@@ -2,6 +2,7 @@
 // tests/IsolationSecurityTest.php - Comprehensive Architecture, Isolation & Security Verification
 
 require_once __DIR__ . '/../app/core/Autoloader.php';
+\App\Core\Env::load(dirname(__DIR__) . '/.env');
 
 use App\Core\DB;
 use App\Core\Auth;

@@ -41,6 +41,7 @@ $router->get('/logout', [AuthController::class, 'logout']);
 // SUPER ADMIN MODULES (guarded 'super_admin')
 // ==========================================
 $router->get('/admin/dashboard', [AdminController::class, 'dashboard'], 'super_admin');
+$router->get('/admin/dashboard/export', [AdminController::class, 'exportReports'], 'super_admin');
 $router->get('/admin/switch-concern', [AdminController::class, 'switchConcern'], 'super_admin');
 $router->get('/admin/concerns', [AdminController::class, 'concerns'], 'super_admin');
 $router->post('/admin/concerns/store', [AdminController::class, 'storeConcern'], 'super_admin');
@@ -48,6 +49,7 @@ $router->post('/admin/concerns/toggle-module', [AdminController::class, 'toggleM
 $router->get('/admin/assets', [AdminController::class, 'assets'], 'super_admin');
 $router->post('/admin/assets/store', [AdminController::class, 'storeAsset'], 'super_admin');
 $router->get('/admin/reports', [AdminController::class, 'reports'], 'super_admin');
+$router->get('/admin/reports/export', [AdminController::class, 'exportReports'], 'super_admin');
 
 // ==========================================
 // CONCERN MODULES (Strictly Guarded by concern_modules)
@@ -55,7 +57,9 @@ $router->get('/admin/reports', [AdminController::class, 'reports'], 'super_admin
 
 // Dashboard
 $router->get('/dashboard', [ConcernDashboardController::class, 'index'], 'concern_dashboard', 'view');
+$router->get('/dashboard/export', [ConcernDashboardController::class, 'exportDashboard'], 'concern_dashboard', 'view');
 $router->get('/m/concern_dashboard', [ConcernDashboardController::class, 'index'], 'concern_dashboard', 'view');
+$router->get('/m/concern_dashboard/export', [ConcernDashboardController::class, 'exportDashboard'], 'concern_dashboard', 'view');
 
 // Variants Catalog
 $router->get('/m/variants', [VariantController::class, 'index'], 'stocks', 'view');
@@ -88,15 +92,24 @@ $router->post('/m/purchase_damage/store', [PurchaseController::class, 'storeDama
 $router->get('/m/concern_damage', [DamageController::class, 'index'], 'concern_damage', 'view');
 $router->post('/m/concern_damage/store', [DamageController::class, 'store'], 'concern_damage', 'add');
 
-// Sales & Distribution
+// Sales & Distribution / Shop
 $router->get('/m/customers', [SalesController::class, 'customers'], 'customers', 'view');
+$router->get('/shop/customers', [SalesController::class, 'customers'], 'customers', 'view');
 $router->post('/m/customers/store', [SalesController::class, 'storeCustomer'], 'customers', 'add');
+$router->post('/m/customers/update', [SalesController::class, 'updateCustomer'], 'customers', 'add');
+$router->get('/m/customers/export', [SalesController::class, 'exportCustomers'], 'customers', 'view');
+$router->get('/api/customers/details', [SalesController::class, 'customerProfile'], 'customers', 'view');
 $router->get('/m/request', [SalesController::class, 'request'], 'request', 'view');
 $router->post('/m/request/store', [SalesController::class, 'storeRequest'], 'request', 'add');
 $router->get('/m/batch', [SalesController::class, 'batch'], 'batch', 'view');
 $router->post('/m/batch/store', [SalesController::class, 'storeBatch'], 'batch', 'add');
 $router->get('/m/billing', [SalesController::class, 'billing'], 'billing', 'view');
 $router->post('/m/billing/store', [SalesController::class, 'storeInvoice'], 'billing', 'add');
+$router->get('/shop/pos', [SalesController::class, 'billing'], 'billing', 'view');
+$router->post('/shop/pos/complete', [SalesController::class, 'completePosSale'], 'billing', 'add');
+$router->post('/m/billing/complete', [SalesController::class, 'completePosSale'], 'billing', 'add');
+$router->get('/api/pos/variant-lookup', [SalesController::class, 'variantLookup'], 'billing', 'view');
+$router->get('/api/pos/customer-lookup', [SalesController::class, 'customerLookup'], 'billing', 'view');
 $router->get('/m/outward', [SalesController::class, 'outward'], 'outward', 'view');
 $router->post('/m/outward/store', [SalesController::class, 'storeOutward'], 'outward', 'add');
 $router->get('/m/dispatch', [SalesController::class, 'dispatch'], 'dispatch', 'view');
@@ -116,7 +129,15 @@ $router->post('/m/qc_stocks/store', [ProductionController::class, 'storeQc'], 'q
 
 // Finance & Accounts
 $router->get('/m/expense', [FinanceController::class, 'expense'], 'expense', 'view');
+$router->get('/m/expense/export', [FinanceController::class, 'exportExpenses'], 'expense', 'view');
 $router->post('/m/expense/store', [FinanceController::class, 'storeExpense'], 'expense', 'add');
 $router->get('/m/cash', [FinanceController::class, 'cash'], 'cash', 'view');
 $router->post('/m/cash/store', [FinanceController::class, 'storeAccount'], 'cash', 'add');
 $router->get('/m/cash_flow', [FinanceController::class, 'cashFlow'], 'cash_flow', 'view');
+$router->get('/m/cash_flow/export', [FinanceController::class, 'exportCashFlow'], 'cash_flow', 'view');
+$router->get('/m/cash/export', [FinanceController::class, 'exportCashFlow'], 'cash', 'view');
+$router->post('/m/cash_flow/store_account', [FinanceController::class, 'storeAccount'], 'cash_flow', 'add');
+$router->post('/m/cash_flow/shift/open', [FinanceController::class, 'openShift'], 'cash_flow', 'add');
+$router->post('/m/cash_flow/shift/close', [FinanceController::class, 'closeShift'], 'cash_flow', 'add');
+$router->post('/m/cash/shift/open', [FinanceController::class, 'openShift'], 'cash', 'add');
+$router->post('/m/cash/shift/close', [FinanceController::class, 'closeShift'], 'cash', 'add');

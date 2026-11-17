@@ -8,7 +8,7 @@ return [
     'port'     => (int)Env::get('DB_PORT', 3306),
     'database' => Env::get('DB_DATABASE', 'invento_db'),
     'username' => Env::get('DB_USERNAME', 'root'),
-    'password' => Env::get('DB_PASSWORD', '12345'),
+    'password' => Env::get('DB_PASSWORD', ''),
     'charset'  => 'utf8mb4',
     'options'  => [
         PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,

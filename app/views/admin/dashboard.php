@@ -1,4 +1,101 @@
 <div class="container-fluid px-0">
+    <!-- Executive Export Intelligence Toolbar (Excel, PDF, Single Day, Monthly, 3 Months, 6 Months) -->
+    <div class="card border-0 shadow-sm rounded-4 p-3 bg-white mb-4" style="border: 1px solid #e2e8f0 !important;">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <div class="d-flex align-items-center gap-3">
+                <div style="width: 44px; height: 44px; background: #ecfdf5; color: #16a34a; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.35rem; flex-shrink: 0; border: 1px solid #bbf7d0;">
+                    <i class="bi bi-file-earmark-excel"></i>
+                </div>
+                <div>
+                    <h6 class="fw-bold text-dark mb-0">Export Enterprise Reports (Excel & PDF)</h6>
+                    <small class="text-muted">Generate consolidated tenant performance, inventory valuation, purchases & revenue as per date period</small>
+                </div>
+            </div>
+
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <!-- Period Selector -->
+                <div class="d-flex align-items-center gap-1">
+                    <label class="small text-muted mb-0 fw-semibold" style="font-size: 0.76rem;">Period:</label>
+                    <select id="dash_export_period" class="form-select form-select-sm" style="width: 175px; border-radius: 8px; font-size: 0.85rem;">
+                        <option value="all" selected>All Time</option>
+                        <option value="single_day">Single Day</option>
+                        <option value="this_month">This Month</option>
+                        <option value="last_month">Last Month</option>
+                        <option value="3_months">Particular 3 Months</option>
+                        <option value="6_months">Six Months</option>
+                        <option value="custom">Custom Date Range</option>
+                    </select>
+                </div>
+
+                <!-- Single Date Picker (Shown for single_day) -->
+                <div id="dash_single_date_box" class="d-none align-items-center gap-1">
+                    <input type="date" id="dash_single_date" class="form-control form-control-sm" value="<?= date('Y-m-d') ?>" style="width: 130px; border-radius: 8px; font-size: 0.82rem;">
+                </div>
+
+                <!-- Custom Range Pickers (Shown for custom) -->
+                <div id="dash_custom_date_box" class="d-none align-items-center gap-1">
+                    <input type="date" id="dash_from_date" class="form-control form-control-sm" value="<?= date('Y-m-01') ?>" style="width: 125px; border-radius: 8px; font-size: 0.82rem;">
+                    <span class="text-muted small">to</span>
+                    <input type="date" id="dash_to_date" class="form-control form-control-sm" value="<?= date('Y-m-d') ?>" style="width: 125px; border-radius: 8px; font-size: 0.82rem;">
+                </div>
+
+                <!-- Export Excel Button -->
+                <button type="button" class="btn btn-success btn-sm px-3 fw-bold d-flex align-items-center gap-2 shadow-sm" onclick="runDashboardExport('excel')" style="border-radius: 8px; height: 35px; background: #16a34a; border: none;">
+                    <i class="bi bi-file-earmark-excel"></i> Export Excel
+                </button>
+
+                <!-- Export PDF Button -->
+                <button type="button" class="btn btn-danger btn-sm px-3 fw-bold d-flex align-items-center gap-2 shadow-sm" onclick="runDashboardExport('pdf')" style="border-radius: 8px; height: 35px; background: #dc2626; border: none;">
+                    <i class="bi bi-file-earmark-pdf"></i> Export PDF
+                </button>
+
+                <!-- CSV Button -->
+                <button type="button" class="btn btn-outline-secondary btn-sm px-3 fw-bold d-flex align-items-center gap-1 shadow-sm" onclick="runDashboardExport('csv')" style="border-radius: 8px; height: 35px;">
+                    <i class="bi bi-download"></i> CSV
+                </button>
+            </div>
+        </div>
+
+        <!-- 1-Click Fast Track Date Shortcuts -->
+        <div class="d-flex flex-wrap align-items-center gap-2 pt-3 mt-3 border-top" style="font-size: 0.82rem;">
+            <span class="text-secondary fw-semibold"><i class="bi bi-lightning-charge text-warning"></i> 1-Click Fast Export:</span>
+            
+            <a href="<?= \App\Core\Controller::url('/admin/reports/export?format=excel&period=single_day') ?>" class="badge text-decoration-none px-2 py-1 fw-semibold d-flex align-items-center gap-1" style="background: #ecfdf5; color: #15803d; border: 1px solid #bbf7d0;">
+                <i class="bi bi-file-earmark-excel"></i> Single Day Excel
+            </a>
+            <a href="<?= \App\Core\Controller::url('/admin/reports/export?format=pdf&period=single_day') ?>" target="_blank" class="badge text-decoration-none px-2 py-1 fw-semibold d-flex align-items-center gap-1" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca;">
+                <i class="bi bi-file-earmark-pdf"></i> Single Day PDF
+            </a>
+
+            <span class="text-muted">|</span>
+
+            <a href="<?= \App\Core\Controller::url('/admin/reports/export?format=excel&period=this_month') ?>" class="badge text-decoration-none px-2 py-1 fw-semibold d-flex align-items-center gap-1" style="background: #ecfdf5; color: #15803d; border: 1px solid #bbf7d0;">
+                <i class="bi bi-file-earmark-excel"></i> Monthly Excel
+            </a>
+            <a href="<?= \App\Core\Controller::url('/admin/reports/export?format=pdf&period=this_month') ?>" target="_blank" class="badge text-decoration-none px-2 py-1 fw-semibold d-flex align-items-center gap-1" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca;">
+                <i class="bi bi-file-earmark-pdf"></i> Monthly PDF
+            </a>
+
+            <span class="text-muted">|</span>
+
+            <a href="<?= \App\Core\Controller::url('/admin/reports/export?format=excel&period=3_months') ?>" class="badge text-decoration-none px-2 py-1 fw-semibold d-flex align-items-center gap-1" style="background: #ecfdf5; color: #15803d; border: 1px solid #bbf7d0;">
+                <i class="bi bi-file-earmark-excel"></i> 3 Months Excel
+            </a>
+            <a href="<?= \App\Core\Controller::url('/admin/reports/export?format=pdf&period=3_months') ?>" target="_blank" class="badge text-decoration-none px-2 py-1 fw-semibold d-flex align-items-center gap-1" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca;">
+                <i class="bi bi-file-earmark-pdf"></i> 3 Months PDF
+            </a>
+
+            <span class="text-muted">|</span>
+
+            <a href="<?= \App\Core\Controller::url('/admin/reports/export?format=excel&period=6_months') ?>" class="badge text-decoration-none px-2 py-1 fw-semibold d-flex align-items-center gap-1" style="background: #ecfdf5; color: #15803d; border: 1px solid #bbf7d0;">
+                <i class="bi bi-file-earmark-excel"></i> 6 Months Excel
+            </a>
+            <a href="<?= \App\Core\Controller::url('/admin/reports/export?format=pdf&period=6_months') ?>" target="_blank" class="badge text-decoration-none px-2 py-1 fw-semibold d-flex align-items-center gap-1" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca;">
+                <i class="bi bi-file-earmark-pdf"></i> 6 Months PDF
+            </a>
+        </div>
+    </div>
+
     <!-- Super Admin Header Stats -->
     <div class="row g-3 mb-4">
         <div class="col-md-3">
@@ -141,3 +238,47 @@
         </div>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const periodSelect = document.getElementById('dash_export_period');
+    const singleDateBox = document.getElementById('dash_single_date_box');
+    const customDateBox = document.getElementById('dash_custom_date_box');
+
+    if (periodSelect) {
+        periodSelect.addEventListener('change', function() {
+            const p = this.value;
+            if (p === 'single_day') {
+                if (singleDateBox) { singleDateBox.classList.remove('d-none'); singleDateBox.classList.add('d-flex'); }
+                if (customDateBox) { customDateBox.classList.add('d-none'); customDateBox.classList.remove('d-flex'); }
+            } else if (p === 'custom') {
+                if (customDateBox) { customDateBox.classList.remove('d-none'); customDateBox.classList.add('d-flex'); }
+                if (singleDateBox) { singleDateBox.classList.add('d-none'); singleDateBox.classList.remove('d-flex'); }
+            } else {
+                if (singleDateBox) { singleDateBox.classList.add('d-none'); singleDateBox.classList.remove('d-flex'); }
+                if (customDateBox) { customDateBox.classList.add('d-none'); customDateBox.classList.remove('d-flex'); }
+            }
+        });
+    }
+});
+
+function runDashboardExport(format) {
+    const period = document.getElementById('dash_export_period').value;
+    const singleDate = document.getElementById('dash_single_date') ? document.getElementById('dash_single_date').value : '';
+    const fromDate = document.getElementById('dash_from_date') ? document.getElementById('dash_from_date').value : '';
+    const toDate = document.getElementById('dash_to_date') ? document.getElementById('dash_to_date').value : '';
+
+    const url = '<?= \App\Core\Controller::url('/admin/reports/export') ?>' +
+                '?format=' + encodeURIComponent(format) +
+                '&period=' + encodeURIComponent(period) +
+                '&single_date=' + encodeURIComponent(singleDate) +
+                '&from_date=' + encodeURIComponent(fromDate) +
+                '&to_date=' + encodeURIComponent(toDate);
+
+    if (format === 'pdf') {
+        window.open(url, '_blank');
+    } else {
+        window.location.href = url;
+    }
+}
+</script>

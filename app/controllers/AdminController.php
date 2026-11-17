@@ -243,13 +243,30 @@ class AdminController extends Controller {
     }
 
     public function reports(): void {
+        $period     = trim($_GET['period'] ?? 'all');
+        $singleDate = trim($_GET['single_date'] ?? '');
+        $fromDate   = trim($_GET['from_date'] ?? '');
+        $toDate     = trim($_GET['to_date'] ?? '');
+
+        $range = \App\Services\ExportService::resolveDateRange($period, $singleDate, $fromDate, $toDate);
+
+        $salesDateFilter = "";
+        $purchaseDateFilter = "";
+
+        if (!empty($range['start_date']) && !empty($range['end_date'])) {
+            $startDateEsc = addslashes($range['start_date']);
+            $endDateEsc = addslashes($range['end_date']);
+            $salesDateFilter = " AND si.invoice_date >= '{$startDateEsc}' AND si.invoice_date <= '{$endDateEsc}'";
+            $purchaseDateFilter = " AND pb.bill_date >= '{$startDateEsc}' AND pb.bill_date <= '{$endDateEsc}'";
+        }
+
         $concernStats = DB::fetchAll(
             "SELECT c.id, c.code, c.name,
                     (SELECT COUNT(*) FROM variants v WHERE v.concern_id = c.id) AS total_variants,
                     (SELECT COALESCE(SUM(s.qty), 0) FROM stocks s WHERE s.concern_id = c.id) AS total_stock_qty,
                     (SELECT COALESCE(SUM(s.qty * v.price), 0) FROM stocks s JOIN variants v ON s.variant_id = v.id WHERE s.concern_id = c.id) AS stock_valuation,
-                    (SELECT COALESCE(SUM(net_amount), 0) FROM sales_invoices si WHERE si.concern_id = c.id) AS total_sales,
-                    (SELECT COALESCE(SUM(net_amount), 0) FROM purchase_bills pb WHERE pb.concern_id = c.id) AS total_purchases
+                    (SELECT COALESCE(SUM(net_amount), 0) FROM sales_invoices si WHERE si.concern_id = c.id {$salesDateFilter}) AS total_sales,
+                    (SELECT COALESCE(SUM(net_amount), 0) FROM purchase_bills pb WHERE pb.concern_id = c.id {$purchaseDateFilter}) AS total_purchases
              FROM concerns c
              ORDER BY c.id ASC"
         );
@@ -258,6 +275,99 @@ class AdminController extends Controller {
             'pageTitle'     => 'Consolidated Multi-Concern Reports',
             'currentModule' => 'admin_reports',
             'concernStats'  => $concernStats,
+            'period'        => $period,
+            'singleDate'    => $singleDate,
+            'fromDate'      => $fromDate,
+            'toDate'        => $toDate,
+            'rangeLabel'    => $range['label'],
         ]);
+    }
+
+    public function exportReports(): void {
+        $format     = strtolower(trim($_GET['format'] ?? 'excel'));
+        $period     = trim($_GET['period'] ?? 'all');
+        $singleDate = trim($_GET['single_date'] ?? '');
+        $fromDate   = trim($_GET['from_date'] ?? '');
+        $toDate     = trim($_GET['to_date'] ?? '');
+
+        $range = \App\Services\ExportService::resolveDateRange($period, $singleDate, $fromDate, $toDate);
+
+        $salesDateFilter = "";
+        $purchaseDateFilter = "";
+
+        if (!empty($range['start_date']) && !empty($range['end_date'])) {
+            $startDateEsc = addslashes($range['start_date']);
+            $endDateEsc = addslashes($range['end_date']);
+            $salesDateFilter = " AND si.invoice_date >= '{$startDateEsc}' AND si.invoice_date <= '{$endDateEsc}'";
+            $purchaseDateFilter = " AND pb.bill_date >= '{$startDateEsc}' AND pb.bill_date <= '{$endDateEsc}'";
+        }
+
+        $stats = DB::fetchAll(
+            "SELECT c.id, c.code, c.name,
+                    (SELECT COUNT(*) FROM variants v WHERE v.concern_id = c.id) AS total_variants,
+                    (SELECT COALESCE(SUM(s.qty), 0) FROM stocks s WHERE s.concern_id = c.id) AS total_stock_qty,
+                    (SELECT COALESCE(SUM(s.qty * v.price), 0) FROM stocks s JOIN variants v ON s.variant_id = v.id WHERE s.concern_id = c.id) AS stock_valuation,
+                    (SELECT COALESCE(SUM(net_amount), 0) FROM sales_invoices si WHERE si.concern_id = c.id {$salesDateFilter}) AS total_sales,
+                    (SELECT COALESCE(SUM(net_amount), 0) FROM purchase_bills pb WHERE pb.concern_id = c.id {$purchaseDateFilter}) AS total_purchases
+             FROM concerns c
+             ORDER BY c.id ASC"
+        );
+
+        $headers = [
+            '#', 'Concern Code', 'Concern Name', 'Variants Cataloged', 'Stock Qty In Hand',
+            'Live Inventory Valuation (₹)', 'Gross Purchases in Period (₹)', 'Gross Sales in Period (₹)'
+        ];
+
+        $exportData = [];
+        $grandStockQty = 0;
+        $grandValuation = 0.00;
+        $grandPurchases = 0.00;
+        $grandSales = 0.00;
+        $sl = 1;
+
+        foreach ($stats as $cs) {
+            $stockQty = (float)$cs['total_stock_qty'];
+            $val = (float)$cs['stock_valuation'];
+            $purch = (float)$cs['total_purchases'];
+            $sales = (float)$cs['total_sales'];
+
+            $grandStockQty += $stockQty;
+            $grandValuation += $val;
+            $grandPurchases += $purch;
+            $grandSales += $sales;
+
+            $exportData[] = [
+                $sl++,
+                $cs['code'],
+                $cs['name'],
+                number_format($cs['total_variants']) . ' items',
+                number_format($stockQty, 2),
+                '₹' . number_format($val, 2),
+                '₹' . number_format($purch, 2),
+                '₹' . number_format($sales, 2)
+            ];
+        }
+
+        $totalsRow = [
+            'TOTAL CONSOLIDATED', '', count($exportData) . ' Concerns', '', number_format($grandStockQty, 2),
+            '₹' . number_format($grandValuation, 2), '₹' . number_format($grandPurchases, 2), '₹' . number_format($grandSales, 2)
+        ];
+
+        $metadata = [
+            'Scope'        => 'Consolidated All Registered Concerns',
+            'Period Scope' => $range['label'],
+            'Generated By' => Auth::user()['name'] ?? 'Super Administrator',
+        ];
+
+        $cleanPeriodName = preg_replace('/[^a-zA-Z0-9_-]/', '_', $range['period']);
+        $filename = 'Consolidated_Performance_Report_' . $cleanPeriodName . '_' . date('Ymd_His');
+
+        if ($format === 'excel' || $format === 'xls' || $format === 'xlsx') {
+            \App\Services\ExportService::downloadExcel($filename, 'Consolidated Multi-Concern Performance Report', $metadata, $headers, $exportData, $totalsRow);
+        } elseif ($format === 'pdf') {
+            \App\Services\ExportService::renderPdfView('Consolidated Multi-Concern Performance Report', $metadata, $headers, $exportData, $totalsRow);
+        } else {
+            \App\Services\ExportService::downloadCsv($filename, $headers, $exportData, $totalsRow);
+        }
     }
 }

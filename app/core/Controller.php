@@ -64,8 +64,12 @@ abstract class Controller {
     }
 
     protected function redirect(string $path): void {
-        header('Location: ' . $this->url($path));
-        exit;
+        if (!headers_sent()) {
+            header('Location: ' . $this->url($path));
+        }
+        if (php_sapi_name() !== 'cli') {
+            exit;
+        }
     }
 
     public static function url(string $path = ''): string {

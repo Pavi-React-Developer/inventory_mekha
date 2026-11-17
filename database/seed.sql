@@ -29,16 +29,17 @@ INSERT INTO `modules` (`code`, `name`, `icon`, `sort_order`, `group_name`, `is_s
 ('concern_damage', 'Concern Damage', 'bi-x-octagon', 42, 'Stock', 0),
 ('return_exchange', 'Return & Exchange', 'bi-arrow-left-right', 43, 'Stock', 0),
 
-('customers', 'Customer Details', 'bi-people', 50, 'Sales', 0),
+('customers', 'Customer Details', 'bi-people', 55, 'Shop', 0),
 ('request', 'Request', 'bi-file-earmark-text', 51, 'Sales', 0),
 ('batch', 'Batch', 'bi-collection', 52, 'Sales', 0),
-('billing', 'Billing', 'bi-credit-card-2-front', 53, 'Sales', 0),
 ('outward', 'Outward', 'bi-box-arrow-up-right', 54, 'Sales', 0),
 ('dispatch', 'Dispatch', 'bi-send', 55, 'Sales', 0),
 
+('billing', 'POS Billing', 'bi-calculator', 56, 'Shop', 0),
+
 ('expense', 'Expense', 'bi-wallet2', 60, 'Finance', 0),
 ('cash', 'Cash', 'bi-cash-coin', 61, 'Finance', 0),
-('cash_flow', 'Cash Flow', 'bi-graph-up-arrow', 62, 'Finance', 0)
+('cash_flow', 'Cash & Cash Flow', 'bi-cash-coin', 62, 'Finance', 0)
 ON DUPLICATE KEY UPDATE `name`=VALUES(`name`), `icon`=VALUES(`icon`), `group_name`=VALUES(`group_name`);
 
 -- 2. ROLES (Super Admin role: id = 1)
@@ -47,11 +48,11 @@ INSERT INTO `roles` (`id`, `concern_id`, `name`, `description`) VALUES
 ON DUPLICATE KEY UPDATE `name`=VALUES(`name`);
 
 -- 3. USERS (Super Admin User: admin@invento.com / password123)
--- Hash for 'password123': $2y$10$f66wXm2q5xI5d5b7Yv4cVeN2rCgK9t0/g5BqBqvRzLg1y.L5c1r6C
+-- Hash for 'password123': $2y$10$pTmq6dD5LimCWm07WoVcJegXw.qD5sVVECtNmZLI3Kb5d8bGJNyMW
 -- (Generated using password_hash('password123', PASSWORD_BCRYPT))
 INSERT INTO `users` (`id`, `concern_id`, `role_id`, `name`, `email`, `password_hash`, `phone`, `status`) VALUES
-(1, NULL, 1, 'Super Administrator', 'admin@invento.com', '$2y$10$UoX0w8Z60W10M7aK75x3c.eD5dKzV5Vb2eO0b4q4W9b7j8fK9c91u', '9876543210', 'active')
-ON DUPLICATE KEY UPDATE `email`=VALUES(`email`);
+(1, NULL, 1, 'Super Administrator', 'admin@invento.com', '$2y$10$pTmq6dD5LimCWm07WoVcJegXw.qD5sVVECtNmZLI3Kb5d8bGJNyMW', '9876543210', 'active')
+ON DUPLICATE KEY UPDATE `email`=VALUES(`email`), `password_hash`=VALUES(`password_hash`);
 
 -- 4. SAMPLE CONCERN 1: GRM Garments Pvt Ltd
 INSERT INTO `concerns` (`id`, `code`, `name`, `address`, `gstin`, `phone`, `email`, `status`) VALUES
@@ -84,9 +85,9 @@ SELECT 3, `id`, 1, 1, 1, 1 FROM `modules` WHERE `is_super_admin_only` = 0;
 
 -- Users for Concern 1 and Concern 2 (all password: password123)
 INSERT INTO `users` (`id`, `concern_id`, `role_id`, `name`, `email`, `password_hash`, `phone`, `status`) VALUES
-(2, 1, 2, 'Kavitha Admin (GRM)', 'grm.admin@invento.com', '$2y$10$UoX0w8Z60W10M7aK75x3c.eD5dKzV5Vb2eO0b4q4W9b7j8fK9c91u', '9842101111', 'active'),
-(3, 2, 3, 'Rajesh Admin (Apex)', 'apex.admin@invento.com', '$2y$10$UoX0w8Z60W10M7aK75x3c.eD5dKzV5Vb2eO0b4q4W9b7j8fK9c91u', '9842102222', 'active')
-ON DUPLICATE KEY UPDATE `email`=VALUES(`email`);
+(2, 1, 2, 'Kavitha Admin (GRM)', 'grm.admin@invento.com', '$2y$10$pTmq6dD5LimCWm07WoVcJegXw.qD5sVVECtNmZLI3Kb5d8bGJNyMW', '9842101111', 'active'),
+(3, 2, 3, 'Rajesh Admin (Apex)', 'apex.admin@invento.com', '$2y$10$pTmq6dD5LimCWm07WoVcJegXw.qD5sVVECtNmZLI3Kb5d8bGJNyMW', '9842102222', 'active')
+ON DUPLICATE KEY UPDATE `email`=VALUES(`email`), `password_hash`=VALUES(`password_hash`);
 
 -- Document Series for Concern 1
 INSERT INTO `doc_series` (`concern_id`, `doc_type`, `prefix`, `next_no`) VALUES
