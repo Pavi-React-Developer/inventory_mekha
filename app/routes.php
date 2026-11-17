@@ -79,8 +79,18 @@ $router->post('/m/inward/store', [InwardController::class, 'store'], 'inward', '
 // Purchase
 $router->get('/m/suppliers', [PurchaseController::class, 'suppliers'], 'suppliers', 'view');
 $router->post('/m/suppliers/store', [PurchaseController::class, 'storeSupplier'], 'suppliers', 'add');
+$router->post('/m/suppliers/update', [PurchaseController::class, 'updateSupplier'], 'suppliers', 'edit');
+$router->post('/m/suppliers/delete', [PurchaseController::class, 'deleteSupplier'], 'suppliers', 'delete');
 $router->get('/m/purchase_billing', [PurchaseController::class, 'billing'], 'purchase_billing', 'view');
+$router->get('/m/purchase_billing/create', [PurchaseController::class, 'createBill'], 'purchase_billing', 'add');
 $router->post('/m/purchase_billing/store', [PurchaseController::class, 'storeBill'], 'purchase_billing', 'add');
+$router->get('/m/purchase_billing/edit', [PurchaseController::class, 'editBill'], 'purchase_billing', 'edit');
+$router->post('/m/purchase_billing/update', [PurchaseController::class, 'updateBill'], 'purchase_billing', 'edit');
+$router->post('/m/purchase_billing/update_status', [PurchaseController::class, 'updateBillStatus'], 'purchase_billing', 'edit');
+$router->post('/m/purchase_billing/delete', [PurchaseController::class, 'deleteBill'], 'purchase_billing', 'delete');
+$router->post('/m/purchase_billing/save_hsn', [PurchaseController::class, 'saveHsnAjax'], 'purchase_billing', 'add');
+$router->get('/m/purchase_billing/view', [PurchaseController::class, 'viewBill'], 'purchase_billing', 'view');
+$router->get('/m/purchase_billing/download_items', [PurchaseController::class, 'downloadItems'], 'purchase_billing', 'view');
 $router->get('/m/purchase_damage', [PurchaseController::class, 'damage'], 'purchase_damage', 'view');
 $router->post('/m/purchase_damage/store', [PurchaseController::class, 'storeDamage'], 'purchase_damage', 'add');
 
