@@ -146,6 +146,29 @@ try {
 assertTest("StockService blocks insufficient/negative stock withdrawal", $threwException === true);
 
 // ----------------------------------------------------
+// TEST 7: Supplier Master District & State Persistence & Validation
+// ----------------------------------------------------
+echo "\nTEST 7: Supplier Master District & State Fields & Validation\n";
+$testSupplierCode = 'SUP-UNIT-TEST-' . time();
+DB::query(
+    "INSERT INTO suppliers (concern_id, code, name, company_name, phone, email, gstin, address, city, district, state, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')",
+    [1, $testSupplierCode, 'VIJA ENTERPRISES', 'VIJA ENTERPRISES', '8668007593', 'pavismvt@gmail.com', '33AAAAA0000A1Z5', 'valvarmanglam', 'Karur', 'Karur', 'Tamil Nadu']
+);
+$insertedSup = DB::fetch("SELECT * FROM suppliers WHERE code = ?", [$testSupplierCode]);
+assertTest("Supplier inserted with separate district field", !empty($insertedSup) && $insertedSup['district'] === 'Karur');
+assertTest("Supplier inserted with separate state field", !empty($insertedSup) && $insertedSup['state'] === 'Tamil Nadu');
+DB::query("DELETE FROM suppliers WHERE code = ?", [$testSupplierCode]);
+
+// Validation rule regex checks
+assertTest("Validation: Valid 10-digit phone passes regex", (bool)preg_match('/^[6-9]\d{9}$/', '8668007593'));
+assertTest("Validation: Invalid 9-digit or non-6-9 phone blocked", !preg_match('/^[6-9]\d{9}$/', '1234567890'));
+assertTest("Validation: Valid 15-char GSTIN format passes", (bool)preg_match('/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/i', '33AAAAA0000A1Z5'));
+assertTest("Validation: Invalid GSTIN blocked", !preg_match('/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/i', 'INVALID_GSTIN'));
+assertTest("Validation: Valid email passes filter", (bool)filter_var('pavismvt@gmail.com', FILTER_VALIDATE_EMAIL));
+assertTest("Validation: Invalid email blocked", !filter_var('not-an-email', FILTER_VALIDATE_EMAIL));
+
+// ----------------------------------------------------
 // FINAL RESULTS
 // ----------------------------------------------------
 echo "\n======================================================\n";

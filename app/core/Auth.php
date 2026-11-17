@@ -42,19 +42,51 @@ class Auth {
     }
 
     /**
-     * Strictly session-only tenant identifier.
-     * Never read from $_GET, $_POST, or request body.
+     * Session tenant identifier.
+     * For concern users: fixed to their own concern_id.
+     * For super admin: can be switched to a specific concern or null (all concerns).
      */
     public static function concernId(): ?int {
         $u = self::user();
-        if (!$u || $u['concern_id'] === null) {
+        if (!$u) {
             return null;
         }
-        return (int)$u['concern_id'];
+        if ($u['concern_id'] !== null) {
+            return (int)$u['concern_id'];
+        }
+        // Super admin selected concern
+        return !empty($_SESSION['super_admin_concern_id']) ? (int)$_SESSION['super_admin_concern_id'] : null;
+    }
+
+    public static function superAdminSelectedConcernId(): ?int {
+        return !empty($_SESSION['super_admin_concern_id']) ? (int)$_SESSION['super_admin_concern_id'] : null;
+    }
+
+    public static function switchConcern(?int $concernId): void {
+        self::startSession();
+        if (!self::isSuperAdmin()) {
+            return;
+        }
+        if ($concernId && $concernId > 0) {
+            $_SESSION['super_admin_concern_id'] = (int)$concernId;
+        } else {
+            $_SESSION['super_admin_concern_id'] = null;
+        }
+    }
+
+    public static function allConcerns(): array {
+        return DB::fetchAll("SELECT id, name, code, status FROM concerns WHERE status = 'active' ORDER BY name ASC");
     }
 
     public static function concern(): ?array {
-        return $_SESSION['concern'] ?? null;
+        if (!self::isSuperAdmin()) {
+            return $_SESSION['concern'] ?? null;
+        }
+        $selectedId = self::concernId();
+        if ($selectedId) {
+            return DB::fetch("SELECT id, name, code, logo FROM concerns WHERE id = ?", [$selectedId]);
+        }
+        return null;
     }
 
     public static function login(string $email, string $password): bool {

@@ -19,6 +19,9 @@
                 <thead>
                     <tr>
                         <th>Ledger ID</th>
+                        <?php if ($isSuperAdmin && empty($selectedCid)): ?>
+                            <th>Concern</th>
+                        <?php endif; ?>
                         <th>Timestamp</th>
                         <th>Variant & SKU</th>
                         <th>Location</th>
@@ -31,11 +34,18 @@
                 </thead>
                 <tbody>
                     <?php if (empty($ledger)): ?>
-                        <tr><td colspan="9" class="text-center py-4 text-muted">No stock ledger entries recorded.</td></tr>
+                        <tr><td colspan="10" class="text-center py-4 text-muted">No stock ledger entries recorded.</td></tr>
                     <?php else: ?>
                         <?php foreach ($ledger as $l): ?>
                             <tr>
                                 <td><span class="badge bg-light text-dark font-monospace">#<?= (int)$l['id'] ?></span></td>
+                                <?php if ($isSuperAdmin && empty($selectedCid)): ?>
+                                    <td>
+                                        <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">
+                                            <?= htmlspecialchars($l['concern_name'] ?? 'Concern #' . $l['concern_id']) ?>
+                                        </span>
+                                    </td>
+                                <?php endif; ?>
                                 <td class="small text-muted font-monospace"><?= date('d M Y H:i:s', strtotime($l['created_at'])) ?></td>
                                 <td>
                                     <div class="fw-bold text-dark"><?= htmlspecialchars($l['variant_name']) ?></div>

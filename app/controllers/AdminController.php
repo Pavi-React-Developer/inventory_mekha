@@ -12,6 +12,17 @@ use App\Services\AuditLog;
 use Exception;
 
 class AdminController extends Controller {
+    public function switchConcern(): void {
+        $concernId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+        Auth::switchConcern($concernId > 0 ? $concernId : null);
+        
+        $this->flash('success', $concernId > 0 ? 'Switched active workspace view to concern.' : 'Switched to Consolidated View (All Concerns).');
+        
+        $referer = $_SERVER['HTTP_REFERER'] ?? self::url('/admin/dashboard');
+        header('Location: ' . $referer);
+        exit;
+    }
+
     public function dashboard(): void {
         $concernsCount = DB::fetchValue("SELECT COUNT(*) FROM concerns WHERE status = 'active'");
         $usersCount = DB::fetchValue("SELECT COUNT(*) FROM users WHERE status = 'active'");

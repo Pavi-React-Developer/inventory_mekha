@@ -15,20 +15,28 @@ class Variant extends Model {
                        c.name AS category_name, 
                        s.name AS subcategory_name, 
                        b.name AS brand_name,
+                       con.name AS concern_name,
+                       con.code AS concern_code,
                        COALESCE(stk.total_qty, 0) AS total_stock
                 FROM variants v
+                LEFT JOIN concerns con ON v.concern_id = con.id
                 LEFT JOIN categories c ON v.category_id = c.id
                 LEFT JOIN subcategories s ON v.subcategory_id = s.id
                 LEFT JOIN brands b ON v.brand_id = b.id
                 LEFT JOIN (
                     SELECT variant_id, SUM(qty) AS total_qty 
                     FROM stocks 
-                    WHERE concern_id = ? 
                     GROUP BY variant_id
-                ) stk ON v.id = stk.variant_id
-                WHERE v.concern_id = ?
-                ORDER BY v.id DESC";
-        return DB::fetchAll($sql, [$cid, $cid]);
+                ) stk ON v.id = stk.variant_id";
+        
+        $params = [];
+        if ($cid !== null) {
+            $sql .= " WHERE v.concern_id = ?";
+            $params[] = $cid;
+        }
+
+        $sql .= " ORDER BY v.id DESC";
+        return DB::fetchAll($sql, $params);
     }
 
     public function findWithDetails(int $id): ?array {
@@ -37,19 +45,28 @@ class Variant extends Model {
                        c.name AS category_name, 
                        s.name AS subcategory_name, 
                        b.name AS brand_name,
+                       con.name AS concern_name,
+                       con.code AS concern_code,
                        COALESCE(stk.total_qty, 0) AS total_stock
                 FROM variants v
+                LEFT JOIN concerns con ON v.concern_id = con.id
                 LEFT JOIN categories c ON v.category_id = c.id
                 LEFT JOIN subcategories s ON v.subcategory_id = s.id
                 LEFT JOIN brands b ON v.brand_id = b.id
                 LEFT JOIN (
                     SELECT variant_id, SUM(qty) AS total_qty 
                     FROM stocks 
-                    WHERE concern_id = ? 
                     GROUP BY variant_id
                 ) stk ON v.id = stk.variant_id
-                WHERE v.id = ? AND v.concern_id = ?
-                LIMIT 1";
-        return DB::fetch($sql, [$cid, $id, $cid]);
+                WHERE v.id = ?";
+        
+        $params = [$id];
+        if ($cid !== null) {
+            $sql .= " AND v.concern_id = ?";
+            $params[] = $cid;
+        }
+
+        $sql .= " LIMIT 1";
+        return DB::fetch($sql, $params);
     }
 }

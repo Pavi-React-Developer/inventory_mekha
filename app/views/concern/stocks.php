@@ -50,6 +50,9 @@
                 <thead>
                     <tr>
                         <th>SKU Code</th>
+                        <?php if ($isSuperAdmin && empty($selectedCid)): ?>
+                            <th>Concern</th>
+                        <?php endif; ?>
                         <th>Variant Description</th>
                         <th>Category / Specs</th>
                         <th>Storage Location</th>
@@ -61,11 +64,18 @@
                 </thead>
                 <tbody>
                     <?php if (empty($stocks)): ?>
-                        <tr><td colspan="8" class="text-center py-4 text-muted">No stock balances in warehouse. Record Inward or QC Passed items.</td></tr>
+                        <tr><td colspan="9" class="text-center py-4 text-muted">No stock balances in warehouse. Record Inward or QC Passed items.</td></tr>
                     <?php else: ?>
                         <?php foreach ($stocks as $s): ?>
                             <tr>
                                 <td><span class="badge bg-dark font-monospace"><?= htmlspecialchars($s['sku_code']) ?></span></td>
+                                <?php if ($isSuperAdmin && empty($selectedCid)): ?>
+                                    <td>
+                                        <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">
+                                            <?= htmlspecialchars($s['concern_name'] ?? 'Concern #' . $s['concern_id']) ?>
+                                        </span>
+                                    </td>
+                                <?php endif; ?>
                                 <td>
                                     <div class="fw-bold text-dark"><?= htmlspecialchars($s['variant_name']) ?></div>
                                     <small class="text-muted"><?= htmlspecialchars($s['size'] ?: 'Free') ?> &bull; <?= number_format($s['weight'], 3) ?> <?= htmlspecialchars($s['weight_unit']) ?></small>

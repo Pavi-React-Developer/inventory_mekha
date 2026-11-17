@@ -8,28 +8,37 @@ use App\Core\DB;
 use App\Core\Auth;
 use App\Services\StockService;
 use App\Services\NumberSeries;
-use App\Services\AuditLog;
 use Exception;
 
 class InwardController extends Controller {
     public function index(): void {
         $cid = Auth::concernId();
 
-        $inwards = DB::fetchAll(
-            "SELECT i.*, s.name AS supplier_name, pb.bill_no, u.name AS user_name,
-                    (SELECT COUNT(*) FROM inward_items ii WHERE ii.inward_id = i.id) AS items_count,
-                    (SELECT COALESCE(SUM(qty), 0) FROM inward_items ii WHERE ii.inward_id = i.id) AS total_qty
-             FROM inwards i
-             LEFT JOIN suppliers s ON i.supplier_id = s.id
-             LEFT JOIN purchase_bills pb ON i.purchase_bill_id = pb.id
-             LEFT JOIN users u ON i.created_by = u.id
-             WHERE i.concern_id = ?
-             ORDER BY i.id DESC",
-            [$cid]
-        );
+        $sql = "SELECT i.*, s.name AS supplier_name, pb.bill_no, u.name AS user_name,
+                       con.name AS concern_name, con.code AS concern_code,
+                       (SELECT COUNT(*) FROM inward_items ii WHERE ii.inward_id = i.id) AS items_count,
+                       (SELECT COALESCE(SUM(qty), 0) FROM inward_items ii WHERE ii.inward_id = i.id) AS total_qty
+                FROM inwards i
+                LEFT JOIN concerns con ON i.concern_id = con.id
+                LEFT JOIN suppliers s ON i.supplier_id = s.id
+                LEFT JOIN purchase_bills pb ON i.purchase_bill_id = pb.id
+                LEFT JOIN users u ON i.created_by = u.id";
+        
+        $params = [];
+        if ($cid) {
+            $sql .= " WHERE i.concern_id = ?";
+            $params[] = $cid;
+        }
+        $sql .= " ORDER BY i.id DESC";
+        $inwards = DB::fetchAll($sql, $params);
 
-        $suppliers = DB::fetchAll("SELECT id, name FROM suppliers WHERE concern_id = ? AND status = 'active'", [$cid]);
-        $variants  = DB::fetchAll("SELECT id, sku_code, name, size, weight_unit FROM variants WHERE concern_id = ? AND status = 'active'", [$cid]);
+        if ($cid) {
+            $suppliers = DB::fetchAll("SELECT id, name FROM suppliers WHERE concern_id = ? AND status = 'active'", [$cid]);
+            $variants  = DB::fetchAll("SELECT id, sku_code, name, size, weight_unit FROM variants WHERE concern_id = ? AND status = 'active'", [$cid]);
+        } else {
+            $suppliers = DB::fetchAll("SELECT id, name FROM suppliers WHERE status = 'active'");
+            $variants  = DB::fetchAll("SELECT id, sku_code, name, size, weight_unit FROM variants WHERE status = 'active'");
+        }
 
         $this->render('concern/inward', [
             'pageTitle'     => 'Inward Stock Consignments',
@@ -37,12 +46,18 @@ class InwardController extends Controller {
             'inwards'       => $inwards,
             'suppliers'     => $suppliers,
             'variants'      => $variants,
+            'selectedCid'   => $cid,
         ]);
     }
 
     public function store(): void {
         $this->validateCsrf();
-        $cid = Auth::concernId();
+        $cid = Auth::concernId() ?: (int)($_POST['concern_id'] ?? 0);
+
+        if (!$cid) {
+            $this->flash('error', 'Please select a concern for this inward consignment.');
+            $this->redirect('/m/inward');
+        }
 
         $supplierId = !empty($_POST['supplier_id']) ? (int)$_POST['supplier_id'] : null;
         $inwardDate = $_POST['inward_date'] ?: date('Y-m-d');

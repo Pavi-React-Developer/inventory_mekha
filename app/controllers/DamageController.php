@@ -14,29 +14,43 @@ class DamageController extends Controller {
     public function index(): void {
         $cid = Auth::concernId();
 
-        $damages = DB::fetchAll(
-            "SELECT cd.*, v.name AS variant_name, v.sku_code, v.size, u.name AS user_name
-             FROM concern_damages cd
-             JOIN variants v ON cd.variant_id = v.id
-             LEFT JOIN users u ON cd.created_by = u.id
-             WHERE cd.concern_id = ?
-             ORDER BY cd.id DESC",
-            [$cid]
-        );
+        $sql = "SELECT cd.*, v.name AS variant_name, v.sku_code, v.size, u.name AS user_name,
+                       con.name AS concern_name, con.code AS concern_code
+                FROM concern_damages cd
+                JOIN variants v ON cd.variant_id = v.id
+                LEFT JOIN concerns con ON cd.concern_id = con.id
+                LEFT JOIN users u ON cd.created_by = u.id";
+        $params = [];
+        if ($cid) {
+            $sql .= " WHERE cd.concern_id = ?";
+            $params[] = $cid;
+        }
+        $sql .= " ORDER BY cd.id DESC";
+        $damages = DB::fetchAll($sql, $params);
 
-        $variants = DB::fetchAll("SELECT id, sku_code, name, size FROM variants WHERE concern_id = ? AND status = 'active'", [$cid]);
+        if ($cid) {
+            $variants = DB::fetchAll("SELECT id, sku_code, name, size FROM variants WHERE concern_id = ? AND status = 'active'", [$cid]);
+        } else {
+            $variants = DB::fetchAll("SELECT id, sku_code, name, size FROM variants WHERE status = 'active'");
+        }
 
         $this->render('concern/concern_damage', [
             'pageTitle'     => 'Internal Concern Damage & Write-offs',
             'currentModule' => 'concern_damage',
             'damages'       => $damages,
             'variants'      => $variants,
+            'selectedCid'   => $cid,
         ]);
     }
 
     public function store(): void {
         $this->validateCsrf();
-        $cid = Auth::concernId();
+        $cid = Auth::concernId() ?: (int)($_POST['concern_id'] ?? 0);
+
+        if (!$cid) {
+            $this->flash('error', 'Please choose a concern for this internal damage.');
+            $this->redirect('/m/concern_damage');
+        }
 
         $variantId = (int)($_POST['variant_id'] ?? 0);
         $qty       = (float)($_POST['qty'] ?? 0);

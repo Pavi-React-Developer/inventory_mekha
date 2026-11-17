@@ -12,6 +12,8 @@ abstract class Controller {
         $currentConcern = Auth::concern();
         $isSuperAdmin = Auth::isSuperAdmin();
         $csrfToken = Auth::csrfToken();
+        $allConcerns = Auth::allConcerns();
+        $selectedConcernId = Auth::superAdminSelectedConcernId();
 
         // Flash messages
         $flashSuccess = $_SESSION['flash_success'] ?? null;
@@ -22,8 +24,9 @@ abstract class Controller {
         $sidebarModules = [];
         if (Auth::check()) {
             if ($isSuperAdmin) {
+                // Super Admin sees both Super Admin management and ALL operational concern modules
                 $sidebarModules = DB::fetchAll(
-                    "SELECT * FROM modules WHERE is_super_admin_only = 1 ORDER BY sort_order ASC"
+                    "SELECT * FROM modules ORDER BY is_super_admin_only DESC, sort_order ASC"
                 );
             } else {
                 $cid = Auth::concernId();

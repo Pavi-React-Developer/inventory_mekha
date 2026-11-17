@@ -168,9 +168,9 @@ INSERT INTO `stock_ledger` (`concern_id`, `variant_id`, `location`, `qty_in`, `q
 (2, 5, 'Main Store', 750.00, 0.00, 'Inward', 1, 'Opening yarn consignment', 3, '2026-11-03 09:00:00');
 
 -- Suppliers
-INSERT INTO `suppliers` (`id`, `concern_id`, `code`, `name`, `company_name`, `phone`, `email`, `gstin`, `address`) VALUES
-(1, 1, 'SUP-001', 'Sundaram Spinning Mills', 'Sundaram Textiles Ltd', '9842144556', 'sales@sundaramtextiles.com', '33AAACS1122D1ZP', 'Ring Road, Erode'),
-(2, 1, 'SUP-002', 'ColorTex Dyeing House', 'ColorTex Processors', '9842188990', 'contact@colortex.in', '33AAACT9988C1ZR', 'SIPCOT Industrial Area, Perundurai')
+INSERT INTO `suppliers` (`id`, `concern_id`, `code`, `name`, `company_name`, `phone`, `email`, `gstin`, `address`, `city`, `district`, `state`) VALUES
+(1, 1, 'SUP-001', 'Sundaram Spinning Mills', 'Sundaram Textiles Ltd', '9842144556', 'sales@sundaramtextiles.com', '33AAACS1122D1ZP', 'Ring Road', 'Erode', 'Erode', 'Tamil Nadu'),
+(2, 1, 'SUP-002', 'ColorTex Dyeing House', 'ColorTex Processors', '9842188990', 'contact@colortex.in', '33AAACT9988C1ZR', 'SIPCOT Industrial Area', 'Perundurai', 'Erode', 'Tamil Nadu')
 ON DUPLICATE KEY UPDATE `name`=VALUES(`name`);
 
 -- Customers

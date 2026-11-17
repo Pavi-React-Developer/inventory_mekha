@@ -16,9 +16,15 @@ class VariantController extends Controller {
         $variants = $variantModel->allWithDetails();
 
         $cid = Auth::concernId();
-        $categories = DB::fetchAll("SELECT * FROM categories WHERE concern_id = ? AND status = 'active'", [$cid]);
-        $subcategories = DB::fetchAll("SELECT * FROM subcategories WHERE concern_id = ? AND status = 'active'", [$cid]);
-        $brands = DB::fetchAll("SELECT * FROM brands WHERE concern_id = ? AND status = 'active'", [$cid]);
+        if ($cid) {
+            $categories = DB::fetchAll("SELECT * FROM categories WHERE concern_id = ? AND status = 'active'", [$cid]);
+            $subcategories = DB::fetchAll("SELECT * FROM subcategories WHERE concern_id = ? AND status = 'active'", [$cid]);
+            $brands = DB::fetchAll("SELECT * FROM brands WHERE concern_id = ? AND status = 'active'", [$cid]);
+        } else {
+            $categories = DB::fetchAll("SELECT * FROM categories WHERE status = 'active'");
+            $subcategories = DB::fetchAll("SELECT * FROM subcategories WHERE status = 'active'");
+            $brands = DB::fetchAll("SELECT * FROM brands WHERE status = 'active'");
+        }
 
         $this->render('concern/variants', [
             'pageTitle'     => 'Product Variants & Master Catalog',
@@ -27,12 +33,13 @@ class VariantController extends Controller {
             'categories'    => $categories,
             'subcategories' => $subcategories,
             'brands'        => $brands,
+            'selectedCid'   => $cid,
         ]);
     }
 
     public function store(): void {
         $this->validateCsrf();
-        $cid = Auth::concernId();
+        $cid = Auth::concernId() ?: (int)($_POST['concern_id'] ?? 0);
 
         $sku          = trim($_POST['sku_code'] ?? '');
         $name         = trim($_POST['name'] ?? '');

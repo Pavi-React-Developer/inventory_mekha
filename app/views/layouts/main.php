@@ -195,13 +195,11 @@
                 <?php endforeach; ?>
             <?php endforeach; ?>
 
-            <?php if (!$isSuperAdmin): ?>
-                <div class="nav-group-title">Masters</div>
-                <a href="<?= \App\Core\Controller::url('/m/variants') ?>" class="nav-link <?= (isset($currentModule) && $currentModule === 'variants') ? 'active' : '' ?>">
-                    <i class="bi bi-tags"></i>
-                    <span>Product Variants</span>
-                </a>
-            <?php endif; ?>
+            <div class="nav-group-title">Masters</div>
+            <a href="<?= \App\Core\Controller::url('/m/variants') ?>" class="nav-link <?= (isset($currentModule) && $currentModule === 'variants') ? 'active' : '' ?>">
+                <i class="bi bi-tags"></i>
+                <span>Product Variants</span>
+            </a>
         </div>
     </nav>
 
@@ -213,9 +211,37 @@
                 <span class="fs-5 fw-semibold text-dark"><?= htmlspecialchars($pageTitle ?? 'Inventory') ?></span>
                 
                 <?php if ($isSuperAdmin): ?>
-                    <span class="super-pill">
-                        <i class="bi bi-shield-check"></i> Super Administrator
+                    <span class="super-pill me-1">
+                        <i class="bi bi-shield-check"></i> Super Admin
                     </span>
+
+                    <!-- CONCERN SWITCHER FOR SUPER ADMIN -->
+                    <div class="dropdown">
+                        <button class="btn btn-sm <?= $currentConcern ? 'btn-primary' : 'btn-outline-dark' ?> dropdown-toggle d-flex align-items-center gap-2 fw-semibold shadow-sm" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-building"></i>
+                            <span><?= $currentConcern ? htmlspecialchars($currentConcern['name']) . ' (' . htmlspecialchars($currentConcern['code']) . ')' : '🌐 All Concerns (Consolidated View)' ?></span>
+                        </button>
+                        <ul class="dropdown-menu shadow">
+                            <li class="dropdown-header text-uppercase small fw-bold">Select Active Concern Context</li>
+                            <li>
+                                <a class="dropdown-item d-flex align-items-center justify-content-between <?= !$currentConcern ? 'active fw-bold' : '' ?>" href="<?= \App\Core\Controller::url('/admin/switch-concern?id=0') ?>">
+                                    <span><i class="bi bi-globe me-2 text-primary"></i> All Concerns (Consolidated)</span>
+                                    <?php if (!$currentConcern): ?><i class="bi bi-check-lg"></i><?php endif; ?>
+                                </a>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <?php foreach ($allConcerns as $con): 
+                                $isSel = ($currentConcern && $currentConcern['id'] == $con['id']);
+                            ?>
+                                <li>
+                                    <a class="dropdown-item d-flex align-items-center justify-content-between <?= $isSel ? 'active fw-bold' : '' ?>" href="<?= \App\Core\Controller::url('/admin/switch-concern?id=' . $con['id']) ?>">
+                                        <span><i class="bi bi-building me-2 text-secondary"></i> <?= htmlspecialchars($con['name']) ?> (<?= htmlspecialchars($con['code']) ?>)</span>
+                                        <?php if ($isSel): ?><i class="bi bi-check-lg"></i><?php endif; ?>
+                                    </a>
+                                </li>
+                            <?php endforeach; ?>
+                        </ul>
+                    </div>
                 <?php elseif ($currentConcern): ?>
                     <span class="concern-pill" title="Concern GSTIN: <?= htmlspecialchars($currentConcern['code']) ?>">
                         <i class="bi bi-building"></i> <?= htmlspecialchars($currentConcern['name']) ?> (<?= htmlspecialchars($currentConcern['code']) ?>)
@@ -224,11 +250,9 @@
             </div>
 
             <div class="d-flex align-items-center gap-3">
-                <?php if (!$isSuperAdmin): ?>
-                    <a href="<?= \App\Core\Controller::url('/m/label_generation') ?>" class="btn btn-sm btn-outline-primary d-flex align-items-center gap-1">
-                        <i class="bi bi-qr-code-scan"></i> Scan / Labels
-                    </a>
-                <?php endif; ?>
+                <a href="<?= \App\Core\Controller::url('/m/label_generation') ?>" class="btn btn-sm btn-outline-primary d-flex align-items-center gap-1">
+                    <i class="bi bi-qr-code-scan"></i> Scan / Labels
+                </a>
 
                 <div class="dropdown">
                     <button class="btn btn-sm btn-light border dropdown-toggle d-flex align-items-center gap-2" type="button" data-bs-toggle="dropdown">
@@ -253,7 +277,7 @@
             <?php if (!empty($flashSuccess)): ?>
                 <div class="alert alert-success alert-dismissible fade show d-flex align-items-center shadow-sm" role="alert">
                     <i class="bi bi-check-circle-fill fs-5 me-2"></i>
-                    <div><?= htmlspecialchars($flashSuccess) ?></div>
+                    <div><?= nl2br(htmlspecialchars($flashSuccess)) ?></div>
                     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                 </div>
             <?php endif; ?>
@@ -261,7 +285,7 @@
             <?php if (!empty($flashError)): ?>
                 <div class="alert alert-danger alert-dismissible fade show d-flex align-items-center shadow-sm" role="alert">
                     <i class="bi bi-exclamation-triangle-fill fs-5 me-2"></i>
-                    <div><?= htmlspecialchars($flashError) ?></div>
+                    <div><?= nl2br(htmlspecialchars($flashError)) ?></div>
                     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                 </div>
             <?php endif; ?>

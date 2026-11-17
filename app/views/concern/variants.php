@@ -19,6 +19,9 @@
                 <thead>
                     <tr>
                         <th>SKU Code</th>
+                        <?php if ($isSuperAdmin && empty($selectedCid)): ?>
+                            <th>Concern</th>
+                        <?php endif; ?>
                         <th>Variant Details</th>
                         <th>Category / Subcategory</th>
                         <th>Brand / Size</th>
@@ -30,7 +33,7 @@
                 </thead>
                 <tbody>
                     <?php if (empty($variants)): ?>
-                        <tr><td colspan="8" class="text-center py-4 text-muted">No variants created yet. Click "Add New Variant" above.</td></tr>
+                        <tr><td colspan="9" class="text-center py-4 text-muted">No variants created yet. Click "Add New Variant" above.</td></tr>
                     <?php else: ?>
                         <?php foreach ($variants as $v): 
                             $attrs = !empty($v['attributes']) ? json_decode($v['attributes'], true) : [];
@@ -41,6 +44,13 @@
                                     <span class="badge bg-dark font-monospace"><?= htmlspecialchars($v['sku_code']) ?></span>
                                     <div class="text-muted small font-monospace mt-1" style="font-size: 0.68rem;">ID: #<?= (int)$v['id'] ?></div>
                                 </td>
+                                <?php if ($isSuperAdmin && empty($selectedCid)): ?>
+                                    <td>
+                                        <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">
+                                            <?= htmlspecialchars($v['concern_name'] ?? 'Concern #' . $v['concern_id']) ?>
+                                        </span>
+                                    </td>
+                                <?php endif; ?>
                                 <td>
                                     <div class="fw-bold text-dark"><?= htmlspecialchars($v['name']) ?></div>
                                     <small class="text-muted"><?= number_format($v['weight'], 3) ?> <?= htmlspecialchars($v['weight_unit']) ?></small>
@@ -98,6 +108,18 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
+                <?php if ($isSuperAdmin && empty($selectedCid)): ?>
+                    <div class="mb-3 p-2 bg-light border rounded">
+                        <label class="form-label small fw-bold text-primary">Assign To Concern *</label>
+                        <select name="concern_id" class="form-select" required>
+                            <option value="">-- Choose Concern --</option>
+                            <?php foreach ($allConcerns as $c): ?>
+                                <option value="<?= $c['id'] ?>"><?= htmlspecialchars($c['name']) ?> (<?= htmlspecialchars($c['code']) ?>)</option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                <?php endif; ?>
+
                 <div class="row g-3 mb-3">
                     <div class="col-md-4">
                         <label class="form-label small fw-semibold">SKU Code *</label>

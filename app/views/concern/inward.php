@@ -19,6 +19,9 @@
                 <thead>
                     <tr>
                         <th>Inward No</th>
+                        <?php if ($isSuperAdmin && empty($selectedCid)): ?>
+                            <th>Concern</th>
+                        <?php endif; ?>
                         <th>Supplier</th>
                         <th>Inward Date</th>
                         <th>Warehouse Bay</th>
@@ -29,11 +32,18 @@
                 </thead>
                 <tbody>
                     <?php if (empty($inwards)): ?>
-                        <tr><td colspan="7" class="text-center py-4 text-muted">No inward consignments received yet.</td></tr>
+                        <tr><td colspan="8" class="text-center py-4 text-muted">No inward consignments received yet.</td></tr>
                     <?php else: ?>
                         <?php foreach ($inwards as $inw): ?>
                             <tr>
                                 <td><span class="badge bg-dark font-monospace"><?= htmlspecialchars($inw['inward_no']) ?></span></td>
+                                <?php if ($isSuperAdmin && empty($selectedCid)): ?>
+                                    <td>
+                                        <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">
+                                            <?= htmlspecialchars($inw['concern_name'] ?? 'Concern #' . $inw['concern_id']) ?>
+                                        </span>
+                                    </td>
+                                <?php endif; ?>
                                 <td>
                                     <div class="fw-bold text-dark"><?= htmlspecialchars($inw['supplier_name'] ?? 'Direct Receipt') ?></div>
                                     <small class="text-muted"><?= htmlspecialchars($inw['remarks'] ?: '-') ?></small>
@@ -67,6 +77,18 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
+                <?php if ($isSuperAdmin && empty($selectedCid)): ?>
+                    <div class="mb-3 p-2 bg-light border rounded">
+                        <label class="form-label small fw-bold text-primary">Inward To Concern *</label>
+                        <select name="concern_id" class="form-select" required>
+                            <option value="">-- Choose Concern --</option>
+                            <?php foreach ($allConcerns as $c): ?>
+                                <option value="<?= $c['id'] ?>"><?= htmlspecialchars($c['name']) ?> (<?= htmlspecialchars($c['code']) ?>)</option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                <?php endif; ?>
+
                 <div class="mb-3">
                     <label class="form-label small fw-semibold">Supplier</label>
                     <select name="supplier_id" class="form-select">

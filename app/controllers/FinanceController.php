@@ -14,17 +14,26 @@ class FinanceController extends Controller {
     public function expense(): void {
         $cid = Auth::concernId();
 
-        $expenses = DB::fetchAll(
-            "SELECT e.*, ca.name AS account_name, u.name AS user_name
-             FROM expenses e
-             LEFT JOIN cash_accounts ca ON e.account_id = ca.id
-             LEFT JOIN users u ON e.created_by = u.id
-             WHERE e.concern_id = ?
-             ORDER BY e.id DESC",
-            [$cid]
-        );
+        $sql = "SELECT e.*, ca.name AS account_name, u.name AS user_name,
+                       con.name AS concern_name, con.code AS concern_code
+                FROM expenses e
+                LEFT JOIN cash_accounts ca ON e.account_id = ca.id
+                LEFT JOIN users u ON e.created_by = u.id
+                LEFT JOIN concerns con ON e.concern_id = con.id";
+        $params = [];
+        if ($cid) {
+            $sql .= " WHERE e.concern_id = ?";
+            $params[] = $cid;
+        }
+        $sql .= " ORDER BY e.id DESC";
+        $expenses = DB::fetchAll($sql, $params);
 
-        $accounts = DB::fetchAll("SELECT * FROM cash_accounts WHERE concern_id = ? AND status = 'active'", [$cid]);
+        if ($cid) {
+            $accounts = DB::fetchAll("SELECT * FROM cash_accounts WHERE concern_id = ? AND status = 'active'", [$cid]);
+        } else {
+            $accounts = DB::fetchAll("SELECT * FROM cash_accounts WHERE status = 'active'");
+        }
+
         $totalExpense = array_sum(array_column($expenses, 'amount'));
 
         $this->render('concern/expense', [
@@ -33,12 +42,18 @@ class FinanceController extends Controller {
             'expenses'      => $expenses,
             'accounts'      => $accounts,
             'totalExpense'  => $totalExpense,
+            'selectedCid'   => $cid,
         ]);
     }
 
     public function storeExpense(): void {
         $this->validateCsrf();
-        $cid = Auth::concernId();
+        $cid = Auth::concernId() ?: (int)($_POST['concern_id'] ?? 0);
+
+        if (!$cid) {
+            $this->flash('error', 'Please choose a concern.');
+            $this->redirect('/m/expense');
+        }
 
         $expDate   = $_POST['expense_date'] ?: date('Y-m-d');
         $category  = trim($_POST['category'] ?? 'Miscellaneous');
@@ -93,24 +108,30 @@ class FinanceController extends Controller {
     public function cash(): void {
         $cid = Auth::concernId();
 
-        $accounts = DB::fetchAll(
-            "SELECT ca.*, 
-                    (SELECT COUNT(*) FROM cash_transactions ct WHERE ct.account_id = ca.id) AS tx_count
-             FROM cash_accounts ca
-             WHERE ca.concern_id = ?
-             ORDER BY ca.id ASC",
-            [$cid]
-        );
+        $sql = "SELECT ca.*, con.name AS concern_name, con.code AS concern_code,
+                       (SELECT COUNT(*) FROM cash_transactions ct WHERE ct.account_id = ca.id) AS tx_count
+                FROM cash_accounts ca
+                LEFT JOIN concerns con ON ca.concern_id = con.id";
+        $params = [];
+        if ($cid) {
+            $sql .= " WHERE ca.concern_id = ?";
+            $params[] = $cid;
+        }
+        $sql .= " ORDER BY ca.id ASC";
+        $accounts = DB::fetchAll($sql, $params);
 
-        $transactions = DB::fetchAll(
-            "SELECT ct.*, ca.name AS account_name, u.name AS user_name
-             FROM cash_transactions ct
-             JOIN cash_accounts ca ON ct.account_id = ca.id
-             LEFT JOIN users u ON ct.created_by = u.id
-             WHERE ct.concern_id = ?
-             ORDER BY ct.id DESC LIMIT 20",
-            [$cid]
-        );
+        $sql2 = "SELECT ct.*, ca.name AS account_name, u.name AS user_name, con.name AS concern_name
+                 FROM cash_transactions ct
+                 JOIN cash_accounts ca ON ct.account_id = ca.id
+                 LEFT JOIN concerns con ON ct.concern_id = con.id
+                 LEFT JOIN users u ON ct.created_by = u.id";
+        $params2 = [];
+        if ($cid) {
+            $sql2 .= " WHERE ct.concern_id = ?";
+            $params2[] = $cid;
+        }
+        $sql2 .= " ORDER BY ct.id DESC LIMIT 20";
+        $transactions = DB::fetchAll($sql2, $params2);
 
         $totalCashInHand = array_reduce($accounts, fn($sum, $a) => $sum + $a['balance'], 0);
 
@@ -120,12 +141,18 @@ class FinanceController extends Controller {
             'accounts'        => $accounts,
             'transactions'    => $transactions,
             'totalCashInHand' => $totalCashInHand,
+            'selectedCid'     => $cid,
         ]);
     }
 
     public function storeAccount(): void {
         $this->validateCsrf();
-        $cid = Auth::concernId();
+        $cid = Auth::concernId() ?: (int)($_POST['concern_id'] ?? 0);
+
+        if (!$cid) {
+            $this->flash('error', 'Please choose a concern.');
+            $this->redirect('/m/cash');
+        }
 
         $name    = trim($_POST['name'] ?? '');
         $type    = $_POST['account_type'] ?? 'cash';
@@ -151,28 +178,26 @@ class FinanceController extends Controller {
     public function cashFlow(): void {
         $cid = Auth::concernId();
 
-        // Summary totals
-        $totalInflow = (float)DB::fetchValue(
-            "SELECT COALESCE(SUM(amount), 0) FROM cash_transactions WHERE concern_id = ? AND type = 'credit'",
-            [$cid]
-        );
+        $sqlIn = "SELECT COALESCE(SUM(amount), 0) FROM cash_transactions WHERE type = 'credit'";
+        $sqlOut = "SELECT COALESCE(SUM(amount), 0) FROM cash_transactions WHERE type = 'debit'";
+        $sqlFeed = "SELECT ct.*, ca.name AS account_name, con.name AS concern_name
+                    FROM cash_transactions ct
+                    JOIN cash_accounts ca ON ct.account_id = ca.id
+                    LEFT JOIN concerns con ON ct.concern_id = con.id";
+        
+        $params = [];
+        if ($cid) {
+            $sqlIn .= " AND concern_id = ?";
+            $sqlOut .= " AND concern_id = ?";
+            $sqlFeed .= " WHERE ct.concern_id = ?";
+            $params[] = $cid;
+        }
+        $sqlFeed .= " ORDER BY ct.txn_date DESC, ct.id DESC";
 
-        $totalOutflow = (float)DB::fetchValue(
-            "SELECT COALESCE(SUM(amount), 0) FROM cash_transactions WHERE concern_id = ? AND type = 'debit'",
-            [$cid]
-        );
-
+        $totalInflow = (float)DB::fetchValue($sqlIn, $params);
+        $totalOutflow = (float)DB::fetchValue($sqlOut, $params);
         $netFlow = $totalInflow - $totalOutflow;
-
-        // Unified Ledger Feed
-        $feed = DB::fetchAll(
-            "SELECT ct.*, ca.name AS account_name
-             FROM cash_transactions ct
-             JOIN cash_accounts ca ON ct.account_id = ca.id
-             WHERE ct.concern_id = ?
-             ORDER BY ct.txn_date DESC, ct.id DESC",
-            [$cid]
-        );
+        $feed = DB::fetchAll($sqlFeed, $params);
 
         $this->render('concern/cash_flow', [
             'pageTitle'     => 'Cash Flow Statement',
@@ -181,6 +206,7 @@ class FinanceController extends Controller {
             'totalOutflow'  => $totalOutflow,
             'netFlow'       => $netFlow,
             'feed'          => $feed,
+            'selectedCid'   => $cid,
         ]);
     }
 }

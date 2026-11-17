@@ -41,6 +41,7 @@ $router->get('/logout', [AuthController::class, 'logout']);
 // SUPER ADMIN MODULES (guarded 'super_admin')
 // ==========================================
 $router->get('/admin/dashboard', [AdminController::class, 'dashboard'], 'super_admin');
+$router->get('/admin/switch-concern', [AdminController::class, 'switchConcern'], 'super_admin');
 $router->get('/admin/concerns', [AdminController::class, 'concerns'], 'super_admin');
 $router->post('/admin/concerns/store', [AdminController::class, 'storeConcern'], 'super_admin');
 $router->post('/admin/concerns/toggle-module', [AdminController::class, 'toggleModule'], 'super_admin');

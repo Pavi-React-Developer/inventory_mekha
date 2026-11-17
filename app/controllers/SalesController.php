@@ -15,18 +15,34 @@ class SalesController extends Controller {
     // 1. CUSTOMERS
     public function customers(): void {
         $cid = Auth::concernId();
-        $customers = DB::fetchAll("SELECT * FROM customers WHERE concern_id = ? ORDER BY id DESC", [$cid]);
+
+        $sql = "SELECT c.*, con.name AS concern_name, con.code AS concern_code
+                FROM customers c
+                LEFT JOIN concerns con ON c.concern_id = con.id";
+        $params = [];
+        if ($cid) {
+            $sql .= " WHERE c.concern_id = ?";
+            $params[] = $cid;
+        }
+        $sql .= " ORDER BY c.id DESC";
+        $customers = DB::fetchAll($sql, $params);
 
         $this->render('concern/customers', [
             'pageTitle'     => 'Customer Details & Directory',
             'currentModule' => 'customers',
             'customers'     => $customers,
+            'selectedCid'   => $cid,
         ]);
     }
 
     public function storeCustomer(): void {
         $this->validateCsrf();
-        $cid = Auth::concernId();
+        $cid = Auth::concernId() ?: (int)($_POST['concern_id'] ?? 0);
+
+        if (!$cid) {
+            $this->flash('error', 'Please choose a concern for this customer.');
+            $this->redirect('/m/customers');
+        }
 
         $name    = trim($_POST['name'] ?? '');
         $phone   = trim($_POST['phone'] ?? '');
@@ -56,22 +72,31 @@ class SalesController extends Controller {
     public function request(): void {
         $cid = Auth::concernId();
 
-        $requests = DB::fetchAll(
-            "SELECT cr.*, c.name AS customer_name, v.name AS variant_name, v.sku_code,
-                    COALESCE(stk.total_qty, 0) AS current_stock
-             FROM customer_requests cr
-             JOIN customers c ON cr.customer_id = c.id
-             JOIN variants v ON cr.variant_id = v.id
-             LEFT JOIN (
-                 SELECT variant_id, SUM(qty) AS total_qty FROM stocks WHERE concern_id = ? GROUP BY variant_id
-             ) stk ON v.id = stk.variant_id
-             WHERE cr.concern_id = ?
-             ORDER BY cr.id DESC",
-            [$cid, $cid]
-        );
+        $sql = "SELECT cr.*, c.name AS customer_name, v.name AS variant_name, v.sku_code,
+                       con.name AS concern_name, con.code AS concern_code,
+                       COALESCE(stk.total_qty, 0) AS current_stock
+                FROM customer_requests cr
+                JOIN customers c ON cr.customer_id = c.id
+                JOIN variants v ON cr.variant_id = v.id
+                LEFT JOIN concerns con ON cr.concern_id = con.id
+                LEFT JOIN (
+                    SELECT variant_id, SUM(qty) AS total_qty FROM stocks GROUP BY variant_id
+                ) stk ON v.id = stk.variant_id";
+        $params = [];
+        if ($cid) {
+            $sql .= " WHERE cr.concern_id = ?";
+            $params[] = $cid;
+        }
+        $sql .= " ORDER BY cr.id DESC";
+        $requests = DB::fetchAll($sql, $params);
 
-        $customers = DB::fetchAll("SELECT id, name FROM customers WHERE concern_id = ? AND status = 'active'", [$cid]);
-        $variants  = DB::fetchAll("SELECT id, sku_code, name, size FROM variants WHERE concern_id = ? AND status = 'active'", [$cid]);
+        if ($cid) {
+            $customers = DB::fetchAll("SELECT id, name FROM customers WHERE concern_id = ? AND status = 'active'", [$cid]);
+            $variants  = DB::fetchAll("SELECT id, sku_code, name, size FROM variants WHERE concern_id = ? AND status = 'active'", [$cid]);
+        } else {
+            $customers = DB::fetchAll("SELECT id, name FROM customers WHERE status = 'active'");
+            $variants  = DB::fetchAll("SELECT id, sku_code, name, size FROM variants WHERE status = 'active'");
+        }
 
         $this->render('concern/request', [
             'pageTitle'     => 'Customer Product Requests',
@@ -79,12 +104,18 @@ class SalesController extends Controller {
             'requests'      => $requests,
             'customers'     => $customers,
             'variants'      => $variants,
+            'selectedCid'   => $cid,
         ]);
     }
 
     public function storeRequest(): void {
         $this->validateCsrf();
-        $cid = Auth::concernId();
+        $cid = Auth::concernId() ?: (int)($_POST['concern_id'] ?? 0);
+
+        if (!$cid) {
+            $this->flash('error', 'Please choose a concern.');
+            $this->redirect('/m/request');
+        }
 
         $customerId   = (int)($_POST['customer_id'] ?? 0);
         $variantId    = (int)($_POST['variant_id'] ?? 0);
@@ -113,28 +144,42 @@ class SalesController extends Controller {
     public function batch(): void {
         $cid = Auth::concernId();
 
-        $batches = DB::fetchAll(
-            "SELECT b.*, v.name AS variant_name, v.sku_code, v.size, v.weight_unit
-             FROM batches b
-             JOIN variants v ON b.variant_id = v.id
-             WHERE b.concern_id = ?
-             ORDER BY b.id DESC",
-            [$cid]
-        );
+        $sql = "SELECT b.*, v.name AS variant_name, v.sku_code, v.size, v.weight_unit,
+                       con.name AS concern_name, con.code AS concern_code
+                FROM batches b
+                JOIN variants v ON b.variant_id = v.id
+                LEFT JOIN concerns con ON b.concern_id = con.id";
+        $params = [];
+        if ($cid) {
+            $sql .= " WHERE b.concern_id = ?";
+            $params[] = $cid;
+        }
+        $sql .= " ORDER BY b.id DESC";
+        $batches = DB::fetchAll($sql, $params);
 
-        $variants = DB::fetchAll("SELECT id, sku_code, name, size FROM variants WHERE concern_id = ? AND status = 'active'", [$cid]);
+        if ($cid) {
+            $variants = DB::fetchAll("SELECT id, sku_code, name, size FROM variants WHERE concern_id = ? AND status = 'active'", [$cid]);
+        } else {
+            $variants = DB::fetchAll("SELECT id, sku_code, name, size FROM variants WHERE status = 'active'");
+        }
 
         $this->render('concern/batch', [
             'pageTitle'     => 'Batch Allocation & Lot Tracking',
             'currentModule' => 'batch',
             'batches'       => $batches,
             'variants'      => $variants,
+            'selectedCid'   => $cid,
         ]);
     }
 
     public function storeBatch(): void {
         $this->validateCsrf();
-        $cid = Auth::concernId();
+        $cid = Auth::concernId() ?: (int)($_POST['concern_id'] ?? 0);
+
+        if (!$cid) {
+            $this->flash('error', 'Please choose a concern.');
+            $this->redirect('/m/batch');
+        }
 
         $variantId = (int)($_POST['variant_id'] ?? 0);
         $qty       = (float)($_POST['batch_qty'] ?? 0);
@@ -162,24 +207,37 @@ class SalesController extends Controller {
     public function billing(): void {
         $cid = Auth::concernId();
 
-        $invoices = DB::fetchAll(
-            "SELECT si.*, c.name AS customer_name,
-                    (SELECT COUNT(*) FROM sales_invoice_items sii WHERE sii.sales_invoice_id = si.id) AS items_count
-             FROM sales_invoices si
-             JOIN customers c ON si.customer_id = c.id
-             WHERE si.concern_id = ?
-             ORDER BY si.id DESC",
-            [$cid]
-        );
+        $sql = "SELECT si.*, c.name AS customer_name, con.name AS concern_name, con.code AS concern_code,
+                       (SELECT COUNT(*) FROM sales_invoice_items sii WHERE sii.sales_invoice_id = si.id) AS items_count
+                FROM sales_invoices si
+                JOIN customers c ON si.customer_id = c.id
+                LEFT JOIN concerns con ON si.concern_id = con.id";
+        $params = [];
+        if ($cid) {
+            $sql .= " WHERE si.concern_id = ?";
+            $params[] = $cid;
+        }
+        $sql .= " ORDER BY si.id DESC";
+        $invoices = DB::fetchAll($sql, $params);
 
-        $customers = DB::fetchAll("SELECT id, name FROM customers WHERE concern_id = ? AND status = 'active'", [$cid]);
-        $variants  = DB::fetchAll(
-            "SELECT v.id, v.sku_code, v.name, v.price, v.mrp, v.size, COALESCE(s.qty, 0) as available_qty
-             FROM variants v
-             LEFT JOIN stocks s ON v.id = s.variant_id AND s.concern_id = ?
-             WHERE v.concern_id = ? AND v.status = 'active'",
-            [$cid, $cid]
-        );
+        if ($cid) {
+            $customers = DB::fetchAll("SELECT id, name FROM customers WHERE concern_id = ? AND status = 'active'", [$cid]);
+            $variants  = DB::fetchAll(
+                "SELECT v.id, v.sku_code, v.name, v.price, v.mrp, v.size, COALESCE(s.qty, 0) as available_qty
+                 FROM variants v
+                 LEFT JOIN stocks s ON v.id = s.variant_id AND s.concern_id = ?
+                 WHERE v.concern_id = ? AND v.status = 'active'",
+                [$cid, $cid]
+            );
+        } else {
+            $customers = DB::fetchAll("SELECT id, name FROM customers WHERE status = 'active'");
+            $variants  = DB::fetchAll(
+                "SELECT v.id, v.sku_code, v.name, v.price, v.mrp, v.size, COALESCE(s.qty, 0) as available_qty
+                 FROM variants v
+                 LEFT JOIN (SELECT variant_id, SUM(qty) as qty FROM stocks GROUP BY variant_id) s ON v.id = s.variant_id
+                 WHERE v.status = 'active'"
+            );
+        }
 
         $this->render('concern/billing', [
             'pageTitle'     => 'Sales Billing & Tax Invoices',
@@ -187,12 +245,18 @@ class SalesController extends Controller {
             'invoices'      => $invoices,
             'customers'     => $customers,
             'variants'      => $variants,
+            'selectedCid'   => $cid,
         ]);
     }
 
     public function storeInvoice(): void {
         $this->validateCsrf();
-        $cid = Auth::concernId();
+        $cid = Auth::concernId() ?: (int)($_POST['concern_id'] ?? 0);
+
+        if (!$cid) {
+            $this->flash('error', 'Please choose a concern.');
+            $this->redirect('/m/billing');
+        }
 
         $customerId = (int)($_POST['customer_id'] ?? 0);
         $invDate    = $_POST['invoice_date'] ?: date('Y-m-d');
@@ -263,27 +327,41 @@ class SalesController extends Controller {
     public function outward(): void {
         $cid = Auth::concernId();
 
-        $outwards = DB::fetchAll(
-            "SELECT o.*, c.name AS customer_name, si.invoice_no,
-                    (SELECT COUNT(*) FROM outward_items oi WHERE oi.outward_id = o.id) AS items_count,
-                    (SELECT COALESCE(SUM(qty), 0) FROM outward_items oi WHERE oi.outward_id = o.id) AS total_qty
-             FROM outwards o
-             JOIN customers c ON o.customer_id = c.id
-             LEFT JOIN sales_invoices si ON o.sales_invoice_id = si.id
-             WHERE o.concern_id = ?
-             ORDER BY o.id DESC",
-            [$cid]
-        );
+        $sql = "SELECT o.*, c.name AS customer_name, si.invoice_no, con.name AS concern_name, con.code AS concern_code,
+                       (SELECT COUNT(*) FROM outward_items oi WHERE oi.outward_id = o.id) AS items_count,
+                       (SELECT COALESCE(SUM(qty), 0) FROM outward_items oi WHERE oi.outward_id = o.id) AS total_qty
+                FROM outwards o
+                JOIN customers c ON o.customer_id = c.id
+                LEFT JOIN sales_invoices si ON o.sales_invoice_id = si.id
+                LEFT JOIN concerns con ON o.concern_id = con.id";
+        $params = [];
+        if ($cid) {
+            $sql .= " WHERE o.concern_id = ?";
+            $params[] = $cid;
+        }
+        $sql .= " ORDER BY o.id DESC";
+        $outwards = DB::fetchAll($sql, $params);
 
-        $customers = DB::fetchAll("SELECT id, name FROM customers WHERE concern_id = ? AND status = 'active'", [$cid]);
-        $invoices  = DB::fetchAll("SELECT id, invoice_no FROM sales_invoices WHERE concern_id = ?", [$cid]);
-        $variants  = DB::fetchAll(
-            "SELECT v.id, v.sku_code, v.name, v.size, COALESCE(s.qty, 0) AS stock_qty
-             FROM variants v
-             LEFT JOIN stocks s ON v.id = s.variant_id AND s.concern_id = ?
-             WHERE v.concern_id = ? AND v.status = 'active'",
-            [$cid, $cid]
-        );
+        if ($cid) {
+            $customers = DB::fetchAll("SELECT id, name FROM customers WHERE concern_id = ? AND status = 'active'", [$cid]);
+            $invoices  = DB::fetchAll("SELECT id, invoice_no FROM sales_invoices WHERE concern_id = ?", [$cid]);
+            $variants  = DB::fetchAll(
+                "SELECT v.id, v.sku_code, v.name, v.size, COALESCE(s.qty, 0) AS stock_qty
+                 FROM variants v
+                 LEFT JOIN stocks s ON v.id = s.variant_id AND s.concern_id = ?
+                 WHERE v.concern_id = ? AND v.status = 'active'",
+                [$cid, $cid]
+            );
+        } else {
+            $customers = DB::fetchAll("SELECT id, name FROM customers WHERE status = 'active'");
+            $invoices  = DB::fetchAll("SELECT id, invoice_no FROM sales_invoices");
+            $variants  = DB::fetchAll(
+                "SELECT v.id, v.sku_code, v.name, v.size, COALESCE(s.qty, 0) AS stock_qty
+                 FROM variants v
+                 LEFT JOIN (SELECT variant_id, SUM(qty) as qty FROM stocks GROUP BY variant_id) s ON v.id = s.variant_id
+                 WHERE v.status = 'active'"
+            );
+        }
 
         $this->render('concern/outward', [
             'pageTitle'     => 'Outward Gate Pass & Packing',
@@ -292,12 +370,18 @@ class SalesController extends Controller {
             'customers'     => $customers,
             'invoices'      => $invoices,
             'variants'      => $variants,
+            'selectedCid'   => $cid,
         ]);
     }
 
     public function storeOutward(): void {
         $this->validateCsrf();
-        $cid = Auth::concernId();
+        $cid = Auth::concernId() ?: (int)($_POST['concern_id'] ?? 0);
+
+        if (!$cid) {
+            $this->flash('error', 'Please choose a concern.');
+            $this->redirect('/m/outward');
+        }
 
         $customerId = (int)($_POST['customer_id'] ?? 0);
         $invoiceId  = !empty($_POST['sales_invoice_id']) ? (int)$_POST['sales_invoice_id'] : null;
@@ -355,32 +439,37 @@ class SalesController extends Controller {
     public function dispatch(): void {
         $cid = Auth::concernId();
 
-        $dispatches = DB::fetchAll(
-            "SELECT d.*, o.outward_no, c.name AS customer_name
-             FROM dispatches d
-             JOIN outwards o ON d.outward_id = o.id
-             JOIN customers c ON o.customer_id = c.id
-             WHERE d.concern_id = ?
-             ORDER BY d.id DESC",
-            [$cid]
-        );
+        $sql = "SELECT d.*, o.outward_no, c.name AS customer_name, con.name AS concern_name, con.code AS concern_code
+                FROM dispatches d
+                JOIN outwards o ON d.outward_id = o.id
+                JOIN customers c ON o.customer_id = c.id
+                LEFT JOIN concerns con ON d.concern_id = con.id";
+        $params = [];
+        if ($cid) {
+            $sql .= " WHERE d.concern_id = ?";
+            $params[] = $cid;
+        }
+        $sql .= " ORDER BY d.id DESC";
+        $dispatches = DB::fetchAll($sql, $params);
 
-        $outwards = DB::fetchAll(
-            "SELECT id, outward_no FROM outwards WHERE concern_id = ? AND status = 'prepared'",
-            [$cid]
-        );
+        if ($cid) {
+            $outwards = DB::fetchAll("SELECT id, outward_no FROM outwards WHERE concern_id = ? AND status = 'prepared'", [$cid]);
+        } else {
+            $outwards = DB::fetchAll("SELECT id, outward_no FROM outwards WHERE status = 'prepared'");
+        }
 
         $this->render('concern/dispatch', [
             'pageTitle'     => 'Dispatch & Logistics Tracking',
             'currentModule' => 'dispatch',
             'dispatches'    => $dispatches,
             'outwards'      => $outwards,
+            'selectedCid'   => $cid,
         ]);
     }
 
     public function storeDispatch(): void {
         $this->validateCsrf();
-        $cid = Auth::concernId();
+        $cid = Auth::concernId() ?: (int)($_POST['concern_id'] ?? 0);
 
         $outwardId    = (int)($_POST['outward_id'] ?? 0);
         $transporter  = trim($_POST['transporter_name'] ?? '');
@@ -392,6 +481,11 @@ class SalesController extends Controller {
         if (!$outwardId) {
             $this->flash('error', 'Please select an outward gate pass.');
             $this->redirect('/m/dispatch');
+        }
+
+        // If cid not set, read from outward
+        if (!$cid) {
+            $cid = (int)DB::fetchValue("SELECT concern_id FROM outwards WHERE id = ?", [$outwardId]);
         }
 
         DB::beginTransaction();
@@ -422,20 +516,29 @@ class SalesController extends Controller {
     public function returnExchange(): void {
         $cid = Auth::concernId();
 
-        $returns = DB::fetchAll(
-            "SELECT re.*, c.name AS customer_name, v1.name AS returned_variant_name, v1.sku_code AS returned_sku,
-                    v2.name AS exchange_variant_name, v2.sku_code AS exchange_sku
-             FROM returns_exchanges re
-             JOIN customers c ON re.customer_id = c.id
-             JOIN variants v1 ON re.returned_variant_id = v1.id
-             LEFT JOIN variants v2 ON re.exchange_variant_id = v2.id
-             WHERE re.concern_id = ?
-             ORDER BY re.id DESC",
-            [$cid]
-        );
+        $sql = "SELECT re.*, c.name AS customer_name, v1.name AS returned_variant_name, v1.sku_code AS returned_sku,
+                       v2.name AS exchange_variant_name, v2.sku_code AS exchange_sku,
+                       con.name AS concern_name, con.code AS concern_code
+                FROM returns_exchanges re
+                JOIN customers c ON re.customer_id = c.id
+                JOIN variants v1 ON re.returned_variant_id = v1.id
+                LEFT JOIN variants v2 ON re.exchange_variant_id = v2.id
+                LEFT JOIN concerns con ON re.concern_id = con.id";
+        $params = [];
+        if ($cid) {
+            $sql .= " WHERE re.concern_id = ?";
+            $params[] = $cid;
+        }
+        $sql .= " ORDER BY re.id DESC";
+        $returns = DB::fetchAll($sql, $params);
 
-        $customers = DB::fetchAll("SELECT id, name FROM customers WHERE concern_id = ? AND status = 'active'", [$cid]);
-        $variants  = DB::fetchAll("SELECT id, sku_code, name, size FROM variants WHERE concern_id = ? AND status = 'active'", [$cid]);
+        if ($cid) {
+            $customers = DB::fetchAll("SELECT id, name FROM customers WHERE concern_id = ? AND status = 'active'", [$cid]);
+            $variants  = DB::fetchAll("SELECT id, sku_code, name, size FROM variants WHERE concern_id = ? AND status = 'active'", [$cid]);
+        } else {
+            $customers = DB::fetchAll("SELECT id, name FROM customers WHERE status = 'active'");
+            $variants  = DB::fetchAll("SELECT id, sku_code, name, size FROM variants WHERE status = 'active'");
+        }
 
         $this->render('concern/return_exchange', [
             'pageTitle'     => 'Customer Returns & Exchanges',
@@ -443,12 +546,18 @@ class SalesController extends Controller {
             'returns'       => $returns,
             'customers'     => $customers,
             'variants'      => $variants,
+            'selectedCid'   => $cid,
         ]);
     }
 
     public function storeReturn(): void {
         $this->validateCsrf();
-        $cid = Auth::concernId();
+        $cid = Auth::concernId() ?: (int)($_POST['concern_id'] ?? 0);
+
+        if (!$cid) {
+            $this->flash('error', 'Please choose a concern.');
+            $this->redirect('/m/return_exchange');
+        }
 
         $type        = $_POST['type'] ?? 'return';
         $customerId  = (int)($_POST['customer_id'] ?? 0);

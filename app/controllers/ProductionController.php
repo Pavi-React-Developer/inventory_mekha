@@ -14,18 +14,27 @@ class ProductionController extends Controller {
     public function catalogProgram(): void {
         $cid = Auth::concernId();
 
-        $programs = DB::fetchAll(
-            "SELECT pp.*, c.name AS catalog_name, v.name AS target_variant_name, v.sku_code
-             FROM production_programs pp
-             LEFT JOIN catalogs c ON pp.catalog_id = c.id
-             JOIN variants v ON pp.target_variant_id = v.id
-             WHERE pp.concern_id = ?
-             ORDER BY pp.id DESC",
-            [$cid]
-        );
+        $sql = "SELECT pp.*, c.name AS catalog_name, v.name AS target_variant_name, v.sku_code,
+                       con.name AS concern_name, con.code AS concern_code
+                FROM production_programs pp
+                LEFT JOIN catalogs c ON pp.catalog_id = c.id
+                JOIN variants v ON pp.target_variant_id = v.id
+                LEFT JOIN concerns con ON pp.concern_id = con.id";
+        $params = [];
+        if ($cid) {
+            $sql .= " WHERE pp.concern_id = ?";
+            $params[] = $cid;
+        }
+        $sql .= " ORDER BY pp.id DESC";
+        $programs = DB::fetchAll($sql, $params);
 
-        $catalogs = DB::fetchAll("SELECT * FROM catalogs WHERE concern_id = ?", [$cid]);
-        $variants = DB::fetchAll("SELECT id, sku_code, name FROM variants WHERE concern_id = ? AND status = 'active'", [$cid]);
+        if ($cid) {
+            $catalogs = DB::fetchAll("SELECT * FROM catalogs WHERE concern_id = ?", [$cid]);
+            $variants = DB::fetchAll("SELECT id, sku_code, name FROM variants WHERE concern_id = ? AND status = 'active'", [$cid]);
+        } else {
+            $catalogs = DB::fetchAll("SELECT * FROM catalogs");
+            $variants = DB::fetchAll("SELECT id, sku_code, name FROM variants WHERE status = 'active'");
+        }
 
         $this->render('concern/catalog_program', [
             'pageTitle'     => 'Production Catalog & Scheduling Programs',
@@ -33,12 +42,18 @@ class ProductionController extends Controller {
             'programs'      => $programs,
             'catalogs'      => $catalogs,
             'variants'      => $variants,
+            'selectedCid'   => $cid,
         ]);
     }
 
     public function storeProgram(): void {
         $this->validateCsrf();
-        $cid = Auth::concernId();
+        $cid = Auth::concernId() ?: (int)($_POST['concern_id'] ?? 0);
+
+        if (!$cid) {
+            $this->flash('error', 'Please choose a concern.');
+            $this->redirect('/m/catalog_program');
+        }
 
         $targetVarId = (int)($_POST['target_variant_id'] ?? 0);
         $plannedQty  = (float)($_POST['planned_qty'] ?? 0);
@@ -85,18 +100,27 @@ class ProductionController extends Controller {
     public function cutting(): void {
         $cid = Auth::concernId();
 
-        $logs = DB::fetchAll(
-            "SELECT cl.*, pp.program_no, v.name AS raw_variant_name, v.sku_code
-             FROM cutting_logs cl
-             LEFT JOIN production_programs pp ON cl.program_id = pp.id
-             JOIN variants v ON cl.raw_variant_id = v.id
-             WHERE cl.concern_id = ?
-             ORDER BY cl.id DESC",
-            [$cid]
-        );
+        $sql = "SELECT cl.*, pp.program_no, v.name AS raw_variant_name, v.sku_code,
+                       con.name AS concern_name, con.code AS concern_code
+                FROM cutting_logs cl
+                LEFT JOIN production_programs pp ON cl.program_id = pp.id
+                JOIN variants v ON cl.raw_variant_id = v.id
+                LEFT JOIN concerns con ON cl.concern_id = con.id";
+        $params = [];
+        if ($cid) {
+            $sql .= " WHERE cl.concern_id = ?";
+            $params[] = $cid;
+        }
+        $sql .= " ORDER BY cl.id DESC";
+        $logs = DB::fetchAll($sql, $params);
 
-        $programs = DB::fetchAll("SELECT id, program_no FROM production_programs WHERE concern_id = ? AND status != 'cancelled'", [$cid]);
-        $rawVariants = DB::fetchAll("SELECT id, sku_code, name, weight_unit FROM variants WHERE concern_id = ? AND status = 'active'", [$cid]);
+        if ($cid) {
+            $programs = DB::fetchAll("SELECT id, program_no FROM production_programs WHERE concern_id = ? AND status != 'cancelled'", [$cid]);
+            $rawVariants = DB::fetchAll("SELECT id, sku_code, name, weight_unit FROM variants WHERE concern_id = ? AND status = 'active'", [$cid]);
+        } else {
+            $programs = DB::fetchAll("SELECT id, program_no FROM production_programs WHERE status != 'cancelled'");
+            $rawVariants = DB::fetchAll("SELECT id, sku_code, name, weight_unit FROM variants WHERE status = 'active'");
+        }
 
         $this->render('concern/cutting_wastage', [
             'pageTitle'     => 'Fabric Cutting & Wastage Tracking',
@@ -104,12 +128,18 @@ class ProductionController extends Controller {
             'logs'          => $logs,
             'programs'      => $programs,
             'rawVariants'   => $rawVariants,
+            'selectedCid'   => $cid,
         ]);
     }
 
     public function storeCutting(): void {
         $this->validateCsrf();
-        $cid = Auth::concernId();
+        $cid = Auth::concernId() ?: (int)($_POST['concern_id'] ?? 0);
+
+        if (!$cid) {
+            $this->flash('error', 'Please choose a concern.');
+            $this->redirect('/m/cutting_wastage');
+        }
 
         $progId      = !empty($_POST['program_id']) ? (int)$_POST['program_id'] : null;
         $rawVarId    = (int)($_POST['raw_variant_id'] ?? 0);
@@ -162,18 +192,27 @@ class ProductionController extends Controller {
     public function stitching(): void {
         $cid = Auth::concernId();
 
-        $logs = DB::fetchAll(
-            "SELECT sl.*, pp.program_no, v.name AS produced_variant_name, v.sku_code
-             FROM stitching_logs sl
-             LEFT JOIN production_programs pp ON sl.program_id = pp.id
-             JOIN variants v ON sl.produced_variant_id = v.id
-             WHERE sl.concern_id = ?
-             ORDER BY sl.id DESC",
-            [$cid]
-        );
+        $sql = "SELECT sl.*, pp.program_no, v.name AS produced_variant_name, v.sku_code,
+                       con.name AS concern_name, con.code AS concern_code
+                FROM stitching_logs sl
+                LEFT JOIN production_programs pp ON sl.program_id = pp.id
+                JOIN variants v ON sl.produced_variant_id = v.id
+                LEFT JOIN concerns con ON sl.concern_id = con.id";
+        $params = [];
+        if ($cid) {
+            $sql .= " WHERE sl.concern_id = ?";
+            $params[] = $cid;
+        }
+        $sql .= " ORDER BY sl.id DESC";
+        $logs = DB::fetchAll($sql, $params);
 
-        $programs = DB::fetchAll("SELECT id, program_no FROM production_programs WHERE concern_id = ?", [$cid]);
-        $variants = DB::fetchAll("SELECT id, sku_code, name, size FROM variants WHERE concern_id = ? AND status = 'active'", [$cid]);
+        if ($cid) {
+            $programs = DB::fetchAll("SELECT id, program_no FROM production_programs WHERE concern_id = ?", [$cid]);
+            $variants = DB::fetchAll("SELECT id, sku_code, name, size FROM variants WHERE concern_id = ? AND status = 'active'", [$cid]);
+        } else {
+            $programs = DB::fetchAll("SELECT id, program_no FROM production_programs");
+            $variants = DB::fetchAll("SELECT id, sku_code, name, size FROM variants WHERE status = 'active'");
+        }
 
         $this->render('concern/stitching_wastage', [
             'pageTitle'     => 'Stitching & Production Wastage',
@@ -181,12 +220,18 @@ class ProductionController extends Controller {
             'logs'          => $logs,
             'programs'      => $programs,
             'variants'      => $variants,
+            'selectedCid'   => $cid,
         ]);
     }
 
     public function storeStitching(): void {
         $this->validateCsrf();
-        $cid = Auth::concernId();
+        $cid = Auth::concernId() ?: (int)($_POST['concern_id'] ?? 0);
+
+        if (!$cid) {
+            $this->flash('error', 'Please choose a concern.');
+            $this->redirect('/m/stitching_wastage');
+        }
 
         $progId        = !empty($_POST['program_id']) ? (int)$_POST['program_id'] : null;
         $producedVarId = (int)($_POST['produced_variant_id'] ?? 0);
@@ -216,29 +261,43 @@ class ProductionController extends Controller {
     public function qc(): void {
         $cid = Auth::concernId();
 
-        $inspections = DB::fetchAll(
-            "SELECT qc.*, v.name AS variant_name, v.sku_code, v.size, u.name AS inspector_name
-             FROM qc_inspections qc
-             JOIN variants v ON qc.variant_id = v.id
-             LEFT JOIN users u ON qc.inspector_id = u.id
-             WHERE qc.concern_id = ?
-             ORDER BY qc.id DESC",
-            [$cid]
-        );
+        $sql = "SELECT qc.*, v.name AS variant_name, v.sku_code, v.size, u.name AS inspector_name,
+                       con.name AS concern_name, con.code AS concern_code
+                FROM qc_inspections qc
+                JOIN variants v ON qc.variant_id = v.id
+                LEFT JOIN concerns con ON qc.concern_id = con.id
+                LEFT JOIN users u ON qc.inspector_id = u.id";
+        $params = [];
+        if ($cid) {
+            $sql .= " WHERE qc.concern_id = ?";
+            $params[] = $cid;
+        }
+        $sql .= " ORDER BY qc.id DESC";
+        $inspections = DB::fetchAll($sql, $params);
 
-        $variants = DB::fetchAll("SELECT id, sku_code, name, size FROM variants WHERE concern_id = ? AND status = 'active'", [$cid]);
+        if ($cid) {
+            $variants = DB::fetchAll("SELECT id, sku_code, name, size FROM variants WHERE concern_id = ? AND status = 'active'", [$cid]);
+        } else {
+            $variants = DB::fetchAll("SELECT id, sku_code, name, size FROM variants WHERE status = 'active'");
+        }
 
         $this->render('concern/qc_stocks', [
             'pageTitle'     => 'Quality Control & Stock Approval',
             'currentModule' => 'qc_stocks',
             'inspections'   => $inspections,
             'variants'      => $variants,
+            'selectedCid'   => $cid,
         ]);
     }
 
     public function storeQc(): void {
         $this->validateCsrf();
-        $cid = Auth::concernId();
+        $cid = Auth::concernId() ?: (int)($_POST['concern_id'] ?? 0);
+
+        if (!$cid) {
+            $this->flash('error', 'Please choose a concern.');
+            $this->redirect('/m/qc_stocks');
+        }
 
         $variantId    = (int)($_POST['variant_id'] ?? 0);
         $inspectedQty = (float)($_POST['inspected_qty'] ?? 0);

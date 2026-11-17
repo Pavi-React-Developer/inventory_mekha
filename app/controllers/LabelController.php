@@ -17,29 +17,31 @@ class LabelController extends Controller {
         $variantModel = new Variant();
         $variants = $variantModel->allWithDetails();
 
-        $recentJobs = DB::fetchAll(
-            "SELECT lj.*, v.name AS variant_name, v.sku_code, u.name AS user_name,
-                    v.category_id, v.subcategory_id
-             FROM label_jobs lj
-             JOIN variants v ON lj.variant_id = v.id
-             LEFT JOIN users u ON lj.printed_by = u.id
-             WHERE lj.concern_id = ?
-             ORDER BY lj.id DESC LIMIT 10",
-            [$cid]
-        );
+        $sql = "SELECT lj.*, v.name AS variant_name, v.sku_code, u.name AS user_name,
+                       v.category_id, v.subcategory_id, con.name AS concern_name, con.code AS concern_code
+                FROM label_jobs lj
+                JOIN variants v ON lj.variant_id = v.id
+                LEFT JOIN concerns con ON lj.concern_id = con.id
+                LEFT JOIN users u ON lj.printed_by = u.id";
+        $params = [];
+        if ($cid) {
+            $sql .= " WHERE lj.concern_id = ?";
+            $params[] = $cid;
+        }
+        $sql .= " ORDER BY lj.id DESC LIMIT 10";
+        $recentJobs = DB::fetchAll($sql, $params);
 
         $this->render('concern/label_generation', [
             'pageTitle'     => 'QR Label Generation & Barcode Print',
             'currentModule' => 'label_generation',
             'variants'      => $variants,
             'recentJobs'    => $recentJobs,
+            'selectedCid'   => $cid,
         ]);
     }
 
     public function generate(): void {
         $this->validateCsrf();
-        $cid = Auth::concernId();
-
         $variantId = (int)($_POST['variant_id'] ?? 0);
         $qty       = max(1, min(500, (int)($_POST['qty'] ?? 1)));
 
@@ -50,6 +52,8 @@ class LabelController extends Controller {
             $this->flash('error', 'Selected variant was not found or belongs to another concern.');
             $this->redirect('/m/label_generation');
         }
+
+        $cid = Auth::concernId() ?: (int)$variant['concern_id'];
 
         // Save job for audit
         DB::query(
@@ -93,6 +97,21 @@ class LabelController extends Controller {
 
         if (empty($code)) {
             $this->renderJson(['success' => false, 'message' => 'Empty barcode/QR code'], 400);
+        }
+
+        // If Super Admin has not filtered to a single concern, detect variant concern
+        if (Auth::isSuperAdmin() && !$cid) {
+            $parsed = QrService::parsePayload($code);
+            if ($parsed) {
+                $varCid = DB::fetchValue("SELECT concern_id FROM variants WHERE id = ?", [$parsed['variant_id']]);
+                if ($varCid) {
+                    $cid = (int)$varCid;
+                }
+            }
+        }
+
+        if (!$cid) {
+            $this->renderJson(['success' => false, 'message' => 'Variant not found.'], 404);
         }
 
         $variant = QrService::lookupVariant($code, $cid);
