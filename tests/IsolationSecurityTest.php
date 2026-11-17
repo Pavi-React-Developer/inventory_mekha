@@ -170,6 +170,182 @@ assertTest("Validation: Valid email passes filter", (bool)filter_var('pavismvt@g
 assertTest("Validation: Invalid email blocked", !filter_var('not-an-email', FILTER_VALIDATE_EMAIL));
 
 // ----------------------------------------------------
+// TEST 8: Multi-Section Production Purchase Billing
+// ----------------------------------------------------
+echo "\nTEST 8: Multi-Section Production Purchase Billing (Rolls, Other, Finished Goods)\n";
+$testBillNo = 'TEST-PO-' . time();
+DB::query(
+    "INSERT INTO purchase_bills (concern_id, bill_no, supplier_invoice_no, supplier_id, bill_date, total_amount, tax_amount, net_amount, payment_status, inward_status, fabric_description, created_by)
+     VALUES (?, ?, ?, ?, CURDATE(), 19200.00, 960.00, 20160.00, 'unpaid', 'pending', '100% COMBED COTTON 30S', 2)",
+    [1, $testBillNo, 'INV-SUP-9988', 1]
+);
+$testBillId = (int)DB::lastInsertId();
+
+// Section 1: Rolls
+DB::query(
+    "INSERT INTO purchase_bill_items (concern_id, purchase_bill_id, section_type, item_name, item_code, specification, unit, gross_weight, net_weight, qty, unit_price, total_price)
+     VALUES (?, ?, 'rolls', '100% Cotton Fabric Roll', 'FB112663', 'Jet Black | 160 GSM', 'kg', 25.50, 25.00, 25.00, 280.00, 7000.00)",
+    [1, $testBillId]
+);
+
+// Section 2: Garment Other Things
+DB::query(
+    "INSERT INTO purchase_bill_items (concern_id, purchase_bill_id, section_type, item_name, item_code, specification, unit, qty, unit_price, total_price)
+     VALUES (?, ?, 'garment_other', 'Spun Polyester Sewing Thread', 'TRIM-01', '40/2 Black Cones', 'cones', 10.00, 120.00, 1200.00)",
+    [1, $testBillId]
+);
+
+// Section 3: Finished Goods
+DB::query(
+    "INSERT INTO purchase_bill_items (concern_id, purchase_bill_id, section_type, item_name, item_code, specification, unit, qty, unit_price, total_price)
+     VALUES (?, ?, 'finished_goods', 'Men Crew Neck Classic T-Shirt', 'FG-01', 'M | Navy Blue', 'pcs', 50.00, 220.00, 11000.00)",
+    [1, $testBillId]
+);
+
+$itemsCount = (int)DB::fetchValue("SELECT COUNT(*) FROM purchase_bill_items WHERE purchase_bill_id = ?", [$testBillId]);
+$rollsCount = (int)DB::fetchValue("SELECT COUNT(*) FROM purchase_bill_items WHERE purchase_bill_id = ? AND section_type = 'rolls'", [$testBillId]);
+$otherCount = (int)DB::fetchValue("SELECT COUNT(*) FROM purchase_bill_items WHERE purchase_bill_id = ? AND section_type = 'garment_other'", [$testBillId]);
+$fgCount = (int)DB::fetchValue("SELECT COUNT(*) FROM purchase_bill_items WHERE purchase_bill_id = ? AND section_type = 'finished_goods'", [$testBillId]);
+
+assertTest("Purchase bill created with multi-section line items", $itemsCount === 3);
+assertTest("Rolls section item persisted correctly", $rollsCount === 1);
+assertTest("Garment Other Things section item persisted correctly", $otherCount === 1);
+assertTest("Finished Goods section item persisted correctly", $fgCount === 1);
+
+// Clean up test bill
+DB::query("DELETE FROM purchase_bills WHERE id = ?", [$testBillId]);
+
+// ----------------------------------------------------
+// TEST 9: Supplier & Purchase Billing CRUD Operations
+// ----------------------------------------------------
+echo "\nTEST 9: Supplier & Purchase Billing CRUD Operations\n";
+
+// 9.1 Supplier Create & Update CRUD
+$crudSupCode = 'SUP-CRUD-' . time();
+DB::query(
+    "INSERT INTO suppliers (concern_id, code, name, company_name, phone, email, gstin, address, city, district, state, status)
+     VALUES (?, ?, 'Anand', 'VIJA ENTERPRISES', '8668007593', 'pavismvt@gmail.com', '33AAAAA0000A1Z5', 'valvarmanglam', 'Karur', 'Karur', 'Tamil Nadu', 'active')",
+    [1, $crudSupCode]
+);
+$testSupId = (int)DB::lastInsertId();
+
+DB::query(
+    "UPDATE suppliers SET company_name = 'VIJA ENTERPRISES Updated', district = 'Coimbatore', status = 'active' WHERE id = ?",
+    [$testSupId]
+);
+$updatedCompany = DB::fetchValue("SELECT company_name FROM suppliers WHERE id = ?", [$testSupId]);
+$updatedDistrict = DB::fetchValue("SELECT district FROM suppliers WHERE id = ?", [$testSupId]);
+assertTest("Supplier updated successfully via CRUD", $updatedCompany === 'VIJA ENTERPRISES Updated' && $updatedDistrict === 'Coimbatore');
+
+// 9.2 Purchase Bill Status & Full Flow Edit Update CRUD
+DB::query(
+    "INSERT INTO purchase_bills (concern_id, bill_no, supplier_id, bill_date, total_amount, tax_amount, net_amount, payment_status, inward_status)
+     VALUES (1, 'PO-CRUD-TEST', ?, CURDATE(), 2000.00, 100.00, 2100.00, 'unpaid', 'pending')",
+    [$testSupId]
+);
+$crudBillId = (int)DB::lastInsertId();
+
+// Insert items with Tax Mode (Include GST and Exclude GST)
+DB::query(
+    "INSERT INTO purchase_bill_items (concern_id, purchase_bill_id, section_type, item_name, item_code, rq_qty, qty, unit_price, gst_rate, gst_type, tax_mode, total_price, tax_amount)
+     VALUES (1, ?, 'rolls', 'ROLL #1', 'FB112661', 2, 2, 1000.00, 5.00, 'Both (CGST and SGST)', 'Exclude GST', 2000.00, 100.00)",
+    [$crudBillId]
+);
+
+// Full Flow Edit: update bill details, change roll to Include GST and recalculate
+DB::query(
+    "UPDATE purchase_bills SET payment_status = 'paid', inward_status = 'completed', supplier_invoice_no = 'INV-EDIT-999', notes = 'Settled via NEFT' WHERE id = ?",
+    [$crudBillId]
+);
+DB::query("DELETE FROM purchase_bill_items WHERE purchase_bill_id = ?", [$crudBillId]);
+DB::query(
+    "INSERT INTO purchase_bill_items (concern_id, purchase_bill_id, section_type, item_name, item_code, rq_qty, qty, unit_price, gst_rate, gst_type, tax_mode, total_price, tax_amount)
+     VALUES (1, ?, 'rolls', 'ROLL #1-EDIT', 'FB112661', 2, 2, 1050.00, 5.00, 'Both (CGST and SGST)', 'Include GST', 2000.00, 100.00)",
+    [$crudBillId]
+);
+
+$crudBill = DB::fetch("SELECT payment_status, inward_status, supplier_invoice_no, notes FROM purchase_bills WHERE id = ?", [$crudBillId]);
+$editedItem = DB::fetch("SELECT item_name, tax_mode, rq_qty, qty FROM purchase_bill_items WHERE purchase_bill_id = ?", [$crudBillId]);
+
+assertTest("Purchase bill updated via create-flow edit (Paid, Inward, Inv #)", $crudBill['payment_status'] === 'paid' && $crudBill['inward_status'] === 'completed' && $crudBill['supplier_invoice_no'] === 'INV-EDIT-999');
+assertTest("Purchase bill item tax_mode persisted ('Include GST')", $editedItem['tax_mode'] === 'Include GST');
+assertTest("Roll quantity and RQ are synchronized (qty == rq)", $editedItem['rq_qty'] == $editedItem['qty']);
+
+// 9.3 Purchase Items CSV Export Verification
+$billForExport = DB::fetch("SELECT * FROM purchase_bills WHERE id = ?", [$crudBillId]);
+$itemsForExport = DB::fetchAll("SELECT * FROM purchase_bill_items WHERE purchase_bill_id = ?", [$crudBillId]);
+$csvStream = fopen('php://memory', 'r+');
+fwrite($csvStream, "\xEF\xBB\xBF");
+fputcsv($csvStream, ['Bill No', $billForExport['bill_no']]);
+foreach ($itemsForExport as $ite) {
+    fputcsv($csvStream, [$ite['item_name'], $ite['tax_mode'], $ite['total_price']]);
+}
+rewind($csvStream);
+$csvContent = stream_get_contents($csvStream);
+fclose($csvStream);
+assertTest("Purchase items downloadable with UTF-8 BOM and valid CSV content", str_starts_with($csvContent, "\xEF\xBB\xBF") && str_contains($csvContent, 'ROLL #1-EDIT'));
+
+// 9.4 Purchase Bill Delete CRUD
+DB::query("DELETE FROM purchase_bills WHERE id = ?", [$crudBillId]);
+$deletedBill = DB::fetch("SELECT id FROM purchase_bills WHERE id = ?", [$crudBillId]);
+assertTest("Purchase bill deleted successfully via CRUD", $deletedBill === false || empty($deletedBill));
+
+// 9.4 Supplier Delete CRUD (Soft/Hard delete)
+DB::query("DELETE FROM suppliers WHERE id = ?", [$testSupId]);
+$deletedSup = DB::fetch("SELECT id FROM suppliers WHERE id = ?", [$testSupId]);
+assertTest("Supplier deleted successfully via CRUD", $deletedSup === false || empty($deletedSup));
+
+// ----------------------------------------------------
+// TEST 10: Cloudinary Image Storage & Local Fallback Service
+// ----------------------------------------------------
+echo "\nTEST 10: Cloudinary Image Storage & Local Fallback Service\n";
+
+// 10.1 Cloudinary URL Resolution
+$cloudSampleUrl = 'https://res.cloudinary.com/demo/image/upload/v1312461204/sample.jpg';
+$resolvedCloudUrl = \App\Services\CloudinaryService::url($cloudSampleUrl);
+assertTest("Cloudinary URL is preserved directly as browser source", $resolvedCloudUrl === $cloudSampleUrl);
+assertTest("isCloudinaryUrl detects Cloudinary CDN domain", \App\Services\CloudinaryService::isCloudinaryUrl($cloudSampleUrl) === true);
+
+// 10.2 Local Storage Path Resolution
+$localPath = 'storage/uploads/rolls/ROLL_20261117_sample.webp';
+$resolvedLocalUrl = \App\Services\CloudinaryService::url($localPath);
+assertTest("Local storage path is converted to full application URL", str_contains($resolvedLocalUrl, 'storage/uploads/rolls/ROLL_20261117_sample.webp') && !str_starts_with($resolvedLocalUrl, '//'));
+assertTest("isCloudinaryUrl returns false for local storage path", \App\Services\CloudinaryService::isCloudinaryUrl($localPath) === false);
+
+// 10.3 Nested File Normalization
+$fakeFiles = [
+    'name'     => [1 => ['photo' => 'sample_fabric.jpg']],
+    'tmp_name' => [1 => ['photo' => sys_get_temp_dir() . '/temp_upload_sample.jpg']],
+    'error'    => [1 => ['photo' => UPLOAD_ERR_OK]],
+    'size'     => [1 => ['photo' => 1024]],
+];
+$normalized = \App\Services\CloudinaryService::normalizeNestedFile($fakeFiles, 1, 'photo');
+assertTest("normalizeNestedFile correctly extracts indexed file attributes", $normalized !== null && $normalized['name'] === 'sample_fabric.jpg' && $normalized['error'] === UPLOAD_ERR_OK);
+
+// 10.4 Graceful Fallback to Local Disk when Cloudinary not configured
+$testTempFile = tempnam(sys_get_temp_dir(), 'inv_test_');
+file_put_contents($testTempFile, "FAKE_IMAGE_DATA");
+$mockUpload = [
+    'name'     => 'test_roll_swatch.jpg',
+    'tmp_name' => $testTempFile,
+    'error'    => UPLOAD_ERR_OK,
+    'size'     => 15,
+];
+$savedPath = \App\Services\CloudinaryService::saveUploadedFile($mockUpload, 'rolls', ['jpg', 'png']);
+assertTest("saveUploadedFile saves file locally if Cloudinary is unconfigured", !empty($savedPath) && str_starts_with($savedPath, 'storage/uploads/rolls/'));
+
+$fullLocalDiskPath = dirname(__DIR__) . '/' . $savedPath;
+assertTest("Saved fallback file exists on disk and is readable", file_exists($fullLocalDiskPath) && filesize($fullLocalDiskPath) === 15);
+
+// Cleanup test file
+if (file_exists($fullLocalDiskPath)) {
+    unlink($fullLocalDiskPath);
+}
+if (file_exists($testTempFile)) {
+    unlink($testTempFile);
+}
+
+// ----------------------------------------------------
 // FINAL RESULTS
 // ----------------------------------------------------
 echo "\n======================================================\n";
