@@ -1,0 +1,121 @@
+<?php
+// app/routes.php
+
+use App\Core\Router;
+use App\Core\Auth;
+use App\Controllers\AuthController;
+use App\Controllers\AdminController;
+use App\Controllers\ConcernDashboardController;
+use App\Controllers\VariantController;
+use App\Controllers\LabelController;
+use App\Controllers\StockController;
+use App\Controllers\InwardController;
+use App\Controllers\PurchaseController;
+use App\Controllers\SalesController;
+use App\Controllers\ProductionController;
+use App\Controllers\FinanceController;
+use App\Controllers\DamageController;
+
+/** @var Router $router */
+
+// Home redirection
+$router->get('/', function() {
+    if (!Auth::check()) {
+        header('Location: ' . \App\Core\Controller::url('/login'));
+        exit;
+    }
+    if (Auth::isSuperAdmin()) {
+        header('Location: ' . \App\Core\Controller::url('/admin/dashboard'));
+    } else {
+        header('Location: ' . \App\Core\Controller::url('/dashboard'));
+    }
+    exit;
+});
+
+// Authentication
+$router->get('/login', [AuthController::class, 'showLogin']);
+$router->post('/login', [AuthController::class, 'login']);
+$router->get('/logout', [AuthController::class, 'logout']);
+
+// ==========================================
+// SUPER ADMIN MODULES (guarded 'super_admin')
+// ==========================================
+$router->get('/admin/dashboard', [AdminController::class, 'dashboard'], 'super_admin');
+$router->get('/admin/concerns', [AdminController::class, 'concerns'], 'super_admin');
+$router->post('/admin/concerns/store', [AdminController::class, 'storeConcern'], 'super_admin');
+$router->post('/admin/concerns/toggle-module', [AdminController::class, 'toggleModule'], 'super_admin');
+$router->get('/admin/assets', [AdminController::class, 'assets'], 'super_admin');
+$router->post('/admin/assets/store', [AdminController::class, 'storeAsset'], 'super_admin');
+$router->get('/admin/reports', [AdminController::class, 'reports'], 'super_admin');
+
+// ==========================================
+// CONCERN MODULES (Strictly Guarded by concern_modules)
+// ==========================================
+
+// Dashboard
+$router->get('/dashboard', [ConcernDashboardController::class, 'index'], 'concern_dashboard', 'view');
+$router->get('/m/concern_dashboard', [ConcernDashboardController::class, 'index'], 'concern_dashboard', 'view');
+
+// Variants Catalog
+$router->get('/m/variants', [VariantController::class, 'index'], 'stocks', 'view');
+$router->post('/m/variants/store', [VariantController::class, 'store'], 'stocks', 'add');
+
+// QR Label Generation & Barcode Scanning
+$router->get('/m/label_generation', [LabelController::class, 'index'], 'label_generation', 'view');
+$router->post('/m/label_generation/generate', [LabelController::class, 'generate'], 'label_generation', 'add');
+$router->get('/scan', [LabelController::class, 'scanPage'], 'stocks', 'view');
+$router->get('/api/qr/lookup', [LabelController::class, 'lookup'], 'stocks', 'view');
+$router->post('/api/qr/lookup', [LabelController::class, 'lookup'], 'stocks', 'view');
+
+// Stock & Ledger
+$router->get('/m/stocks', [StockController::class, 'index'], 'stocks', 'view');
+$router->get('/m/stock_ledger', [StockController::class, 'ledger'], 'stocks', 'view');
+
+// Inward
+$router->get('/m/inward', [InwardController::class, 'index'], 'inward', 'view');
+$router->post('/m/inward/store', [InwardController::class, 'store'], 'inward', 'add');
+
+// Purchase
+$router->get('/m/suppliers', [PurchaseController::class, 'suppliers'], 'suppliers', 'view');
+$router->post('/m/suppliers/store', [PurchaseController::class, 'storeSupplier'], 'suppliers', 'add');
+$router->get('/m/purchase_billing', [PurchaseController::class, 'billing'], 'purchase_billing', 'view');
+$router->post('/m/purchase_billing/store', [PurchaseController::class, 'storeBill'], 'purchase_billing', 'add');
+$router->get('/m/purchase_damage', [PurchaseController::class, 'damage'], 'purchase_damage', 'view');
+$router->post('/m/purchase_damage/store', [PurchaseController::class, 'storeDamage'], 'purchase_damage', 'add');
+
+// Concern Damage
+$router->get('/m/concern_damage', [DamageController::class, 'index'], 'concern_damage', 'view');
+$router->post('/m/concern_damage/store', [DamageController::class, 'store'], 'concern_damage', 'add');
+
+// Sales & Distribution
+$router->get('/m/customers', [SalesController::class, 'customers'], 'customers', 'view');
+$router->post('/m/customers/store', [SalesController::class, 'storeCustomer'], 'customers', 'add');
+$router->get('/m/request', [SalesController::class, 'request'], 'request', 'view');
+$router->post('/m/request/store', [SalesController::class, 'storeRequest'], 'request', 'add');
+$router->get('/m/batch', [SalesController::class, 'batch'], 'batch', 'view');
+$router->post('/m/batch/store', [SalesController::class, 'storeBatch'], 'batch', 'add');
+$router->get('/m/billing', [SalesController::class, 'billing'], 'billing', 'view');
+$router->post('/m/billing/store', [SalesController::class, 'storeInvoice'], 'billing', 'add');
+$router->get('/m/outward', [SalesController::class, 'outward'], 'outward', 'view');
+$router->post('/m/outward/store', [SalesController::class, 'storeOutward'], 'outward', 'add');
+$router->get('/m/dispatch', [SalesController::class, 'dispatch'], 'dispatch', 'view');
+$router->post('/m/dispatch/store', [SalesController::class, 'storeDispatch'], 'dispatch', 'add');
+$router->get('/m/return_exchange', [SalesController::class, 'returnExchange'], 'return_exchange', 'view');
+$router->post('/m/return_exchange/store', [SalesController::class, 'storeReturn'], 'return_exchange', 'add');
+
+// Production Line
+$router->get('/m/catalog_program', [ProductionController::class, 'catalogProgram'], 'catalog_program', 'view');
+$router->post('/m/catalog_program/store', [ProductionController::class, 'storeProgram'], 'catalog_program', 'add');
+$router->get('/m/cutting_wastage', [ProductionController::class, 'cutting'], 'cutting_wastage', 'view');
+$router->post('/m/cutting_wastage/store', [ProductionController::class, 'storeCutting'], 'cutting_wastage', 'add');
+$router->get('/m/stitching_wastage', [ProductionController::class, 'stitching'], 'stitching_wastage', 'view');
+$router->post('/m/stitching_wastage/store', [ProductionController::class, 'storeStitching'], 'stitching_wastage', 'add');
+$router->get('/m/qc_stocks', [ProductionController::class, 'qc'], 'qc_stocks', 'view');
+$router->post('/m/qc_stocks/store', [ProductionController::class, 'storeQc'], 'qc_stocks', 'add');
+
+// Finance & Accounts
+$router->get('/m/expense', [FinanceController::class, 'expense'], 'expense', 'view');
+$router->post('/m/expense/store', [FinanceController::class, 'storeExpense'], 'expense', 'add');
+$router->get('/m/cash', [FinanceController::class, 'cash'], 'cash', 'view');
+$router->post('/m/cash/store', [FinanceController::class, 'storeAccount'], 'cash', 'add');
+$router->get('/m/cash_flow', [FinanceController::class, 'cashFlow'], 'cash_flow', 'view');
