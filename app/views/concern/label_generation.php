@@ -165,7 +165,7 @@ $concernName = $concern['name'] ?? 'INVENTO ERP';
 
                                     <div class="mb-3">
                                         <label class="form-label small fw-semibold">Select Fabric Roll <span class="text-danger">*</span></label>
-                                        <select name="item_id" id="roll_item_select" class="form-select" required onchange="updateRollPreview()">
+                                        <select name="item_id" id="roll_item_select" class="form-select" required onchange="updateRollPreview(); matchRollQty()">
                                             <option value="">-- Choose Fabric Roll --</option>
                                             <?php foreach ($purchaseRollItems as $raw): 
                                                 $code = $raw['item_code'] ?: ('ROLL-' . $raw['id']);
@@ -190,6 +190,7 @@ $concernName = $concern['name'] ?? 'INVENTO ERP';
                                                         data-unit="<?= htmlspecialchars($raw['unit'] ?: 'Rolls') ?>"
                                                         data-rq="<?= htmlspecialchars($raw['rq_qty'] ?: 1) ?>"
                                                         data-net="<?= htmlspecialchars($raw['net_weight'] ?? '') ?>"
+                                                        data-price="<?= (float)($raw['unit_price'] ?: ($raw['mrp'] ?: 0)) ?>"
                                                         data-bill="<?= htmlspecialchars($raw['bill_no']) ?>"
                                                         data-qr="<?= htmlspecialchars($tagCode) ?>">
                                                     [ROLL] <?= htmlspecialchars($raw['item_name']) ?> (<?= htmlspecialchars($tagCode) ?>) &bull; <?= number_format((float)$raw['qty'], 2) ?> <?= htmlspecialchars($raw['unit'] ?: 'Rolls') ?> &bull; Bill #<?= htmlspecialchars($raw['bill_no']) ?>
@@ -203,16 +204,13 @@ $concernName = $concern['name'] ?? 'INVENTO ERP';
                                         <div class="d-flex justify-content-between align-items-center mb-1">
                                             <label class="form-label small fw-semibold mb-0">Number of Label Copies (N Prints) <span class="text-danger">*</span></label>
                                             <div class="btn-group btn-group-sm" role="group">
-                                                <button type="button" class="btn btn-outline-secondary py-0 px-2" onclick="setCopies('roll_qty', 1)">1</button>
-                                                <button type="button" class="btn btn-outline-secondary py-0 px-2" onclick="setCopies('roll_qty', 2)">2</button>
-                                                <button type="button" class="btn btn-outline-secondary py-0 px-2" onclick="setCopies('roll_qty', 4)">4</button>
-                                                <button type="button" class="btn btn-outline-secondary py-0 px-2" onclick="setCopies('roll_qty', 12)">12</button>
-                                                <button type="button" class="btn btn-outline-primary py-0 px-2" onclick="matchRollQty()">Match RQ</button>
+                                                <button type="button" class="btn btn-outline-primary py-0 px-2" onclick="matchRollQty()">Match Qty</button>
                                             </div>
                                         </div>
                                         <div class="input-group">
-                                            <span class="input-group-text bg-light"><i class="bi bi-printer"></i></span>
-                                            <input type="number" name="qty" id="roll_qty" class="form-control" min="1" max="500" value="12" required>
+                                            <button type="button" class="btn btn-outline-secondary" onclick="adjustCopies('roll_qty', -1)" aria-label="Decrease label quantity"><i class="bi bi-dash-lg"></i></button>
+                                            <input type="number" name="qty" id="roll_qty" class="form-control text-center" min="1" max="500" value="1" required>
+                                            <button type="button" class="btn btn-outline-secondary" onclick="adjustCopies('roll_qty', 1)" aria-label="Increase label quantity"><i class="bi bi-plus-lg"></i></button>
                                             <span class="input-group-text bg-light">Stickers</span>
                                         </div>
                                     </div>
@@ -240,7 +238,8 @@ $concernName = $concern['name'] ?? 'INVENTO ERP';
                                                     <div class="fw-bold text-dark text-uppercase mb-1 text-truncate" style="font-size: 0.86rem;" id="roll_preview_title">ROLL #1</div>
                                                     <div class="text-truncate"><span class="text-secondary">Fabric:</span> <strong class="text-dark" id="roll_preview_fabric">-</strong></div>
                                                     <div class="text-truncate"><span class="text-secondary">Color:</span> <strong class="text-dark text-uppercase" id="roll_preview_color">RED</strong></div>
-                                                    <div class="text-truncate"><span class="text-secondary">Weight:</span> <strong class="text-dark" id="roll_preview_weight">10.00 kg</strong></div>
+                                                    <div class="text-truncate"><span class="text-secondary">Design:</span> <strong class="text-dark text-uppercase" id="roll_preview_design">FLORA</strong></div>
+                                                    <div class="text-truncate"><span class="text-secondary">Price:</span> <strong class="text-success fw-bold" id="roll_preview_price">₹5,000.00</strong></div>
                                                     <div class="text-truncate"><span class="text-secondary">Code:</span> <strong class="font-monospace text-primary fw-bold" id="roll_preview_code_tag">FAB-R-FL</strong></div>
                                                 </div>
                                             </div>
@@ -386,6 +385,7 @@ $concernName = $concern['name'] ?? 'INVENTO ERP';
                                                         data-spec="<?= htmlspecialchars($other['specification'] ?? '') ?>"
                                                         data-qty="<?= htmlspecialchars($other['qty']) ?>"
                                                         data-unit="<?= htmlspecialchars($other['unit'] ?: 'pcs') ?>"
+                                                        data-price="<?= (float)($other['unit_price'] ?: ($other['mrp'] ?: 0)) ?>"
                                                         data-bill="<?= htmlspecialchars($other['bill_no']) ?>"
                                                         data-qr="<?= htmlspecialchars($tagCode) ?>">
                                                     [TRIM] <?= htmlspecialchars($other['item_name']) ?> (<?= htmlspecialchars($tagCode) ?>) &bull; <?= number_format((float)$other['qty'], 2) ?> <?= htmlspecialchars($other['unit']) ?> &bull; Bill #<?= htmlspecialchars($other['bill_no']) ?>
@@ -399,16 +399,13 @@ $concernName = $concern['name'] ?? 'INVENTO ERP';
                                         <div class="d-flex justify-content-between align-items-center mb-1">
                                             <label class="form-label small fw-semibold mb-0">Number of Label Copies (N Prints) <span class="text-danger">*</span></label>
                                             <div class="btn-group btn-group-sm" role="group">
-                                                <button type="button" class="btn btn-outline-secondary py-0 px-2" onclick="setCopies('other_qty', 1)">1</button>
-                                                <button type="button" class="btn btn-outline-secondary py-0 px-2" onclick="setCopies('other_qty', 2)">2</button>
-                                                <button type="button" class="btn btn-outline-secondary py-0 px-2" onclick="setCopies('other_qty', 4)">4</button>
-                                                <button type="button" class="btn btn-outline-secondary py-0 px-2" onclick="setCopies('other_qty', 12)">12</button>
                                                 <button type="button" class="btn btn-outline-primary py-0 px-2" onclick="matchOtherQty()">Match Qty</button>
                                             </div>
                                         </div>
                                         <div class="input-group">
-                                            <span class="input-group-text bg-light"><i class="bi bi-printer"></i></span>
-                                            <input type="number" name="qty" id="other_qty" class="form-control" min="1" max="500" value="12" required>
+                                            <button type="button" class="btn btn-outline-secondary" onclick="adjustCopies('other_qty', -1)" aria-label="Decrease label quantity"><i class="bi bi-dash-lg"></i></button>
+                                            <input type="number" name="qty" id="other_qty" class="form-control text-center" min="1" max="500" value="12" required>
+                                            <button type="button" class="btn btn-outline-secondary" onclick="adjustCopies('other_qty', 1)" aria-label="Increase label quantity"><i class="bi bi-plus-lg"></i></button>
                                             <span class="input-group-text bg-light">Stickers</span>
                                         </div>
                                     </div>
@@ -435,8 +432,9 @@ $concernName = $concern['name'] ?? 'INVENTO ERP';
                                                 <div class="flex-grow-1 overflow-hidden" style="line-height: 1.35; font-size: 0.76rem;">
                                                     <div class="fw-bold text-dark text-uppercase mb-1 text-truncate" style="font-size: 0.86rem;" id="other_preview_title">SEWING THREAD</div>
                                                     <div class="text-truncate"><span class="text-secondary">Item:</span> <strong class="text-dark" id="other_preview_item">-</strong></div>
-                                                    <div class="text-truncate"><span class="text-secondary">Color / Spec:</span> <strong class="text-dark text-uppercase" id="other_preview_color">-</strong></div>
-                                                    <div class="text-truncate"><span class="text-secondary">Quantity:</span> <strong class="text-dark" id="other_preview_qty">50.00 spools</strong></div>
+                                                    <div class="text-truncate"><span class="text-secondary">Color:</span> <strong class="text-dark text-uppercase" id="other_preview_color">-</strong></div>
+                                                    <div class="text-truncate"><span class="text-secondary">Design:</span> <strong class="text-dark text-uppercase" id="other_preview_design">STANDARD</strong></div>
+                                                    <div class="text-truncate"><span class="text-secondary">Price:</span> <strong class="text-success fw-bold" id="other_preview_price">₹45.00</strong></div>
                                                     <div class="text-truncate"><span class="text-secondary">Code:</span> <strong class="font-monospace text-primary fw-bold" id="other_preview_code_tag">TR-TH-WHT</strong></div>
                                                 </div>
                                             </div>
@@ -582,7 +580,9 @@ $concernName = $concern['name'] ?? 'INVENTO ERP';
                                                 data-sku="<?= htmlspecialchars($sku) ?>"
                                                 data-tag="<?= htmlspecialchars($tagCode) ?>"
                                                 data-mrp="<?= htmlspecialchars($mrp) ?>"
+                                                data-price="<?= htmlspecialchars($mrp) ?>"
                                                 data-size="<?= htmlspecialchars($size) ?>"
+                                                data-pattern="<?= htmlspecialchars($fg['pattern'] ?: ($fg['specification'] ?? 'STANDARD')) ?>"
                                                 data-cat="<?= htmlspecialchars($cat) ?>"
                                                 data-brand="<?= htmlspecialchars($fg['brand_name'] ?: ($fg['supplier_company'] ?: 'INVENTO')) ?>"
                                                 data-color="<?= htmlspecialchars($fg['color'] ?: 'STANDARD') ?>"
@@ -638,15 +638,13 @@ $concernName = $concern['name'] ?? 'INVENTO ERP';
                                 <div class="d-flex justify-content-between align-items-center mb-1">
                                     <label class="form-label small fw-semibold mb-0">Number of Label Copies (N Prints) <span class="text-danger">*</span></label>
                                     <div class="btn-group btn-group-sm" role="group">
-                                        <button type="button" class="btn btn-outline-secondary py-0 px-2" onclick="setCopies('fg_qty', 10)">10</button>
-                                        <button type="button" class="btn btn-outline-secondary py-0 px-2" onclick="setCopies('fg_qty', 25)">25</button>
-                                        <button type="button" class="btn btn-outline-secondary py-0 px-2" onclick="setCopies('fg_qty', 50)">50</button>
                                         <button type="button" class="btn btn-outline-primary py-0 px-2" onclick="matchFgQty()">Match Purchase Qty</button>
                                     </div>
                                 </div>
                                 <div class="input-group">
-                                    <span class="input-group-text bg-light"><i class="bi bi-printer"></i></span>
-                                    <input type="number" name="qty" id="fg_qty" class="form-control" min="1" max="500" value="24" required>
+                                    <button type="button" class="btn btn-outline-secondary" onclick="adjustCopies('fg_qty', -1)" aria-label="Decrease label quantity"><i class="bi bi-dash-lg"></i></button>
+                                    <input type="number" name="qty" id="fg_qty" class="form-control text-center" min="1" max="500" value="24" required>
+                                    <button type="button" class="btn btn-outline-secondary" onclick="adjustCopies('fg_qty', 1)" aria-label="Increase label quantity"><i class="bi bi-plus-lg"></i></button>
                                     <span class="input-group-text bg-light">Price Tags</span>
                                 </div>
                             </div>
@@ -676,9 +674,9 @@ $concernName = $concern['name'] ?? 'INVENTO ERP';
                                             <div class="fw-bold text-dark text-uppercase mb-1 text-truncate" style="font-size: 0.86rem;" id="fg_preview_title">Finished Good</div>
                                             <div class="text-truncate"><span class="text-secondary">Product:</span> <strong class="text-dark" id="fg_preview_cat">Apparel</strong></div>
                                             <div class="text-truncate"><span class="text-secondary">Color:</span> <strong class="text-dark text-uppercase" id="fg_preview_color">STANDARD</strong></div>
-                                            <div class="text-truncate"><span class="text-secondary">Size / Qty:</span> <strong class="text-dark" id="fg_preview_size_qty">Free Size</strong></div>
+                                            <div class="text-truncate"><span class="text-secondary">Design:</span> <strong class="text-dark text-uppercase" id="fg_preview_design">STANDARD</strong></div>
+                                            <div class="text-truncate"><span class="text-secondary">Price:</span> <strong class="text-success fw-bold" id="fg_preview_price">₹0.00</strong></div>
                                             <div class="text-truncate"><span class="text-secondary">Code:</span> <strong class="font-monospace text-primary fw-bold" id="fg_preview_code_tag">FG-0-01</strong></div>
-                                            <div class="text-danger fw-bold mt-1" style="font-size: 0.72rem;" id="fg_preview_mrp">MRP ₹0.00</div>
                                         </div>
                                     </div>
                                 </div>
@@ -839,15 +837,13 @@ $concernName = $concern['name'] ?? 'INVENTO ERP';
                                 <div class="d-flex justify-content-between align-items-center mb-1">
                                     <label class="form-label small fw-semibold mb-0">Number of Label Copies (N Prints) <span class="text-danger">*</span></label>
                                     <div class="btn-group btn-group-sm" role="group">
-                                        <button type="button" class="btn btn-outline-secondary py-0 px-2" onclick="setCopies('prod_qty', 12)">12</button>
-                                        <button type="button" class="btn btn-outline-secondary py-0 px-2" onclick="setCopies('prod_qty', 24)">24</button>
-                                        <button type="button" class="btn btn-outline-secondary py-0 px-2" onclick="setCopies('prod_qty', 50)">50</button>
                                         <button type="button" class="btn btn-outline-warning py-0 px-2" onclick="matchProdQty()">Match Stitched Pcs</button>
                                     </div>
                                 </div>
                                 <div class="input-group">
-                                    <span class="input-group-text bg-light"><i class="bi bi-printer"></i></span>
-                                    <input type="number" name="qty" id="prod_qty" class="form-control" min="1" max="500" value="24" required>
+                                    <button type="button" class="btn btn-outline-secondary" onclick="adjustCopies('prod_qty', -1)" aria-label="Decrease label quantity"><i class="bi bi-dash-lg"></i></button>
+                                    <input type="number" name="qty" id="prod_qty" class="form-control text-center" min="1" max="500" value="24" required>
+                                    <button type="button" class="btn btn-outline-secondary" onclick="adjustCopies('prod_qty', 1)" aria-label="Increase label quantity"><i class="bi bi-plus-lg"></i></button>
                                     <span class="input-group-text bg-light">Stickers</span>
                                 </div>
                             </div>
@@ -877,9 +873,9 @@ $concernName = $concern['name'] ?? 'INVENTO ERP';
                                             <div class="fw-bold text-dark text-uppercase mb-1 text-truncate" style="font-size: 0.86rem;" id="prod_preview_title">Production Garment</div>
                                             <div class="text-truncate"><span class="text-secondary">Program:</span> <strong class="text-dark" id="prod_preview_program">In-House</strong></div>
                                             <div class="text-truncate"><span class="text-secondary">Color:</span> <strong class="text-dark text-uppercase" id="prod_preview_color">STANDARD</strong></div>
-                                            <div class="text-truncate"><span class="text-secondary">Size:</span> <strong class="text-dark" id="prod_preview_size">Standard</strong></div>
+                                            <div class="text-truncate"><span class="text-secondary">Design:</span> <strong class="text-dark text-uppercase" id="prod_preview_design">STANDARD</strong></div>
+                                            <div class="text-truncate"><span class="text-secondary">Price:</span> <strong class="text-success fw-bold" id="prod_preview_price">₹0.00</strong></div>
                                             <div class="text-truncate"><span class="text-secondary">Code:</span> <strong class="font-monospace text-primary fw-bold" id="prod_preview_code_tag">PRO-S-01</strong></div>
-                                            <div class="text-danger fw-bold mt-1" style="font-size: 0.72rem;" id="prod_preview_mrp">MRP ₹0.00</div>
                                         </div>
                                     </div>
                                 </div>
@@ -1038,15 +1034,13 @@ $concernName = $concern['name'] ?? 'INVENTO ERP';
                                 <div class="d-flex justify-content-between align-items-center mb-1">
                                     <label class="form-label small fw-semibold mb-0">Number of Label Copies (N Prints) <span class="text-danger">*</span></label>
                                     <div class="btn-group btn-group-sm" role="group">
-                                        <button type="button" class="btn btn-outline-secondary py-0 px-2" onclick="setCopies('ret_qty', 1)">1</button>
-                                        <button type="button" class="btn btn-outline-secondary py-0 px-2" onclick="setCopies('ret_qty', 2)">2</button>
-                                        <button type="button" class="btn btn-outline-secondary py-0 px-2" onclick="setCopies('ret_qty', 5)">5</button>
                                         <button type="button" class="btn btn-outline-danger py-0 px-2" onclick="matchRetQty()">Match Returned Qty</button>
                                     </div>
                                 </div>
                                 <div class="input-group">
-                                    <span class="input-group-text bg-light"><i class="bi bi-printer"></i></span>
-                                    <input type="number" name="qty" id="ret_qty" class="form-control" min="1" max="500" value="1" required>
+                                    <button type="button" class="btn btn-outline-secondary" onclick="adjustCopies('ret_qty', -1)" aria-label="Decrease label quantity"><i class="bi bi-dash-lg"></i></button>
+                                    <input type="number" name="qty" id="ret_qty" class="form-control text-center" min="1" max="500" value="1" required>
+                                    <button type="button" class="btn btn-outline-secondary" onclick="adjustCopies('ret_qty', 1)" aria-label="Increase label quantity"><i class="bi bi-plus-lg"></i></button>
                                     <span class="input-group-text bg-light">Stickers</span>
                                 </div>
                             </div>
@@ -1076,9 +1070,9 @@ $concernName = $concern['name'] ?? 'INVENTO ERP';
                                             <div class="fw-bold text-dark text-uppercase mb-1 text-truncate" style="font-size: 0.86rem;" id="ret_preview_title">Returned Product</div>
                                             <div class="text-truncate"><span class="text-secondary">Customer:</span> <strong class="text-dark" id="ret_preview_customer">Retail</strong></div>
                                             <div class="text-truncate"><span class="text-secondary">Color:</span> <strong class="text-dark text-uppercase" id="ret_preview_color">STANDARD</strong></div>
-                                            <div class="text-truncate"><span class="text-secondary">Size / Qty:</span> <strong class="text-dark" id="ret_preview_size">Free Size</strong></div>
+                                            <div class="text-truncate"><span class="text-secondary">Design:</span> <strong class="text-dark text-uppercase" id="ret_preview_design">RESTOCK</strong></div>
+                                            <div class="text-truncate"><span class="text-secondary">Price:</span> <strong class="text-success fw-bold" id="ret_preview_price">₹0.00</strong></div>
                                             <div class="text-truncate"><span class="text-secondary">Code:</span> <strong class="font-monospace text-primary fw-bold" id="ret_preview_code_tag">RET-C-01</strong></div>
-                                            <div class="text-danger fw-bold mt-1" style="font-size: 0.72rem;" id="ret_preview_mrp">MRP ₹0.00</div>
                                         </div>
                                     </div>
                                 </div>
@@ -1276,16 +1270,16 @@ function updateRollPreview() {
         const title = 'ROLL #' + (opt.dataset.code || opt.value);
         const fabric = opt.dataset.name || 'Fabric Material';
         const color = (opt.dataset.color || 'STANDARD').toUpperCase();
-        const weight = (opt.dataset.net && parseFloat(opt.dataset.net) > 0)
-            ? (parseFloat(opt.dataset.net).toFixed(2) + ' kg')
-            : (parseFloat(opt.dataset.qty || 0).toFixed(2) + ' ' + (opt.dataset.unit || 'Rolls'));
+        const design = (opt.dataset.pattern || opt.dataset.spec || 'PLAIN').toUpperCase();
+        const price = parseFloat(opt.dataset.price || 0);
         const ref = opt.dataset.bill ? ('PO-' + opt.dataset.bill) : 'PO-REF';
 
         document.getElementById('roll_preview_ref').textContent = ref;
         document.getElementById('roll_preview_title').textContent = title;
         document.getElementById('roll_preview_fabric').textContent = fabric;
         document.getElementById('roll_preview_color').textContent = color;
-        document.getElementById('roll_preview_weight').textContent = weight;
+        document.getElementById('roll_preview_design').textContent = design;
+        document.getElementById('roll_preview_price').textContent = '₹' + price.toFixed(2);
         document.getElementById('roll_preview_code_tag').textContent = tag;
         document.getElementById('roll_preview_badge').textContent = 'RAW MATERIAL';
 
@@ -1295,7 +1289,8 @@ function updateRollPreview() {
         document.getElementById('roll_preview_title').textContent = 'ROLL #1';
         document.getElementById('roll_preview_fabric').textContent = 'Select a fabric roll';
         document.getElementById('roll_preview_color').textContent = 'RED';
-        document.getElementById('roll_preview_weight').textContent = '10.00 kg';
+        document.getElementById('roll_preview_design').textContent = 'FLORA';
+        document.getElementById('roll_preview_price').textContent = '₹5,000.00';
         document.getElementById('roll_preview_code_tag').textContent = 'FAB-R-FL';
         document.getElementById('roll_preview_badge').textContent = 'RAW MATERIAL';
         renderQr('roll_qr_box', 'FAB-R-FL');
@@ -1316,8 +1311,8 @@ function matchRollQty() {
     if (!sel) return;
     const opt = sel.options[sel.selectedIndex];
     if (opt && opt.value) {
-        const rq = parseInt(opt.dataset.rq || opt.dataset.qty || 1, 10);
-        document.getElementById('roll_qty').value = rq > 0 ? rq : 1;
+        const qty = parseInt(opt.dataset.qty || opt.dataset.rq || '1', 10);
+        document.getElementById('roll_qty').value = qty > 0 ? Math.min(qty, 500) : 1;
     }
 }
 
@@ -1345,15 +1340,18 @@ function updateOtherPreview() {
     if (!sel) return;
     const opt = sel.options[sel.selectedIndex];
     if (opt && opt.value) {
-        const tag = opt.dataset.tag || makeTagCode(opt.dataset.name, opt.dataset.color, opt.dataset.spec, opt.value);
+        const tag = opt.dataset.tag || makeTagCode(opt.dataset.name, opt.dataset.color, opt.dataset.pattern || opt.dataset.spec, opt.value);
         const ref = opt.dataset.bill ? ('BILL #' + opt.dataset.bill) : 'TRIM-REF';
-        const colorSpec = (opt.dataset.color ? opt.dataset.color + ' • ' : '') + (opt.dataset.spec || '-');
+        const color = (opt.dataset.color || 'STANDARD').toUpperCase();
+        const design = (opt.dataset.pattern || opt.dataset.spec || 'STANDARD').toUpperCase();
+        const price = parseFloat(opt.dataset.price || 0);
 
         document.getElementById('other_preview_ref').textContent = ref;
         document.getElementById('other_preview_title').textContent = opt.dataset.name || 'Garment Supply';
         document.getElementById('other_preview_item').textContent = opt.dataset.name || 'Trim Item';
-        document.getElementById('other_preview_color').textContent = colorSpec.toUpperCase();
-        document.getElementById('other_preview_qty').textContent = parseFloat(opt.dataset.qty || 0).toFixed(2) + ' ' + (opt.dataset.unit || 'pcs');
+        document.getElementById('other_preview_color').textContent = color;
+        document.getElementById('other_preview_design').textContent = design;
+        document.getElementById('other_preview_price').textContent = '₹' + price.toFixed(2);
         document.getElementById('other_preview_code_tag').textContent = tag;
         document.getElementById('other_preview_badge').textContent = 'PURCHASE TRIM';
 
@@ -1362,8 +1360,9 @@ function updateOtherPreview() {
         document.getElementById('other_preview_ref').textContent = 'TRIM-REF';
         document.getElementById('other_preview_title').textContent = 'SEWING THREAD';
         document.getElementById('other_preview_item').textContent = 'Select a trim item';
-        document.getElementById('other_preview_color').textContent = 'STANDARD';
-        document.getElementById('other_preview_qty').textContent = '50.00 spools';
+        document.getElementById('other_preview_color').textContent = 'BRIGHT WHITE';
+        document.getElementById('other_preview_design').textContent = 'STANDARD';
+        document.getElementById('other_preview_price').textContent = '₹45.00';
         document.getElementById('other_preview_code_tag').textContent = 'TR-TH-WHT';
         document.getElementById('other_preview_badge').textContent = 'PURCHASE TRIM';
         renderQr('other_qr_box', 'TR-TH-WHT');
@@ -1432,17 +1431,19 @@ function updateFgPreview() {
     const unmappedBox = document.getElementById('fg_unmapped_box');
 
     if (opt && opt.value) {
-        const tag = opt.dataset.tag || makeTagCode(opt.dataset.name, opt.dataset.color, '', opt.value);
+        const tag = opt.dataset.tag || makeTagCode(opt.dataset.name, opt.dataset.color, opt.dataset.pattern, opt.value);
         const ref = opt.dataset.bill ? ('BILL #' + opt.dataset.bill) : (opt.dataset.sku || 'PO-FG');
-        const sizeQty = (opt.dataset.size || 'Free Size') + ' (' + (parseInt(opt.dataset.qty || 1, 10)) + ' ' + (opt.dataset.unit || 'pcs') + ')';
+        const color = (opt.dataset.color || 'STANDARD').toUpperCase();
+        const design = (opt.dataset.pattern || opt.dataset.spec || opt.dataset.size || 'STANDARD').toUpperCase();
+        const price = parseFloat(opt.dataset.price || opt.dataset.mrp || 0);
 
         document.getElementById('fg_preview_ref').textContent = ref;
         document.getElementById('fg_preview_title').textContent = opt.dataset.name || 'Finished Good';
         document.getElementById('fg_preview_cat').textContent = opt.dataset.cat || 'Apparel';
-        document.getElementById('fg_preview_color').textContent = (opt.dataset.color || 'STANDARD').toUpperCase();
-        document.getElementById('fg_preview_size_qty').textContent = sizeQty;
+        document.getElementById('fg_preview_color').textContent = color;
+        document.getElementById('fg_preview_design').textContent = design;
+        document.getElementById('fg_preview_price').textContent = '₹' + price.toFixed(2);
         document.getElementById('fg_preview_code_tag').textContent = tag;
-        document.getElementById('fg_preview_mrp').textContent = 'MRP ₹' + parseFloat(opt.dataset.mrp || 0).toFixed(2);
 
         renderQr('fg_qr_box', tag);
 
@@ -1461,9 +1462,9 @@ function updateFgPreview() {
         document.getElementById('fg_preview_title').textContent = 'Select Finished Good';
         document.getElementById('fg_preview_cat').textContent = 'Apparel';
         document.getElementById('fg_preview_color').textContent = 'STANDARD';
-        document.getElementById('fg_preview_size_qty').textContent = 'Free Size';
+        document.getElementById('fg_preview_design').textContent = 'STANDARD';
+        document.getElementById('fg_preview_price').textContent = '₹0.00';
         document.getElementById('fg_preview_code_tag').textContent = 'GAR-S-01';
-        document.getElementById('fg_preview_mrp').textContent = 'MRP ₹0.00';
         renderQr('fg_qr_box', 'GAR-S-01');
         mappingCard.style.display = 'none';
     }
@@ -1542,15 +1543,17 @@ function updateProdPreview() {
     if (opt && opt.value) {
         const tag = opt.dataset.tag || makeTagCode(opt.dataset.name, '', opt.dataset.program, opt.value);
         const ref = opt.dataset.program || opt.dataset.log || 'PP-REF';
-        const sizePcs = (opt.dataset.size || 'Standard') + ' (' + (parseInt(opt.dataset.pcs || 1, 10)) + ' pcs)';
+        const color = 'STANDARD';
+        const design = (opt.dataset.program || opt.dataset.pattern || 'STANDARD').toUpperCase();
+        const price = parseFloat(opt.dataset.mrp || 0);
 
         document.getElementById('prod_preview_ref').textContent = ref;
         document.getElementById('prod_preview_title').textContent = opt.dataset.name || 'Production Garment';
         document.getElementById('prod_preview_program').textContent = opt.dataset.program || 'In-House';
-        document.getElementById('prod_preview_color').textContent = 'STANDARD';
-        document.getElementById('prod_preview_size').textContent = sizePcs;
+        document.getElementById('prod_preview_color').textContent = color;
+        document.getElementById('prod_preview_design').textContent = design;
+        document.getElementById('prod_preview_price').textContent = '₹' + price.toFixed(2);
         document.getElementById('prod_preview_code_tag').textContent = tag;
-        document.getElementById('prod_preview_mrp').textContent = 'MRP ₹' + parseFloat(opt.dataset.mrp || 0).toFixed(2);
 
         renderQr('prod_qr_box', tag);
     } else {
@@ -1558,9 +1561,9 @@ function updateProdPreview() {
         document.getElementById('prod_preview_title').textContent = 'Select Stitched Batch';
         document.getElementById('prod_preview_program').textContent = 'In-House';
         document.getElementById('prod_preview_color').textContent = 'STANDARD';
-        document.getElementById('prod_preview_size').textContent = 'Standard';
+        document.getElementById('prod_preview_design').textContent = 'STANDARD';
+        document.getElementById('prod_preview_price').textContent = '₹0.00';
         document.getElementById('prod_preview_code_tag').textContent = 'PRO-S-01';
-        document.getElementById('prod_preview_mrp').textContent = 'MRP ₹0.00';
         renderQr('prod_qr_box', 'PRO-S-01');
     }
 }
@@ -1602,30 +1605,34 @@ function updateRetPreview() {
         if (isExchangeTarget && opt.dataset.hasExchange === '1') {
             const tag = opt.dataset.excTag || makeTagCode(opt.dataset.excName, '', 'EXC', opt.value);
             const ref = 'EXC #' + (opt.dataset.returnNo || '00');
-            const sizeQty = (opt.dataset.excSize || 'Free') + ' (' + (parseInt(opt.dataset.excQty || 1, 10)) + ' pcs)';
+            const color = 'STANDARD';
+            const design = (opt.dataset.excSize || 'EXCHANGE').toUpperCase();
+            const price = parseFloat(opt.dataset.excMrp || 0);
 
             document.getElementById('ret_preview_ref').textContent = ref;
             document.getElementById('ret_preview_title').textContent = opt.dataset.excName || 'Exchange Replacement';
             document.getElementById('ret_preview_customer').textContent = opt.dataset.customer || 'Retail Customer';
-            document.getElementById('ret_preview_color').textContent = 'STANDARD';
-            document.getElementById('ret_preview_size').textContent = sizeQty;
+            document.getElementById('ret_preview_color').textContent = color;
+            document.getElementById('ret_preview_design').textContent = design;
+            document.getElementById('ret_preview_price').textContent = '₹' + price.toFixed(2);
             document.getElementById('ret_preview_code_tag').textContent = tag;
-            document.getElementById('ret_preview_mrp').textContent = 'MRP ₹' + parseFloat(opt.dataset.excMrp || 0).toFixed(2);
             document.getElementById('ret_preview_badge').textContent = 'EXCHANGE DISPATCH';
 
             renderQr('ret_qr_box', tag);
         } else {
             const tag = opt.dataset.retTag || makeTagCode(opt.dataset.retName, '', 'RET', opt.value);
             const ref = 'RET #' + (opt.dataset.returnNo || '00');
-            const sizeQty = (opt.dataset.retSize || 'Free') + ' (' + (parseInt(opt.dataset.retQty || 1, 10)) + ' pcs)';
+            const color = 'STANDARD';
+            const design = (opt.dataset.retSize || 'RESTOCK').toUpperCase();
+            const price = parseFloat(opt.dataset.retMrp || 0);
 
             document.getElementById('ret_preview_ref').textContent = ref;
             document.getElementById('ret_preview_title').textContent = opt.dataset.retName || 'Returned Product';
             document.getElementById('ret_preview_customer').textContent = opt.dataset.customer || 'Retail Customer';
-            document.getElementById('ret_preview_color').textContent = 'STANDARD';
-            document.getElementById('ret_preview_size').textContent = sizeQty;
+            document.getElementById('ret_preview_color').textContent = color;
+            document.getElementById('ret_preview_design').textContent = design;
+            document.getElementById('ret_preview_price').textContent = '₹' + price.toFixed(2);
             document.getElementById('ret_preview_code_tag').textContent = tag;
-            document.getElementById('ret_preview_mrp').textContent = 'MRP ₹' + parseFloat(opt.dataset.retMrp || 0).toFixed(2);
             document.getElementById('ret_preview_badge').textContent = 'RESTOCK ITEM';
 
             renderQr('ret_qr_box', tag);
@@ -1636,9 +1643,9 @@ function updateRetPreview() {
         document.getElementById('ret_preview_title').textContent = 'Select Return Item';
         document.getElementById('ret_preview_customer').textContent = 'Retail Customer';
         document.getElementById('ret_preview_color').textContent = 'STANDARD';
-        document.getElementById('ret_preview_size').textContent = 'Free Size';
+        document.getElementById('ret_preview_design').textContent = 'RESTOCK';
+        document.getElementById('ret_preview_price').textContent = '₹0.00';
         document.getElementById('ret_preview_code_tag').textContent = 'RET-S-01';
-        document.getElementById('ret_preview_mrp').textContent = 'MRP ₹0.00';
         document.getElementById('ret_preview_badge').textContent = 'RESTOCK ITEM';
         renderQr('ret_qr_box', 'RET-S-01');
     }
@@ -1661,8 +1668,13 @@ function matchRetQty() {
     }
 }
 
-function setCopies(inputId, count) {
-    document.getElementById(inputId).value = count;
+function adjustCopies(inputId, delta) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    const min = parseInt(input.min || '1', 10);
+    const max = parseInt(input.max || '500', 10);
+    const current = parseInt(input.value || String(min), 10);
+    input.value = String(Math.min(max, Math.max(min, current + delta)));
 }
 
 function submitRawToStock() {

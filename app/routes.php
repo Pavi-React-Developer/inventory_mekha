@@ -72,9 +72,7 @@ $router->get('/m/label_generation', [LabelController::class, 'index'], 'label_ge
 $router->post('/m/label_generation/generate', [LabelController::class, 'generate'], 'label_generation', 'add');
 $router->post('/m/label_generation/map_variant', [LabelController::class, 'mapVariant'], 'label_generation', 'edit');
 $router->post('/m/label/add_to_stock', [LabelController::class, 'addToStock'], 'label_generation', 'edit');
-$router->get('/m/label/add_to_stock', [LabelController::class, 'addToStock'], 'label_generation', 'edit');
 $router->post('/m/label_generation/add_to_stock', [LabelController::class, 'addToStock'], 'label_generation', 'edit');
-$router->get('/m/label_generation/add_to_stock', [LabelController::class, 'addToStock'], 'label_generation', 'edit');
 $router->get('/scan', [LabelController::class, 'scanPage'], 'stocks', 'view');
 $router->get('/api/qr/lookup', [LabelController::class, 'lookup'], 'stocks', 'view');
 $router->post('/api/qr/lookup', [LabelController::class, 'lookup'], 'stocks', 'view');
@@ -106,6 +104,7 @@ $router->get('/m/purchase_billing/download_items', [PurchaseController::class, '
 
 // Purchase Stocks (3 Sections: Rolls, Trims/Other Garments, Finished Goods)
 $router->get('/m/purchase_stocks', [PurchaseStockController::class, 'index'], 'purchase_stocks', 'view');
+$router->post('/m/purchase_stocks/update_consolidated_roll', [PurchaseStockController::class, 'updateConsolidatedRoll'], 'purchase_stocks', 'edit');
 $router->get('/m/purchase_stocks/export', [PurchaseStockController::class, 'export'], 'purchase_stocks', 'view');
 
 $router->get('/m/purchase_damage', [PurchaseController::class, 'damage'], 'purchase_damage', 'view');

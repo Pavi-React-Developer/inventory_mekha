@@ -235,7 +235,7 @@
             <!-- View A: Consolidated Color & Design Stock (Duplicates removed, Qty added to previous count) -->
             <div id="viewRollConsolidated" class="card-body p-0" style="<?= $rollViewMode === 'detailed' ? 'display: none;' : '' ?>">
                 <div class="table-responsive">
-                    <table class="table table-hover table-bordered align-middle mb-0 text-center small">
+                    <table class="table table-hover table-bordered table-sm align-middle mb-0 text-center small">
                         <thead class="table-light">
                             <tr class="fw-bold text-uppercase" style="font-size: 0.72rem; letter-spacing: 0.03em;">
                                 <th style="width: 40px;">#</th>
@@ -262,55 +262,95 @@
                                 </tr>
                             <?php else: ?>
                                 <?php $cIdx = 1; foreach ($consolidatedRolls as $cr): ?>
+                                    <?php
+                                    $labelFabric = $cr['last_item_name'] ?: 'Fabric Material';
+                                    $labelColor = $cr['last_item_color'] ?: 'STANDARD';
+                                    $labelDesign = trim($cr['last_item_pattern'] ?: ($cr['last_item_specification'] ?: 'PLAIN'));
+                                    $labelPrice = (float)($cr['last_item_unit_price'] ?: ($cr['last_item_mrp'] ?: 0));
+                                    $labelHeader = 'ROLL #' . ($cr['last_item_code'] ?: $cr['last_item_id']);
+                                    $labelRef = $cr['last_bill_no'] ?: ('PO-' . ($cr['last_item_bill_id'] ?? ''));
+                                    $labelConcern = \App\Core\Auth::concern()['name'] ?? 'INVENTO ERP';
+                                    $qrPayload = \App\Services\QrService::generateTagCode(
+                                        $cr['last_item_name'] ?: 'Fabric',
+                                        $cr['last_item_color'] ?? '',
+                                        $labelDesign,
+                                        (string)($cr['last_item_id'] ?? '')
+                                    );
+                                    ?>
                                     <tr>
-                                        <td class="text-muted fw-semibold"><?= $cIdx++ ?></td>
-                                        <td class="text-start">
-                                            <div class="fw-bold text-dark fs-6 font-monospace">
+                                        <td class="text-muted fw-semibold py-1 px-2"><?= $cIdx++ ?></td>
+                                        <td class="text-start py-1 px-2">
+                                            <div class="fw-bold text-dark font-monospace">
                                                 <i class="bi bi-palette text-primary me-1"></i><?= htmlspecialchars($cr['design_name']) ?>
                                             </div>
-                                            <small class="text-muted" style="font-size: 0.70rem;">Fabric Pattern Specification</small>
                                         </td>
-                                        <td>
-                                            <span class="badge bg-light text-dark border px-2 py-1 text-uppercase fw-semibold">
+                                        <td class="py-1 px-2">
+                                            <span class="badge bg-light text-dark border px-1 py-1 text-uppercase fw-semibold">
                                                 <i class="bi bi-circle-fill me-1" style="font-size: 0.55rem; color: #4f46e5;"></i><?= htmlspecialchars($cr['color']) ?>
                                             </span>
                                         </td>
-                                        <td class="font-monospace small"><?= htmlspecialchars($cr['hsn_code'] ?: '-') ?></td>
-                                        <td class="table-primary text-primary fw-bold fs-6">
-                                            <?= (float)$cr['qty'] ?> <span class="fs-6 fw-normal text-muted"><?= htmlspecialchars($cr['unit'] ?: 'Rolls') ?></span>
-                                            <div>
-                                                <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size: 0.65rem;">
-                                                    <i class="bi bi-check2-circle me-1"></i>Accumulated Available
-                                                </span>
-                                            </div>
+                                        <td class="font-monospace small py-1 px-2"><?= htmlspecialchars($cr['hsn_code'] ?: '-') ?></td>
+                                        <td class="table-primary text-primary fw-bold py-1 px-2">
+                                            <?= (float)$cr['qty'] ?> <span class="fw-normal text-muted"><?= htmlspecialchars($cr['unit'] ?: 'Rolls') ?></span>
                                         </td>
-                                        <td class="fw-bold text-secondary">
+                                        <td class="fw-bold text-secondary py-1 px-2">
                                             <?= number_format((float)$cr['net_weight'], 2) ?> kg
                                         </td>
-                                        <td class="text-end fw-semibold text-dark">
+                                        <td class="text-end fw-semibold text-dark py-1 px-2">
                                             ₹<?= number_format((float)$cr['last_unit_price'], 2) ?>
                                         </td>
-                                        <td class="text-end fw-bold text-dark">
+                                        <td class="text-end fw-bold text-dark py-1 px-2">
                                             ₹<?= number_format((float)$cr['total_value'], 2) ?>
                                         </td>
-                                        <td class="text-start">
-                                            <div class="fw-semibold text-dark">
-                                                <i class="bi bi-receipt text-secondary me-1"></i><?= (int)$cr['bills_count'] ?> Inward Batch(es)
-                                            </div>
+                                        <td class="text-start py-1 px-2">
+                                            <span class="fw-semibold text-dark"><i class="bi bi-receipt text-secondary me-1"></i><?= (int)$cr['bills_count'] ?> batch(es)</span>
                                             <?php if (!empty($cr['last_bill_no'])): ?>
-                                                <div class="text-muted small" style="font-size: 0.70rem;">
-                                                    Last Bill: <span class="font-monospace fw-semibold text-primary"><?= htmlspecialchars($cr['last_bill_no']) ?></span>
+                                                <div class="text-muted small">
+                                                    <span class="font-monospace fw-semibold text-primary"><?= htmlspecialchars($cr['last_bill_no']) ?></span>
                                                     <?= !empty($cr['last_supplier_name']) ? (' &bull; ' . htmlspecialchars($cr['last_supplier_name'])) : '' ?>
                                                 </div>
                                             <?php endif; ?>
                                         </td>
-                                        <td>
-                                            <span class="badge bg-success text-white px-2 py-1" style="font-size: 0.68rem;">IN STOCK</span>
+                                        <td class="py-1 px-2">
+                                            <span class="badge bg-<?= (float)$cr['qty'] > 0 ? 'success' : 'secondary' ?> text-white px-2 py-1">
+                                                <?= (float)$cr['qty'] > 0 ? 'IN STOCK' : 'OUT OF STOCK' ?>
+                                            </span>
                                         </td>
-                                        <td>
-                                            <a href="<?= \App\Core\Controller::url('/m/label_generation?tab=purchase_raw&roll=' . urlencode($cr['design_name'])) ?>" class="btn btn-outline-primary btn-sm p-1" title="Print QR Labels for this Color & Design">
+                                        <td class="py-1 px-2">
+                                            <div class="d-flex justify-content-center gap-1">
+                                            <button type="button" class="btn btn-outline-primary btn-sm p-1"
+                                                data-qr="<?= htmlspecialchars($qrPayload, ENT_QUOTES, 'UTF-8') ?>"
+                                                data-label-concern="<?= htmlspecialchars($labelConcern, ENT_QUOTES, 'UTF-8') ?>"
+                                                data-label-ref="<?= htmlspecialchars($labelRef, ENT_QUOTES, 'UTF-8') ?>"
+                                                data-label-title="<?= htmlspecialchars($labelHeader, ENT_QUOTES, 'UTF-8') ?>"
+                                                data-label-fabric="<?= htmlspecialchars($labelFabric, ENT_QUOTES, 'UTF-8') ?>"
+                                                data-label-color="<?= htmlspecialchars($labelColor, ENT_QUOTES, 'UTF-8') ?>"
+                                                data-label-design="<?= htmlspecialchars($labelDesign, ENT_QUOTES, 'UTF-8') ?>"
+                                                data-label-price="<?= htmlspecialchars('₹' . number_format($labelPrice, 2), ENT_QUOTES, 'UTF-8') ?>"
+                                                data-label-code="<?= htmlspecialchars($qrPayload, ENT_QUOTES, 'UTF-8') ?>"
+                                                onclick="showRollQr(this)"
+                                                title="Preview the exact fabric roll label">
                                                 <i class="bi bi-qr-code"></i>
-                                            </a>
+                                            </button>
+                                            <?php if ($canEditRollStock): ?>
+                                                <button type="button" class="btn btn-outline-secondary btn-sm p-1"
+                                                    data-concern-id="<?= (int)$cr['concern_id'] ?>"
+                                                    data-source-color="<?= htmlspecialchars($cr['source_color'], ENT_QUOTES, 'UTF-8') ?>"
+                                                    data-source-design="<?= htmlspecialchars($cr['source_design_name'], ENT_QUOTES, 'UTF-8') ?>"
+                                                    data-color="<?= htmlspecialchars($cr['color'], ENT_QUOTES, 'UTF-8') ?>"
+                                                    data-design="<?= htmlspecialchars($cr['design_name'], ENT_QUOTES, 'UTF-8') ?>"
+                                                    data-hsn="<?= htmlspecialchars($cr['hsn_code'] ?? '', ENT_QUOTES, 'UTF-8') ?>"
+                                                    data-qty="<?= htmlspecialchars(number_format((float)$cr['qty'], 2, '.', ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                    data-weight="<?= htmlspecialchars(number_format((float)$cr['net_weight'], 2, '.', ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                    data-unit="<?= htmlspecialchars($cr['unit'] ?: 'Rolls', ENT_QUOTES, 'UTF-8') ?>"
+                                                    data-rate="<?= htmlspecialchars(number_format((float)$cr['last_unit_price'], 2, '.', ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                    data-total="<?= htmlspecialchars(number_format((float)$cr['total_value'], 2, '.', ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                    onclick="editConsolidatedRoll(this)"
+                                                    title="Edit consolidated fabric stock">
+                                                    <i class="bi bi-pencil-square"></i>
+                                                </button>
+                                            <?php endif; ?>
+                                            </div>
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>
@@ -319,6 +359,232 @@
                     </table>
                 </div>
             </div>
+
+            <style>
+                #rollQrModal .label-sticker {
+                    width: 100%;
+                    max-width: 420px;
+                    min-height: 140px;
+                    background: #fff;
+                    border: 1.5px solid #0f172a;
+                    border-radius: 10px;
+                    padding: 8px 12px;
+                    display: flex;
+                    flex-direction: column;
+                    box-sizing: border-box;
+                    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+                    color: #0f172a;
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+                }
+                #rollQrModal .label-header-bar {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    gap: 6px;
+                    padding-bottom: 4px;
+                }
+                #rollQrModal .concern-check-icon {
+                    width: 17px;
+                    height: 17px;
+                    margin-right: 6px;
+                    border-radius: 4px;
+                    background: #0d6efd;
+                    color: #fff;
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    flex-shrink: 0;
+                    font-size: 11px;
+                }
+                #rollQrModal .concern-name-text {
+                    max-width: 170px;
+                    overflow: hidden;
+                    color: #0f172a;
+                    font-size: 0.82rem;
+                    font-weight: 800;
+                    letter-spacing: 0.04em;
+                    text-overflow: ellipsis;
+                    text-transform: uppercase;
+                    white-space: nowrap;
+                }
+                #rollQrModal .ref-pill-badge {
+                    padding: 1px 7px;
+                    border: 1px solid #bae6fd;
+                    border-radius: 12px;
+                    background: #e0f2fe;
+                    color: #0284c7;
+                    font-family: monospace;
+                    font-size: 0.70rem;
+                    font-weight: 600;
+                    white-space: nowrap;
+                }
+                #rollQrModal .label-divider {
+                    margin: 4px 0 6px;
+                    border-top: 1px dashed #cbd5e1;
+                }
+                #rollQrModal .label-body-content {
+                    display: flex;
+                    flex: 1;
+                    align-items: center;
+                    gap: 10px;
+                }
+                #rollQrModal .label-qr-wrapper,
+                #rollQrModal .label-qr-box {
+                    width: 76px;
+                    height: 76px;
+                    flex-shrink: 0;
+                }
+                #rollQrModal .label-qr-wrapper {
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    background: #fff;
+                }
+                #rollQrModal .label-details-stack {
+                    flex: 1;
+                    overflow: hidden;
+                    font-size: 0.76rem;
+                    line-height: 1.35;
+                }
+                #rollQrModal .label-item-title {
+                    margin-bottom: 2px;
+                    overflow: hidden;
+                    color: #0f172a;
+                    font-size: 0.86rem;
+                    font-weight: 800;
+                    text-overflow: ellipsis;
+                    text-transform: uppercase;
+                    white-space: nowrap;
+                }
+                #rollQrModal .label-detail-row {
+                    overflow: hidden;
+                    color: #334155;
+                    font-size: 0.75rem;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                }
+                #rollQrModal .detail-label {
+                    margin-right: 3px;
+                    color: #64748b;
+                    font-weight: 500;
+                }
+                #rollQrModal .detail-val {
+                    color: #0f172a;
+                    font-weight: 600;
+                }
+            </style>
+            <div class="modal fade" id="rollQrModal" tabindex="-1" aria-labelledby="rollQrModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-header py-2">
+                            <h5 class="modal-title fs-6 fw-bold" id="rollQrModalLabel">Fabric Roll Label Preview</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body d-flex justify-content-center">
+                            <div class="label-sticker">
+                                <div class="label-header-bar">
+                                    <div class="d-flex align-items-center">
+                                        <span class="concern-check-icon"><i class="bi bi-check-lg"></i></span>
+                                        <span class="concern-name-text" id="rollQrConcern"></span>
+                                    </div>
+                                    <span class="ref-pill-badge" id="rollQrRef"></span>
+                                </div>
+                                <div class="label-divider"></div>
+                                <div class="label-body-content">
+                                    <div class="label-qr-wrapper">
+                                        <div class="label-qr-box" id="rollQrCode"></div>
+                                    </div>
+                                    <div class="label-details-stack">
+                                        <div class="label-item-title" id="rollQrTitle"></div>
+                                        <div class="label-detail-row">
+                                            <span class="detail-label">Fabric:</span>
+                                            <span class="detail-val" id="rollQrFabric"></span>
+                                        </div>
+                                        <div class="label-detail-row">
+                                            <span class="detail-label">Color:</span>
+                                            <span class="detail-val text-uppercase" id="rollQrColor"></span>
+                                        </div>
+                                        <div class="label-detail-row">
+                                            <span class="detail-label">Design:</span>
+                                            <span class="detail-val text-uppercase" id="rollQrDesign"></span>
+                                        </div>
+                                        <div class="label-detail-row">
+                                            <span class="detail-label">Price:</span>
+                                            <span class="detail-val fw-bold text-success" id="rollQrPrice"></span>
+                                        </div>
+                                        <div class="label-detail-row">
+                                            <span class="detail-label">Code:</span>
+                                            <span class="detail-val font-monospace text-primary fw-bold" id="rollQrCodeText"></span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <?php if ($canEditRollStock): ?>
+                <div class="modal fade" id="editConsolidatedRollModal" tabindex="-1" aria-labelledby="editConsolidatedRollModalLabel" aria-hidden="true">
+                    <div class="modal-dialog modal-lg modal-dialog-centered">
+                        <div class="modal-content">
+                            <form action="<?= \App\Core\Controller::url('/m/purchase_stocks/update_consolidated_roll') ?>" method="POST">
+                                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
+                                <input type="hidden" name="concern_id" id="edit_roll_concern_id">
+                                <input type="hidden" name="source_color" id="edit_roll_source_color">
+                                <input type="hidden" name="source_design_name" id="edit_roll_source_design">
+                                <div class="modal-header py-2">
+                                    <h5 class="modal-title fs-6 fw-bold" id="editConsolidatedRollModalLabel">Edit Consolidated Fabric Stock</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div class="row g-3">
+                                        <div class="col-md-6">
+                                            <label for="edit_roll_design" class="form-label small fw-semibold">Design Name / Pattern</label>
+                                            <input type="text" class="form-control form-control-sm" id="edit_roll_design" name="design_name" maxlength="150" required>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label for="edit_roll_color" class="form-label small fw-semibold">Color / Shade</label>
+                                            <input type="text" class="form-control form-control-sm" id="edit_roll_color" name="color" maxlength="100" required>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label for="edit_roll_hsn" class="form-label small fw-semibold">HSN</label>
+                                            <input type="text" class="form-control form-control-sm" id="edit_roll_hsn" name="hsn_code" maxlength="50">
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label for="edit_roll_qty" class="form-label small fw-semibold">Accumulated Stock</label>
+                                            <input type="number" class="form-control form-control-sm" id="edit_roll_qty" name="qty" min="0" max="9999999999.99" step="0.01" required>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label for="edit_roll_unit" class="form-label small fw-semibold">Unit</label>
+                                            <input type="text" class="form-control form-control-sm" id="edit_roll_unit" name="unit" maxlength="50" required>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label for="edit_roll_weight" class="form-label small fw-semibold">Total Fabric Weight (kg)</label>
+                                            <input type="number" class="form-control form-control-sm" id="edit_roll_weight" name="net_weight" min="0" max="9999999999.99" step="0.01" required>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label for="edit_roll_rate" class="form-label small fw-semibold">Unit Rate (₹)</label>
+                                            <input type="number" class="form-control form-control-sm" id="edit_roll_rate" name="last_unit_price" min="0" max="9999999999.99" step="0.01" required>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label for="edit_roll_total" class="form-label small fw-semibold">Total Valuation (₹)</label>
+                                            <input type="number" class="form-control form-control-sm" id="edit_roll_total" name="total_value" min="0" max="9999999999.99" step="0.01" required>
+                                        </div>
+                                    </div>
+                                    <div class="alert alert-info py-2 mt-3 mb-0 small">
+                                        These edits apply to the consolidated stock row only. Purchase bill history remains unchanged.
+                                    </div>
+                                </div>
+                                <div class="modal-footer py-2">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                                    <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-check2 me-1"></i>Save Changes</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            <?php endif; ?>
 
             <!-- View B: Individual Roll Batches (Detailed Roll Breakdown) -->
             <div id="viewRollDetailed" class="card-body p-0" style="<?= $rollViewMode === 'consolidated' ? 'display: none;' : '' ?>">
@@ -709,6 +975,55 @@
 </div>
 
 <script>
+function showRollQr(button) {
+    const qrContainer = document.getElementById('rollQrCode');
+    const modalElement = document.getElementById('rollQrModal');
+    if (!qrContainer || !modalElement || !button) return;
+    if (typeof QRCode === 'undefined') {
+        alert('QR display is unavailable. Refresh the page and try again.');
+        return;
+    }
+
+    const payload = button.dataset.qr || '';
+    document.getElementById('rollQrConcern').textContent = button.dataset.labelConcern || 'INVENTO ERP';
+    document.getElementById('rollQrRef').textContent = button.dataset.labelRef || '';
+    document.getElementById('rollQrTitle').textContent = button.dataset.labelTitle || '';
+    document.getElementById('rollQrFabric').textContent = button.dataset.labelFabric || '';
+    document.getElementById('rollQrColor').textContent = button.dataset.labelColor || '';
+    document.getElementById('rollQrDesign').textContent = button.dataset.labelDesign || '';
+    document.getElementById('rollQrPrice').textContent = button.dataset.labelPrice || '₹0.00';
+    document.getElementById('rollQrCodeText').textContent = button.dataset.labelCode || payload;
+    qrContainer.replaceChildren();
+    new QRCode(qrContainer, {
+        text: payload,
+        width: 80,
+        height: 80,
+        colorDark: '#000000',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M
+    });
+    bootstrap.Modal.getOrCreateInstance(modalElement).show();
+}
+
+function editConsolidatedRoll(button) {
+    const modalElement = document.getElementById('editConsolidatedRollModal');
+    if (!modalElement || !button) return;
+
+    document.getElementById('edit_roll_concern_id').value = button.dataset.concernId || '';
+    document.getElementById('edit_roll_source_color').value = button.dataset.sourceColor || '';
+    document.getElementById('edit_roll_source_design').value = button.dataset.sourceDesign || '';
+    document.getElementById('edit_roll_color').value = button.dataset.color || '';
+    document.getElementById('edit_roll_design').value = button.dataset.design || '';
+    document.getElementById('edit_roll_hsn').value = button.dataset.hsn || '';
+    document.getElementById('edit_roll_qty').value = button.dataset.qty || '0';
+    document.getElementById('edit_roll_weight').value = button.dataset.weight || '0';
+    document.getElementById('edit_roll_unit').value = button.dataset.unit || 'Rolls';
+    document.getElementById('edit_roll_rate').value = button.dataset.rate || '0';
+    document.getElementById('edit_roll_total').value = button.dataset.total || '0';
+
+    bootstrap.Modal.getOrCreateInstance(modalElement).show();
+}
+
 function switchRollView(mode) {
     const consView = document.getElementById('viewRollConsolidated');
     const detView = document.getElementById('viewRollDetailed');
