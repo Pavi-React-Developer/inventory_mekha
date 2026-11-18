@@ -11,6 +11,7 @@ use App\Services\QrService;
 use App\Services\AuditLog;
 use App\Services\StockService;
 use App\Services\RollRegistryService;
+use App\Services\PurchaseStockItemOverrideService;
 use Exception;
 
 class LabelController extends Controller {
@@ -18,6 +19,7 @@ class LabelController extends Controller {
      * Display the 4-Section Label Generation Hub
      */
     public function index(): void {
+        PurchaseStockItemOverrideService::initTable();
         $cid = Auth::concernId();
         $variantModel = new Variant();
         $allVariants = $variantModel->allWithDetails();
@@ -62,7 +64,7 @@ class LabelController extends Controller {
         } else {
             $rollSql .= " ORDER BY pbi.id DESC LIMIT 100";
         }
-        $purchaseRollItems = DB::fetchAll($rollSql, $rollParams);
+        $purchaseRollItems = PurchaseStockItemOverrideService::applyToItems(DB::fetchAll($rollSql, $rollParams));
 
         // 1b. Purchase Other Garment Supplies & Trims (Trims, Accessories, Threads)
         $otherSql = "SELECT pbi.*, pb.bill_no, pb.bill_date, pb.supplier_invoice_no, pb.inward_status AS bill_inward_status,
@@ -82,7 +84,7 @@ class LabelController extends Controller {
         } else {
             $otherSql .= " ORDER BY pbi.id DESC LIMIT 100";
         }
-        $purchaseOtherItems = DB::fetchAll($otherSql, $otherParams);
+        $purchaseOtherItems = PurchaseStockItemOverrideService::applyToItems(DB::fetchAll($otherSql, $otherParams));
 
         // Determine default subtab
         if (!in_array($activeSubTab, ['rolls', 'garment_other'], true)) {
@@ -117,7 +119,7 @@ class LabelController extends Controller {
         } else {
             $fgSql .= " ORDER BY pbi.id DESC LIMIT 100";
         }
-        $purchaseFgItems = DB::fetchAll($fgSql, $fgParams);
+        $purchaseFgItems = PurchaseStockItemOverrideService::applyToItems(DB::fetchAll($fgSql, $fgParams));
 
         // 3. Production Labels (After-Stitching assembled garments)
         $prodSql = "SELECT sl.*, 
@@ -252,6 +254,7 @@ class LabelController extends Controller {
      */
     public function generate(): void {
         $this->validateCsrf();
+        PurchaseStockItemOverrideService::initTable();
 
         $labelType  = trim($_POST['label_type'] ?? 'variant');
         $qty        = max(1, min(500, (int)($_POST['qty'] ?? 12)));
@@ -312,6 +315,7 @@ class LabelController extends Controller {
                 return;
             }
 
+            $item = PurchaseStockItemOverrideService::applyToItems([$item])[0];
             $cid = $cid ?: (int)$item['concern_id'];
             $isRoll = ($item['section_type'] === 'rolls');
             $designVal = trim($item['pattern'] ?: ($item['specification'] ?: ($isRoll ? 'PLAIN' : 'STANDARD')));
@@ -390,6 +394,7 @@ class LabelController extends Controller {
                 return;
             }
 
+            $item = PurchaseStockItemOverrideService::applyToItems([$item])[0];
             $cid = $cid ?: (int)$item['concern_id'];
             $varId = (int)($item['variant_id'] ?: ($variantId ?: 0));
 

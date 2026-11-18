@@ -1,4 +1,17 @@
 <div class="container-fluid px-0">
+    <?php $canEditPurchaseStock = !empty($canEditPurchaseStock); ?>
+    <style>
+        .compact-purchase-stock-table > :not(caption) > * > * {
+            padding: 0.25rem 0.5rem;
+            vertical-align: middle;
+        }
+        .compact-purchase-stock-table tbody .badge {
+            font-size: 0.68rem;
+        }
+        .compact-purchase-stock-table .btn-sm {
+            line-height: 1;
+        }
+    </style>
     <!-- Page Header & Action Bar -->
     <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
         <div class="d-flex align-items-center gap-3">
@@ -473,57 +486,6 @@
                     font-weight: 600;
                 }
             </style>
-            <div class="modal fade" id="rollQrModal" tabindex="-1" aria-labelledby="rollQrModalLabel" aria-hidden="true">
-                <div class="modal-dialog modal-dialog-centered">
-                    <div class="modal-content">
-                        <div class="modal-header py-2">
-                            <h5 class="modal-title fs-6 fw-bold" id="rollQrModalLabel">Fabric Roll Label Preview</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                        </div>
-                        <div class="modal-body d-flex justify-content-center">
-                            <div class="label-sticker">
-                                <div class="label-header-bar">
-                                    <div class="d-flex align-items-center">
-                                        <span class="concern-check-icon"><i class="bi bi-check-lg"></i></span>
-                                        <span class="concern-name-text" id="rollQrConcern"></span>
-                                    </div>
-                                    <span class="ref-pill-badge" id="rollQrRef"></span>
-                                </div>
-                                <div class="label-divider"></div>
-                                <div class="label-body-content">
-                                    <div class="label-qr-wrapper">
-                                        <div class="label-qr-box" id="rollQrCode"></div>
-                                    </div>
-                                    <div class="label-details-stack">
-                                        <div class="label-item-title" id="rollQrTitle"></div>
-                                        <div class="label-detail-row">
-                                            <span class="detail-label">Fabric:</span>
-                                            <span class="detail-val" id="rollQrFabric"></span>
-                                        </div>
-                                        <div class="label-detail-row">
-                                            <span class="detail-label">Color:</span>
-                                            <span class="detail-val text-uppercase" id="rollQrColor"></span>
-                                        </div>
-                                        <div class="label-detail-row">
-                                            <span class="detail-label">Design:</span>
-                                            <span class="detail-val text-uppercase" id="rollQrDesign"></span>
-                                        </div>
-                                        <div class="label-detail-row">
-                                            <span class="detail-label">Price:</span>
-                                            <span class="detail-val fw-bold text-success" id="rollQrPrice"></span>
-                                        </div>
-                                        <div class="label-detail-row">
-                                            <span class="detail-label">Code:</span>
-                                            <span class="detail-val font-monospace text-primary fw-bold" id="rollQrCodeText"></span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
             <?php if ($canEditRollStock): ?>
                 <div class="modal fade" id="editConsolidatedRollModal" tabindex="-1" aria-labelledby="editConsolidatedRollModalLabel" aria-hidden="true">
                     <div class="modal-dialog modal-lg modal-dialog-centered">
@@ -589,7 +551,7 @@
             <!-- View B: Individual Roll Batches (Detailed Roll Breakdown) -->
             <div id="viewRollDetailed" class="card-body p-0" style="<?= $rollViewMode === 'consolidated' ? 'display: none;' : '' ?>">
                 <div class="table-responsive">
-                    <table class="table table-hover table-bordered align-middle mb-0 text-center small">
+                    <table class="table table-hover table-bordered align-middle mb-0 text-center small compact-purchase-stock-table">
                         <thead class="table-light">
                             <tr class="fw-bold text-uppercase" style="font-size: 0.72rem; letter-spacing: 0.03em;">
                                 <th style="width: 40px;">#</th>
@@ -729,7 +691,7 @@
         <?php if ($activeTab === 'garment_other'): ?>
             <div class="card-body p-0">
                 <div class="table-responsive">
-                    <table class="table table-hover table-bordered align-middle mb-0 text-center small">
+                    <table class="table table-hover table-bordered align-middle mb-0 text-center small compact-purchase-stock-table">
                         <thead class="table-light">
                             <tr class="fw-bold text-uppercase" style="font-size: 0.72rem; letter-spacing: 0.03em;">
                                 <th style="width: 40px;">#</th>
@@ -760,8 +722,20 @@
                                 foreach ($garmentOther as $g): 
                                     $isInStock = ($g['inward_status'] ?? '') === 'completed';
                                     $qty = (float)($g['qty'] ?? 1);
+                                    $availableQty = (float)($g['available_qty'] ?? $qty);
                                     $uPrice = (float)($g['unit_price'] ?? 0);
-                                    $tot = (float)($g['total_price'] ?? 0);
+                                    $tot = (float)($g['available_value'] ?? $g['total_price'] ?? 0);
+                                    $labelDesign = trim($g['pattern'] ?: ($g['specification'] ?: 'STANDARD'));
+                                    $labelItemName = $g['item_name'] ?: 'Garment Supply';
+                                    $labelCode = \App\Services\QrService::generateTagCode(
+                                        $g['item_name'] ?: 'Trims',
+                                        $g['color'] ?? '',
+                                        $labelDesign,
+                                        (string)$g['id']
+                                    );
+                                    $labelPrice = '₹' . number_format($uPrice, 2);
+                                    $labelConcern = $g['concern_name'] ?: 'INVENTO ERP';
+                                    $labelRef = $g['bill_no'] ?: ('PO-' . $g['purchase_bill_id']);
                                 ?>
                                     <tr>
                                         <td class="text-muted fw-semibold"><?= $gIdx++ ?></td>
@@ -783,9 +757,13 @@
                                             <?= (float)$qty ?> <?= htmlspecialchars($g['unit'] ?: 'Pcs') ?>
                                         </td>
                                         <td>
-                                            <?php if ($isInStock): ?>
+                                            <?php if ($isInStock && $availableQty > 0): ?>
                                                 <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">
-                                                    <i class="bi bi-box-seam me-1"></i><?= (float)$qty ?> <?= htmlspecialchars($g['unit'] ?: 'Pcs') ?> Available
+                                                    <i class="bi bi-box-seam me-1"></i><?= number_format($availableQty, 2) ?> <?= htmlspecialchars($g['unit'] ?: 'Pcs') ?> Available
+                                                </span>
+                                            <?php elseif ($isInStock): ?>
+                                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1">
+                                                    <i class="bi bi-shield-x me-1"></i>Quarantined / Out of Stock
                                                 </span>
                                             <?php else: ?>
                                                 <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2 py-1">
@@ -810,20 +788,49 @@
                                             </div>
                                         </td>
                                         <td>
-                                            <?php if ($isInStock): ?>
+                                            <?php if ($isInStock && $availableQty > 0): ?>
                                                 <span class="badge bg-success text-white px-2 py-1" style="font-size: 0.68rem;">IN STOCK</span>
+                                            <?php elseif ($isInStock): ?>
+                                                <span class="badge bg-danger text-white px-2 py-1" style="font-size: 0.68rem;">QUARANTINED</span>
                                             <?php else: ?>
                                                 <span class="badge bg-warning text-dark px-2 py-1" style="font-size: 0.68rem;">PENDING</span>
                                             <?php endif; ?>
                                         </td>
                                         <td>
                                             <div class="d-flex justify-content-center gap-1">
-                                                <a href="<?= \App\Core\Controller::url('/m/purchase_billing/view?id=' . $g['purchase_bill_id']) ?>" class="btn btn-outline-secondary btn-sm p-1" title="View Bill">
-                                                    <i class="bi bi-receipt"></i>
-                                                </a>
-                                                <a href="<?= \App\Core\Controller::url('/m/label_generation?tab=purchase_raw&q=' . urlencode($g['item_name'])) ?>" class="btn btn-outline-primary btn-sm p-1" title="Print QR Label">
+                                                <button type="button" class="btn btn-outline-primary btn-sm p-1"
+                                                    data-qr="<?= htmlspecialchars($labelCode, ENT_QUOTES, 'UTF-8') ?>"
+                                                    data-label-concern="<?= htmlspecialchars($labelConcern, ENT_QUOTES, 'UTF-8') ?>"
+                                                    data-label-ref="<?= htmlspecialchars($labelRef, ENT_QUOTES, 'UTF-8') ?>"
+                                                    data-label-title="<?= htmlspecialchars($labelItemName, ENT_QUOTES, 'UTF-8') ?>"
+                                                    data-label-field1-label="Item"
+                                                    data-label-fabric="<?= htmlspecialchars($labelItemName, ENT_QUOTES, 'UTF-8') ?>"
+                                                    data-label-color="<?= htmlspecialchars($g['color'] ?: 'STANDARD', ENT_QUOTES, 'UTF-8') ?>"
+                                                    data-label-design="<?= htmlspecialchars($labelDesign, ENT_QUOTES, 'UTF-8') ?>"
+                                                    data-label-price="<?= htmlspecialchars($labelPrice, ENT_QUOTES, 'UTF-8') ?>"
+                                                    data-label-code="<?= htmlspecialchars($labelCode, ENT_QUOTES, 'UTF-8') ?>"
+                                                    onclick="showRollQr(this)"
+                                                    title="Preview the exact supply label">
                                                     <i class="bi bi-qr-code"></i>
-                                                </a>
+                                                </button>
+                                                <?php if ($canEditPurchaseStock): ?>
+                                                    <button type="button" class="btn btn-outline-secondary btn-sm p-1" title="Edit this stock item"
+                                                        data-stock-type="garment_other"
+                                                        data-item-id="<?= (int)$g['id'] ?>"
+                                                        data-concern-id="<?= (int)$g['concern_id'] ?>"
+                                                        data-item-name="<?= htmlspecialchars($g['item_name'] ?? '', ENT_QUOTES, 'UTF-8') ?>"
+                                                        data-item-code="<?= htmlspecialchars($g['item_code'] ?? '', ENT_QUOTES, 'UTF-8') ?>"
+                                                        data-specification="<?= htmlspecialchars($g['specification'] ?? '', ENT_QUOTES, 'UTF-8') ?>"
+                                                        data-color="<?= htmlspecialchars($g['color'] ?? '', ENT_QUOTES, 'UTF-8') ?>"
+                                                        data-unit="<?= htmlspecialchars($g['unit'] ?? 'Pieces', ENT_QUOTES, 'UTF-8') ?>"
+                                                        data-qty="<?= htmlspecialchars((string)$qty, ENT_QUOTES, 'UTF-8') ?>"
+                                                        data-unit-price="<?= htmlspecialchars((string)$uPrice, ENT_QUOTES, 'UTF-8') ?>"
+                                                        data-mrp="0"
+                                                        data-total-value="<?= htmlspecialchars((string)$g['total_price'], ENT_QUOTES, 'UTF-8') ?>"
+                                                        onclick="editPurchaseStockItem(this)">
+                                                        <i class="bi bi-pencil-square"></i>
+                                                    </button>
+                                                <?php endif; ?>
                                             </div>
                                         </td>
                                     </tr>
@@ -841,7 +848,7 @@
         <?php if ($activeTab === 'finished_goods'): ?>
             <div class="card-body p-0">
                 <div class="table-responsive">
-                    <table class="table table-hover table-bordered align-middle mb-0 text-center small">
+                    <table class="table table-hover table-bordered align-middle mb-0 text-center small compact-purchase-stock-table">
                         <thead class="table-light">
                             <tr class="fw-bold text-uppercase" style="font-size: 0.72rem; letter-spacing: 0.03em;">
                                 <th style="width: 40px;">#</th>
@@ -879,6 +886,20 @@
                                     $mrp = (float)($f['mrp'] ?? 0);
                                     $tot = (float)($f['total_price'] ?? 0);
                                     $liveStore = isset($f['live_variant_stock']) ? (float)$f['live_variant_stock'] : $qty;
+                                    $labelProductName = $f['variant_name'] ?: ($f['item_name'] ?: 'Finished Garment');
+                                    $labelDesign = trim($f['pattern'] ?: ($f['specification'] ?: ($f['variant_size'] ?: 'STANDARD')));
+                                    $labelCode = \App\Services\QrService::generateTagCode(
+                                        $labelProductName,
+                                        $f['color'] ?? '',
+                                        $f['specification'] ?? '',
+                                        (string)$f['id']
+                                    );
+                                    $labelCode = $f['fg_label_qr_payload'] ?: $labelCode;
+                                    $labelProductName = $f['fg_label_title'] ?: $labelProductName;
+                                    $labelCodeDisplay = $f['fg_label_code'] ?: $labelCode;
+                                    $labelPrice = (float)($f['variant_mrp'] ?: ($f['mrp'] ?: $f['unit_price']));
+                                    $labelConcern = $f['concern_name'] ?: 'INVENTO ERP';
+                                    $labelRef = $f['bill_no'] ?: ('PO-' . $f['purchase_bill_id']);
                                 ?>
                                     <tr>
                                         <td class="text-muted fw-semibold"><?= $fIdx++ ?></td>
@@ -944,12 +965,41 @@
                                         </td>
                                         <td>
                                             <div class="d-flex justify-content-center gap-1">
-                                                <a href="<?= \App\Core\Controller::url('/m/purchase_billing/view?id=' . $f['purchase_bill_id']) ?>" class="btn btn-outline-secondary btn-sm p-1" title="View Bill">
-                                                    <i class="bi bi-receipt"></i>
-                                                </a>
-                                                <a href="<?= \App\Core\Controller::url('/m/label_generation?tab=purchase_fg&q=' . urlencode($f['item_name'])) ?>" class="btn btn-outline-primary btn-sm p-1" title="Print QR Label">
-                                                    <i class="bi bi-qr-code"></i>
-                                                </a>
+                                                <?php if (!empty($f['label_generation_complete'])): ?>
+                                                    <button type="button" class="btn btn-outline-primary btn-sm p-1"
+                                                        data-qr="<?= htmlspecialchars($labelCode, ENT_QUOTES, 'UTF-8') ?>"
+                                                        data-label-concern="<?= htmlspecialchars($labelConcern, ENT_QUOTES, 'UTF-8') ?>"
+                                                        data-label-ref="<?= htmlspecialchars($labelRef, ENT_QUOTES, 'UTF-8') ?>"
+                                                        data-label-title="<?= htmlspecialchars($labelProductName, ENT_QUOTES, 'UTF-8') ?>"
+                                                        data-label-field1-label="Product"
+                                                        data-label-fabric="<?= htmlspecialchars($f['category_name'] ?: 'Apparel', ENT_QUOTES, 'UTF-8') ?>"
+                                                        data-label-color="<?= htmlspecialchars($f['color'] ?: 'STANDARD', ENT_QUOTES, 'UTF-8') ?>"
+                                                        data-label-design="<?= htmlspecialchars($labelDesign, ENT_QUOTES, 'UTF-8') ?>"
+                                                        data-label-price="<?= htmlspecialchars('₹' . number_format($labelPrice, 2), ENT_QUOTES, 'UTF-8') ?>"
+                                                        data-label-code="<?= htmlspecialchars($labelCodeDisplay, ENT_QUOTES, 'UTF-8') ?>"
+                                                        onclick="showRollQr(this)"
+                                                        title="Preview the generated finished-goods label">
+                                                        <i class="bi bi-qr-code"></i>
+                                                    </button>
+                                                <?php endif; ?>
+                                                <?php if ($canEditPurchaseStock): ?>
+                                                    <button type="button" class="btn btn-outline-secondary btn-sm p-1" title="Edit this stock item"
+                                                        data-stock-type="finished_goods"
+                                                        data-item-id="<?= (int)$f['id'] ?>"
+                                                        data-concern-id="<?= (int)$f['concern_id'] ?>"
+                                                        data-item-name="<?= htmlspecialchars($f['item_name'] ?? '', ENT_QUOTES, 'UTF-8') ?>"
+                                                        data-item-code="<?= htmlspecialchars($f['item_code'] ?? '', ENT_QUOTES, 'UTF-8') ?>"
+                                                        data-specification="<?= htmlspecialchars($f['specification'] ?? '', ENT_QUOTES, 'UTF-8') ?>"
+                                                        data-color="<?= htmlspecialchars($f['color'] ?? '', ENT_QUOTES, 'UTF-8') ?>"
+                                                        data-unit="<?= htmlspecialchars($f['unit'] ?? 'Pieces', ENT_QUOTES, 'UTF-8') ?>"
+                                                        data-qty="<?= htmlspecialchars((string)$qty, ENT_QUOTES, 'UTF-8') ?>"
+                                                        data-unit-price="<?= htmlspecialchars((string)$uPrice, ENT_QUOTES, 'UTF-8') ?>"
+                                                        data-mrp="<?= htmlspecialchars((string)$mrp, ENT_QUOTES, 'UTF-8') ?>"
+                                                        data-total-value="<?= htmlspecialchars((string)$tot, ENT_QUOTES, 'UTF-8') ?>"
+                                                        onclick="editPurchaseStockItem(this)">
+                                                        <i class="bi bi-pencil-square"></i>
+                                                    </button>
+                                                <?php endif; ?>
                                             </div>
                                         </td>
                                     </tr>
@@ -957,6 +1007,73 @@
                             <?php endif; ?>
                         </tbody>
                     </table>
+                </div>
+            </div>
+        <?php endif; ?>
+
+        <?php if ($activeTab !== 'rolls' && $canEditPurchaseStock): ?>
+            <div class="modal fade" id="editPurchaseStockItemModal" tabindex="-1" aria-labelledby="editPurchaseStockItemModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-lg modal-dialog-centered">
+                    <div class="modal-content">
+                        <form action="<?= \App\Core\Controller::url('/m/purchase_stocks/update_item') ?>" method="POST">
+                            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
+                            <input type="hidden" name="concern_id" id="edit_stock_concern_id">
+                            <input type="hidden" name="item_id" id="edit_stock_item_id">
+                            <input type="hidden" name="section_type" id="edit_stock_section_type">
+                            <div class="modal-header py-2">
+                                <h5 class="modal-title fs-6 fw-bold" id="editPurchaseStockItemModalLabel">Edit Purchase Stock Item</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <label for="edit_stock_item_name" class="form-label small fw-semibold">Item Name</label>
+                                        <input type="text" class="form-control form-control-sm" id="edit_stock_item_name" name="item_name" maxlength="255" required>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="edit_stock_item_code" class="form-label small fw-semibold">Item Code / SKU</label>
+                                        <input type="text" class="form-control form-control-sm" id="edit_stock_item_code" name="item_code" maxlength="100">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="edit_stock_specification" class="form-label small fw-semibold">Specification / Size</label>
+                                        <input type="text" class="form-control form-control-sm" id="edit_stock_specification" name="specification" maxlength="255">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="edit_stock_color" class="form-label small fw-semibold">Color</label>
+                                        <input type="text" class="form-control form-control-sm" id="edit_stock_color" name="color" maxlength="100">
+                                    </div>
+                                    <div class="col-md-4" id="edit_stock_unit_group">
+                                        <label for="edit_stock_unit" class="form-label small fw-semibold">Unit</label>
+                                        <input type="text" class="form-control form-control-sm" id="edit_stock_unit" name="unit" maxlength="50" required>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label for="edit_stock_qty" class="form-label small fw-semibold">Inward Quantity</label>
+                                        <input type="number" class="form-control form-control-sm" id="edit_stock_qty" name="qty" min="0" max="9999999999.99" step="0.01" required>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label for="edit_stock_unit_price" class="form-label small fw-semibold">Unit Price (₹)</label>
+                                        <input type="number" class="form-control form-control-sm" id="edit_stock_unit_price" name="unit_price" min="0" max="9999999999.99" step="0.01" required>
+                                    </div>
+                                    <div class="col-md-4" id="edit_stock_mrp_group">
+                                        <label for="edit_stock_mrp" class="form-label small fw-semibold">MRP (₹)</label>
+                                        <input type="number" class="form-control form-control-sm" id="edit_stock_mrp" name="mrp" min="0" max="9999999999.99" step="0.01">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label for="edit_stock_total_value" class="form-label small fw-semibold">Stock Value (₹)</label>
+                                        <input type="number" class="form-control form-control-sm" id="edit_stock_total_value" name="total_value" min="0" max="9999999999.99" step="0.01" required>
+                                    </div>
+                                </div>
+                                <div class="alert alert-info py-2 mt-3 mb-0 small">
+                                    These edits apply to this purchase stock row only. Purchase bill history remains unchanged.
+                                    For finished goods, an edit hides the QR until labels are generated again.
+                                </div>
+                            </div>
+                            <div class="modal-footer py-2">
+                                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                                <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-check2 me-1"></i>Save Changes</button>
+                            </div>
+                        </form>
+                    </div>
                 </div>
             </div>
         <?php endif; ?>
@@ -969,6 +1086,58 @@
             <div class="d-flex align-items-center gap-3">
                 <span><i class="bi bi-shield-check text-success me-1"></i> Multi-tenant data isolated</span>
                 <span><i class="bi bi-arrow-repeat text-primary me-1"></i> Live inventory synced</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<?php if ($activeTab !== 'rolls'): ?>
+    <style>
+        #rollQrModal .label-sticker { width: 100%; max-width: 420px; min-height: 140px; padding: 8px 12px; border: 1.5px solid #0f172a; border-radius: 10px; background: #fff; color: #0f172a; display: flex; flex-direction: column; box-sizing: border-box; font-family: Arial, sans-serif; }
+        #rollQrModal .label-header-bar { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding-bottom: 4px; }
+        #rollQrModal .concern-check-icon { width: 17px; height: 17px; margin-right: 6px; border-radius: 4px; background: #0d6efd; color: #fff; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 11px; }
+        #rollQrModal .concern-name-text { max-width: 170px; overflow: hidden; color: #0f172a; font-size: .82rem; font-weight: 800; letter-spacing: .04em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+        #rollQrModal .ref-pill-badge { padding: 1px 7px; border: 1px solid #bae6fd; border-radius: 12px; background: #e0f2fe; color: #0284c7; font: 600 .7rem monospace; white-space: nowrap; }
+        #rollQrModal .label-divider { margin: 4px 0 6px; border-top: 1px dashed #cbd5e1; }
+        #rollQrModal .label-body-content { display: flex; flex: 1; align-items: center; gap: 10px; }
+        #rollQrModal .label-qr-wrapper, #rollQrModal .label-qr-box { width: 76px; height: 76px; flex-shrink: 0; }
+        #rollQrModal .label-qr-wrapper { display: flex; align-items: center; justify-content: center; background: #fff; }
+        #rollQrModal .label-details-stack { flex: 1; overflow: hidden; font-size: .76rem; line-height: 1.35; }
+        #rollQrModal .label-item-title { margin-bottom: 2px; overflow: hidden; color: #0f172a; font-size: .86rem; font-weight: 800; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+        #rollQrModal .label-detail-row { overflow: hidden; color: #334155; font-size: .75rem; text-overflow: ellipsis; white-space: nowrap; }
+        #rollQrModal .detail-label { margin-right: 3px; color: #64748b; font-weight: 500; }
+        #rollQrModal .detail-val { color: #0f172a; font-weight: 600; }
+    </style>
+<?php endif; ?>
+<div class="modal fade" id="rollQrModal" tabindex="-1" aria-labelledby="rollQrModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h5 class="modal-title fs-6 fw-bold" id="rollQrModalLabel">Purchase Stock Label Preview</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body d-flex justify-content-center">
+                <div class="label-sticker">
+                    <div class="label-header-bar">
+                        <div class="d-flex align-items-center">
+                            <span class="concern-check-icon"><i class="bi bi-check-lg"></i></span>
+                            <span class="concern-name-text" id="rollQrConcern"></span>
+                        </div>
+                        <span class="ref-pill-badge" id="rollQrRef"></span>
+                    </div>
+                    <div class="label-divider"></div>
+                    <div class="label-body-content">
+                        <div class="label-qr-wrapper"><div class="label-qr-box" id="rollQrCode"></div></div>
+                        <div class="label-details-stack">
+                            <div class="label-item-title" id="rollQrTitle"></div>
+                            <div class="label-detail-row"><span class="detail-label" id="rollQrField1Label">Fabric:</span> <span class="detail-val" id="rollQrFabric"></span></div>
+                            <div class="label-detail-row"><span class="detail-label">Color:</span> <span class="detail-val text-uppercase" id="rollQrColor"></span></div>
+                            <div class="label-detail-row"><span class="detail-label">Design:</span> <span class="detail-val text-uppercase" id="rollQrDesign"></span></div>
+                            <div class="label-detail-row"><span class="detail-label">Price:</span> <span class="detail-val fw-bold text-success" id="rollQrPrice"></span></div>
+                            <div class="label-detail-row"><span class="detail-label">Code:</span> <span class="detail-val font-monospace text-primary fw-bold" id="rollQrCodeText"></span></div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -988,6 +1157,7 @@ function showRollQr(button) {
     document.getElementById('rollQrConcern').textContent = button.dataset.labelConcern || 'INVENTO ERP';
     document.getElementById('rollQrRef').textContent = button.dataset.labelRef || '';
     document.getElementById('rollQrTitle').textContent = button.dataset.labelTitle || '';
+    document.getElementById('rollQrField1Label').textContent = (button.dataset.labelField1Label || 'Fabric') + ':';
     document.getElementById('rollQrFabric').textContent = button.dataset.labelFabric || '';
     document.getElementById('rollQrColor').textContent = button.dataset.labelColor || '';
     document.getElementById('rollQrDesign').textContent = button.dataset.labelDesign || '';
@@ -1020,6 +1190,30 @@ function editConsolidatedRoll(button) {
     document.getElementById('edit_roll_unit').value = button.dataset.unit || 'Rolls';
     document.getElementById('edit_roll_rate').value = button.dataset.rate || '0';
     document.getElementById('edit_roll_total').value = button.dataset.total || '0';
+
+    bootstrap.Modal.getOrCreateInstance(modalElement).show();
+}
+
+function editPurchaseStockItem(button) {
+    const modalElement = document.getElementById('editPurchaseStockItemModal');
+    if (!modalElement || !button) return;
+
+    const type = button.dataset.stockType || '';
+    document.getElementById('edit_stock_concern_id').value = button.dataset.concernId || '';
+    document.getElementById('edit_stock_item_id').value = button.dataset.itemId || '';
+    document.getElementById('edit_stock_section_type').value = type;
+    document.getElementById('edit_stock_item_name').value = button.dataset.itemName || '';
+    document.getElementById('edit_stock_item_code').value = button.dataset.itemCode || '';
+    document.getElementById('edit_stock_specification').value = button.dataset.specification || '';
+    document.getElementById('edit_stock_color').value = button.dataset.color || '';
+    document.getElementById('edit_stock_unit').value = button.dataset.unit || 'Pieces';
+    document.getElementById('edit_stock_qty').value = button.dataset.qty || '0';
+    document.getElementById('edit_stock_unit_price').value = button.dataset.unitPrice || '0';
+    document.getElementById('edit_stock_mrp').value = button.dataset.mrp || '0';
+    document.getElementById('edit_stock_total_value').value = button.dataset.totalValue || '0';
+    document.getElementById('edit_stock_mrp_group').classList.toggle('d-none', type !== 'finished_goods');
+    document.getElementById('editPurchaseStockItemModalLabel').textContent =
+        type === 'finished_goods' ? 'Edit Finished Goods Stock' : 'Edit Garment Supply / Trim';
 
     bootstrap.Modal.getOrCreateInstance(modalElement).show();
 }

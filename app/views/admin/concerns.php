@@ -130,7 +130,7 @@
 <!-- CREATE CONCERN GUIDED MODAL -->
 <div class="modal fade" id="modalCreateConcern" tabindex="-1">
     <div class="modal-dialog modal-xl">
-        <form action="<?= \App\Core\Controller::url('/admin/concerns/store') ?>" method="POST" class="modal-content">
+        <form action="<?= \App\Core\Controller::url('/admin/concerns/store') ?>" method="POST" class="modal-content" autocomplete="off">
             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
 
             <div class="modal-header bg-dark text-white">
@@ -146,34 +146,31 @@
                         
                         <div class="mb-3">
                             <label class="form-label small fw-semibold">Concern Name *</label>
-                            <input type="text" name="name" class="form-control" placeholder="e.g. Tirupur Knits Pvt Ltd" required>
+                            <input type="text" name="name" id="newConcernName" class="form-control" minlength="2" maxlength="150" autocomplete="off" required>
                         </div>
 
                         <div class="row g-2 mb-3">
                             <div class="col-md-6">
                                 <label class="form-label small fw-semibold">Concern Code *</label>
-                                <input type="text" name="code" class="form-control text-uppercase" placeholder="e.g. CON-TKP" required>
+                                <input type="text" name="code" id="newConcernCode" class="form-control text-uppercase" readonly required aria-describedby="newConcernCodeHelp">
+                                <div class="form-text" id="newConcernCodeHelp">Generated automatically from the concern name.</div>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label small fw-semibold">GSTIN</label>
-                                <input type="text" name="gstin" class="form-control text-uppercase" placeholder="33AAAAA0000A1Z5">
+                                <input type="text" name="gstin" class="form-control text-uppercase" maxlength="15" pattern="[0-9]{2}[A-Za-z]{5}[0-9]{4}[A-Za-z][A-Za-z0-9]Z[A-Za-z0-9]" autocomplete="off">
                             </div>
                         </div>
 
                         <div class="row g-2 mb-3">
-                            <div class="col-md-6">
+                            <div class="col-12">
                                 <label class="form-label small fw-semibold">Phone</label>
-                                <input type="text" name="phone" class="form-control" placeholder="9842100000">
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label small fw-semibold">Official Email</label>
-                                <input type="email" name="email" class="form-control" placeholder="info@concern.com">
+                                <input type="tel" name="phone" class="form-control" maxlength="16" pattern="\+?[0-9]{10,15}" autocomplete="off">
                             </div>
                         </div>
 
                         <div class="mb-3">
                             <label class="form-label small fw-semibold">Registered Address</label>
-                            <textarea name="address" class="form-control" rows="2" placeholder="Full address"></textarea>
+                            <textarea name="address" class="form-control" rows="2" maxlength="1000" autocomplete="off"></textarea>
                         </div>
 
                         <hr class="my-4">
@@ -181,15 +178,16 @@
                         <h6 class="fw-bold text-primary mb-3"><i class="bi bi-person-badge me-1"></i> Step 2: Tenant Admin Account</h6>
                         <div class="mb-3">
                             <label class="form-label small fw-semibold">Admin Name *</label>
-                            <input type="text" name="admin_name" class="form-control" placeholder="e.g. Senthil Kumar" required>
+                            <input type="text" name="admin_name" class="form-control" minlength="2" maxlength="100" autocomplete="off" required>
                         </div>
                         <div class="mb-3">
                             <label class="form-label small fw-semibold">Admin Login Email *</label>
-                            <input type="email" name="admin_email" class="form-control" placeholder="admin@concern.com" required>
+                            <input type="email" name="admin_email" class="form-control" maxlength="120" autocomplete="off" required>
                         </div>
                         <div class="mb-3">
                             <label class="form-label small fw-semibold">Admin Password *</label>
-                            <input type="password" name="admin_password" class="form-control" placeholder="Minimum 6 characters" required>
+                            <input type="password" name="admin_password" class="form-control" minlength="8" maxlength="72" pattern="(?=.*[A-Za-z])(?=.*[0-9]).{8,72}" autocomplete="new-password" required>
+                            <div class="form-text">Use 8 to 72 characters, including at least one letter and one number.</div>
                         </div>
                     </div>
 
@@ -205,11 +203,13 @@
                         <p class="text-muted small">
                             Select the modules this concern gets. Unchecked modules will not appear in their sidebar and will return 403 on direct URL access.
                         </p>
+                        <div class="alert alert-danger py-2 d-none" id="newConcernModuleError" role="alert">Select at least one module.</div>
 
                         <?php
                         $groupedAll = [];
                         foreach ($allModules as $mod) {
-                            $groupedAll[$mod['group_name']][] = $mod;
+                            $groupName = $mod['code'] === 'catalog_mapping' ? 'Purchase' : $mod['group_name'];
+                            $groupedAll[$groupName][] = $mod;
                         }
                         ?>
 
@@ -223,7 +223,7 @@
                                         <div class="card-body p-2">
                                             <?php foreach ($mods as $m): ?>
                                                 <div class="form-check mb-1">
-                                                    <input class="form-check-input module-check" type="checkbox" name="modules[]" value="<?= $m['id'] ?>" id="new_mod_<?= $m['id'] ?>" checked>
+                                                    <input class="form-check-input module-check" type="checkbox" name="modules[]" value="<?= $m['id'] ?>" id="new_mod_<?= $m['id'] ?>">
                                                     <label class="form-check-label small" for="new_mod_<?= $m['id'] ?>">
                                                         <i class="bi <?= htmlspecialchars($m['icon']) ?> text-muted me-1"></i>
                                                         <?= htmlspecialchars($m['name']) ?>
@@ -250,8 +250,53 @@
 </div>
 
 <script>
+const createConcernModal = document.getElementById('modalCreateConcern');
+const createConcernForm = createConcernModal.querySelector('form');
+const newConcernName = document.getElementById('newConcernName');
+const newConcernCode = document.getElementById('newConcernCode');
+const moduleSelectionError = document.getElementById('newConcernModuleError');
+
+function concernCodePreview(name) {
+    const words = String(name).toUpperCase().match(/[A-Z0-9]+/g) || [];
+    let token = words.slice(0, 3).map(word => word.charAt(0)).join('');
+    if (token.length < 2) token = words.join('').slice(0, 3);
+    if (!token && String(name).trim()) token = 'NEW';
+    return token ? `CON-${token}` : '';
+}
+
+newConcernName.addEventListener('input', () => {
+    newConcernCode.value = concernCodePreview(newConcernName.value);
+});
+
+createConcernModal.addEventListener('show.bs.modal', () => {
+    createConcernForm.reset();
+    createConcernForm.querySelectorAll('input:not([type="hidden"]):not([type="checkbox"])').forEach(field => {
+        field.value = '';
+        field.setCustomValidity('');
+    });
+    createConcernForm.querySelectorAll('textarea').forEach(field => field.value = '');
+    moduleSelectionError.classList.add('d-none');
+});
+
+createConcernForm.addEventListener('submit', event => {
+    const hasSelectedModule = createConcernForm.querySelector('.module-check:checked');
+    if (!hasSelectedModule) {
+        event.preventDefault();
+        moduleSelectionError.classList.remove('d-none');
+    }
+});
+
+createConcernForm.querySelectorAll('.module-check').forEach(checkbox => {
+    checkbox.addEventListener('change', () => {
+        if (createConcernForm.querySelector('.module-check:checked')) {
+            moduleSelectionError.classList.add('d-none');
+        }
+    });
+});
+
 function selectAllModules(check) {
     document.querySelectorAll('.module-check').forEach(cb => cb.checked = check);
+    moduleSelectionError.classList.toggle('d-none', check);
 }
 
 // Live module toggle handler

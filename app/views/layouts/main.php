@@ -200,7 +200,8 @@
             $activeRoute = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
             $grouped = [];
             foreach ($sidebarModules as $m) {
-                $grouped[$m['group_name']][] = $m;
+                $groupName = $m['code'] === 'catalog_mapping' ? 'Purchase' : $m['group_name'];
+                $grouped[$groupName][] = $m;
             }
 
             foreach ($grouped as $groupName => $mods):

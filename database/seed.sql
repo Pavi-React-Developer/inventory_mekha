@@ -20,7 +20,7 @@ INSERT INTO `modules` (`code`, `name`, `icon`, `sort_order`, `group_name`, `is_s
 ('purchase_damage', 'Purchase Damage', 'bi-shield-x', 23, 'Purchase', 0),
 
 ('catalog_program', 'Catalog & Program', 'bi-journal-bookmark', 30, 'Production', 0),
-('catalog_mapping', 'Catalog Mapping', 'bi-diagram-3-fill', 30.5, 'Production', 0),
+('catalog_mapping', 'Catalog Mapping', 'bi-diagram-3-fill', 24, 'Purchase', 0),
 ('cutting_wastage', 'Cutting & Wastage', 'bi-scissors', 31, 'Production', 0),
 ('stitching_wastage', 'Stitching & Wastage', 'bi-layers', 32, 'Production', 0),
 ('label_generation', 'Label Generation', 'bi-qr-code', 33, 'Production', 0),

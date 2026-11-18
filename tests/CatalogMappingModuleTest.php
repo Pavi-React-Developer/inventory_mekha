@@ -33,7 +33,7 @@ echo "TEST 1: Module & Table Schema Integrity\n";
 
 $mod = DB::fetch("SELECT * FROM modules WHERE code = 'catalog_mapping'");
 assertTest("catalog_mapping module is registered in `modules`", !empty($mod));
-assertTest("catalog_mapping module is in 'Production' group", !empty($mod) && $mod['group_name'] === 'Production');
+assertTest("catalog_mapping module is in 'Purchase' group", !empty($mod) && $mod['group_name'] === 'Purchase');
 
 $pbiCols = array_column(DB::fetchAll("DESCRIBE purchase_bill_items"), 'Field');
 assertTest("purchase_bill_items has 'catalog_id' column", in_array('catalog_id', $pbiCols));

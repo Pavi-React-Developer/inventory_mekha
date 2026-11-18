@@ -6,10 +6,13 @@ namespace App\Controllers;
 use App\Core\Controller;
 use App\Core\DB;
 use App\Core\Auth;
+use App\Core\ModuleGuard;
+use App\Services\AuditLog;
 use App\Services\StockService;
 use App\Services\NumberSeries;
 use App\Services\CloudinaryService;
 use App\Services\RollRegistryService;
+use App\Services\PurchaseDamageService;
 use Exception;
 
 class PurchaseController extends Controller {
@@ -1544,93 +1547,229 @@ class PurchaseController extends Controller {
 
     // 3. PURCHASE DAMAGE
     public function damage(): void {
+        $isSuperAdmin = Auth::isSuperAdmin();
         $cid = Auth::concernId();
+        if ($isSuperAdmin) {
+            $cid = (int)($_GET['concern_id'] ?? 0) ?: null;
+        }
 
-        $sql = "SELECT pd.*, s.name AS supplier_name, v.name AS variant_name, v.sku_code,
-                       con.name AS concern_name, con.code AS concern_code
-                FROM purchase_damages pd
-                JOIN suppliers s ON pd.supplier_id = s.id
-                JOIN variants v ON pd.variant_id = v.id
-                LEFT JOIN concerns con ON pd.concern_id = con.id";
+        PurchaseDamageService::initTable();
+        $sql = "SELECT history_source, record_id, damage_no, concern_id, concern_name, supplier_name,
+                       item_name, item_code, item_type, tag_code, qty, location, reason, notes,
+                       damaged_weight, estimated_loss, action_taken, created_at
+                FROM (
+                    SELECT 'legacy' AS history_source, pd.id AS record_id, pd.damage_no, pd.concern_id,
+                           con.name AS concern_name, s.name AS supplier_name, v.name AS item_name,
+                           v.sku_code AS item_code, 'legacy' AS item_type, NULL AS tag_code, pd.qty,
+                           pd.location, pd.reason, NULL AS notes, 0 AS damaged_weight, 0 AS estimated_loss,
+                           pd.action_taken, pd.created_at
+                    FROM purchase_damages pd
+                    JOIN suppliers s ON pd.supplier_id = s.id
+                    JOIN variants v ON pd.variant_id = v.id
+                    LEFT JOIN concerns con ON con.id = pd.concern_id
+                    UNION ALL
+                    SELECT 'quarantine' AS history_source, q.id AS record_id, q.damage_no, q.concern_id,
+                           con.name AS concern_name, q.supplier_name, q.item_name, q.item_code,
+                           q.item_type, q.tag_code, q.qty, q.location, q.reason, q.notes,
+                           q.damaged_weight, q.estimated_loss, q.status AS action_taken, q.created_at
+                    FROM purchase_damage_quarantine q
+                    LEFT JOIN concerns con ON con.id = q.concern_id
+                ) damage_history";
         $params = [];
         if ($cid) {
-            $sql .= " WHERE pd.concern_id = ?";
+            $sql .= " WHERE damage_history.concern_id = ?";
             $params[] = $cid;
         }
-        $sql .= " ORDER BY pd.id DESC";
+        $sql .= " ORDER BY damage_history.created_at DESC LIMIT 200";
         $damages = DB::fetchAll($sql, $params);
-
-        if ($cid) {
-            $suppliers = DB::fetchAll("SELECT id, name FROM suppliers WHERE concern_id = ? AND status = 'active'", [$cid]);
-            $variants  = DB::fetchAll("SELECT id, sku_code, name FROM variants WHERE concern_id = ? AND status = 'active'", [$cid]);
-        } else {
-            $suppliers = DB::fetchAll("SELECT id, name FROM suppliers WHERE status = 'active'");
-            $variants  = DB::fetchAll("SELECT id, sku_code, name FROM variants WHERE status = 'active'");
-        }
+        $damageReasons = $cid ? PurchaseDamageService::getDamageReasons((int)$cid) : [];
+        $allConcerns = $isSuperAdmin
+            ? DB::fetchAll("SELECT id, name, code FROM concerns ORDER BY name ASC")
+            : [];
+        $canAddDamage = $isSuperAdmin || Auth::can('purchase_damage', 'add');
+        $canEditDamage = $isSuperAdmin || Auth::can('purchase_damage', 'edit');
+        $canDeleteDamage = $isSuperAdmin || Auth::can('purchase_damage', 'delete');
 
         $this->render('concern/purchase_damage', [
             'pageTitle'     => 'Purchase Damage & Rejections',
             'currentModule' => 'purchase_damage',
             'damages'       => $damages,
-            'suppliers'     => $suppliers,
-            'variants'      => $variants,
             'selectedCid'   => $cid,
+            'isSuperAdmin'  => $isSuperAdmin,
+            'allConcerns'   => $allConcerns,
+            'damageReasons' => $damageReasons,
+            'canAddDamage'  => $canAddDamage,
+            'canEditDamage' => $canEditDamage,
+            'canDeleteDamage' => $canDeleteDamage,
         ]);
+    }
+
+    public function scanPurchaseDamageTag(): void {
+        $this->validateCsrf();
+        $cid = Auth::isSuperAdmin()
+            ? (int)($_POST['concern_id'] ?? 0)
+            : Auth::concernId();
+        if (!$cid) {
+            $this->renderJson(['success' => false, 'message' => 'Select a concern before scanning labels.'], 422);
+            return;
+        }
+
+        try {
+            $item = PurchaseDamageService::resolveTag($cid, (string)($_POST['tag_code'] ?? ''));
+            $this->renderJson(['success' => true, 'item' => $item]);
+        } catch (\RuntimeException $e) {
+            $this->renderJson(['success' => false, 'message' => $e->getMessage()], 422);
+        }
+    }
+
+    public function addDamageReason(): void {
+        ModuleGuard::enforce('purchase_damage', 'add');
+        $this->validateCsrf();
+
+        $cid = Auth::isSuperAdmin()
+            ? (int)($_POST['concern_id'] ?? 0)
+            : Auth::concernId();
+        $reason = $_POST['reason'] ?? null;
+        if (!$cid || !is_scalar($reason)) {
+            $this->renderJson(['success' => false, 'message' => 'Enter a valid damage reason.'], 422);
+            return;
+        }
+
+        try {
+            $savedReason = PurchaseDamageService::addDamageReason($cid, (string)$reason, Auth::id());
+            $this->renderJson([
+                'success' => true,
+                'reason' => $savedReason,
+                'message' => 'Damage reason is available in the dropdown.',
+            ]);
+        } catch (\RuntimeException $e) {
+            $this->renderJson(['success' => false, 'message' => $e->getMessage()], 422);
+        }
     }
 
     public function storeDamage(): void {
         $this->validateCsrf();
-        $cid = Auth::concernId() ?: (int)($_POST['concern_id'] ?? 0);
+        $cid = Auth::isSuperAdmin()
+            ? (int)($_POST['concern_id'] ?? 0)
+            : Auth::concernId();
 
         if (!$cid) {
             $this->flash('error', 'Please choose a concern for this purchase damage.');
             $this->redirect('/m/purchase_damage');
         }
 
-        $supplierId = (int)($_POST['supplier_id'] ?? 0);
-        $variantId  = (int)($_POST['variant_id'] ?? 0);
-        $qty        = (float)($_POST['qty'] ?? 0);
-        $location   = trim($_POST['location'] ?? 'Main Store');
-        $reason     = trim($_POST['reason'] ?? '');
-        $action     = trim($_POST['action_taken'] ?? 'Debit Note / Return to Supplier');
-
-        if (!$supplierId || !$variantId || $qty <= 0) {
-            $this->flash('error', 'Supplier, Variant and valid quantity are required.');
-            $this->redirect('/m/purchase_damage');
+        $rawScannedItems = $_POST['scanned_items'] ?? '';
+        $scannedItems = is_string($rawScannedItems) ? json_decode($rawScannedItems, true) : null;
+        if (!is_array($scannedItems)) {
+            $scannedItems = [];
         }
 
-        DB::beginTransaction();
         try {
-            $damageNo = NumberSeries::getNext($cid, 'DAMAGE');
-
-            DB::query(
-                "INSERT INTO purchase_damages (concern_id, damage_no, supplier_id, variant_id, qty, location, reason, action_taken, created_by, created_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())",
-                [$cid, $damageNo, $supplierId, $variantId, $qty, $location, $reason, $action, Auth::id()]
-            );
-            $damageId = (int)DB::lastInsertId();
-
-            // Deduct damaged quantity from live stock via StockService
-            StockService::move(
+            $result = PurchaseDamageService::saveScannedDamage(
                 $cid,
-                $variantId,
-                $location,
-                0.00,
-                $qty,
-                'Purchase Damage',
-                $damageId,
-                "Supplier Damage {$damageNo}: {$reason}",
+                $scannedItems,
+                trim((string)($_POST['reason'] ?? '')),
+                trim((string)($_POST['notes'] ?? '')),
                 Auth::id()
             );
 
-            DB::commit();
-
-            $this->flash('success', "Purchase Damage '{$damageNo}' recorded and {$qty} units deducted from stock.");
-        } catch (Exception $e) {
-            DB::rollBack();
+            $quarantinedQty = number_format((float)$result['count'], 2);
+            $this->flash(
+                'success',
+                "Purchase Damage '{$result['damage_no']}' quarantined {$quarantinedQty} unit(s); stock was updated."
+            );
+        } catch (\Throwable $e) {
             $this->flash('error', 'Failed to record damage: ' . $e->getMessage());
         }
 
         $this->redirect('/m/purchase_damage');
+    }
+
+    public function updateDamageRecord(): void {
+        ModuleGuard::enforce('purchase_damage', 'edit');
+        $this->validateCsrf();
+
+        $damageId = (int)($_POST['damage_id'] ?? 0);
+        $concernId = Auth::isSuperAdmin()
+            ? (int)($_POST['concern_id'] ?? 0)
+            : Auth::concernId();
+        $returnUrl = '/m/purchase_damage' . (Auth::isSuperAdmin() && $concernId ? '?concern_id=' . $concernId : '');
+
+        $rawQty = $_POST['qty'] ?? null;
+        $reason = $_POST['reason'] ?? null;
+        $notes = $_POST['notes'] ?? '';
+        if (
+            !$damageId || !$concernId ||
+            !is_scalar($rawQty) || !is_numeric($rawQty) ||
+            !is_scalar($reason) || !is_scalar($notes)
+        ) {
+            $this->flash('error', 'Enter valid quarantine record details.');
+            $this->redirect($returnUrl);
+            return;
+        }
+        $qty = (float)$rawQty;
+        $reason = trim((string)$reason);
+        $notes = trim((string)$notes);
+        if (!is_finite($qty) || $qty <= 0 || $qty > 500 || $reason === '' || strlen($reason) > 255 || strlen($notes) > 2000) {
+            $this->flash('error', 'Enter a valid quantity, reason, and notes within the allowed limits.');
+            $this->redirect($returnUrl);
+            return;
+        }
+
+        try {
+            $result = PurchaseDamageService::updateQuarantineRecord(
+                $concernId,
+                $damageId,
+                $qty,
+                $reason,
+                $notes,
+                Auth::id()
+            );
+            AuditLog::log(
+                'UPDATE',
+                'purchase_damage_quarantine',
+                $damageId,
+                $result['before'],
+                $result['after']
+            );
+            $this->flash('success', 'Quarantine record updated and stock balances reconciled.');
+        } catch (\Throwable $e) {
+            $this->flash('error', 'Failed to update quarantine record: ' . $e->getMessage());
+        }
+
+        $this->redirect($returnUrl);
+    }
+
+    public function deleteDamageRecord(): void {
+        ModuleGuard::enforce('purchase_damage', 'delete');
+        $this->validateCsrf();
+
+        $damageId = (int)($_POST['damage_id'] ?? 0);
+        $concernId = Auth::isSuperAdmin()
+            ? (int)($_POST['concern_id'] ?? 0)
+            : Auth::concernId();
+        $returnUrl = '/m/purchase_damage' . (Auth::isSuperAdmin() && $concernId ? '?concern_id=' . $concernId : '');
+
+        if (!$damageId || !$concernId) {
+            $this->flash('error', 'Select a valid quarantine record.');
+            $this->redirect($returnUrl);
+            return;
+        }
+
+        try {
+            $result = PurchaseDamageService::deleteQuarantineRecord($concernId, $damageId, Auth::id());
+            AuditLog::log(
+                'DELETE',
+                'purchase_damage_quarantine',
+                $damageId,
+                $result['before'],
+                null
+            );
+            $this->flash('success', 'Quarantine record deleted and stock balances restored.');
+        } catch (\Throwable $e) {
+            $this->flash('error', 'Failed to delete quarantine record: ' . $e->getMessage());
+        }
+
+        $this->redirect($returnUrl);
     }
 }

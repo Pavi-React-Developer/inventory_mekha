@@ -80,40 +80,104 @@ class AdminController extends Controller {
     public function storeConcern(): void {
         $this->validateCsrf();
 
-        $name     = trim($_POST['name'] ?? '');
-        $code     = strtoupper(trim($_POST['code'] ?? ''));
-        $gstin    = trim($_POST['gstin'] ?? '');
-        $phone    = trim($_POST['phone'] ?? '');
-        $email    = trim($_POST['email'] ?? '');
-        $address  = trim($_POST['address'] ?? '');
+        $errors = [];
+        $readField = static function (string $field, bool $trim = true) use (&$errors): string {
+            $value = $_POST[$field] ?? '';
+            if (!is_string($value)) {
+                $errors[] = 'Invalid form value for ' . str_replace('_', ' ', $field) . '.';
+                return '';
+            }
+            return $trim ? trim($value) : $value;
+        };
 
-        // Admin User Details
-        $adminName  = trim($_POST['admin_name'] ?? '');
-        $adminEmail = trim($_POST['admin_email'] ?? '');
-        $adminPass  = $_POST['admin_password'] ?? '';
+        $name = $readField('name');
+        $gstin = strtoupper($readField('gstin'));
+        $phone = $readField('phone');
+        $address = $readField('address');
+        $adminName = $readField('admin_name');
+        $adminEmail = strtolower($readField('admin_email'));
+        $adminPass = $readField('admin_password', false);
 
-        // Picked Modules
-        $pickedModuleIds = $_POST['modules'] ?? [];
+        $textLength = static function (string $value): int {
+            return function_exists('mb_strlen') ? mb_strlen($value, 'UTF-8') : strlen($value);
+        };
 
-        if (empty($name) || empty($code) || empty($adminEmail) || empty($adminPass)) {
-            $this->flash('error', 'Please fill in all mandatory fields (Name, Code, Admin Email, Password).');
+        if ($textLength($name) < 2 || $textLength($name) > 150 || preg_match('/\p{L}/u', $name) !== 1) {
+            $errors[] = 'Concern name must be 2 to 150 characters and contain a letter.';
+        }
+        if ($gstin !== '' && !preg_match('/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][A-Z0-9]Z[A-Z0-9]$/D', $gstin)) {
+            $errors[] = 'Enter a valid 15-character GSTIN or leave the field blank.';
+        }
+        if ($phone !== '' && !preg_match('/^\+?[0-9]{10,15}$/D', $phone)) {
+            $errors[] = 'Phone must contain 10 to 15 digits, with an optional leading +.';
+        }
+        if ($textLength($address) > 1000) {
+            $errors[] = 'Registered address cannot exceed 1000 characters.';
+        }
+        if ($textLength($adminName) < 2 || $textLength($adminName) > 100 || preg_match('/\p{L}/u', $adminName) !== 1) {
+            $errors[] = 'Admin name must be 2 to 100 characters and contain a letter.';
+        }
+        if ($adminEmail === '' || strlen($adminEmail) > 120 || filter_var($adminEmail, FILTER_VALIDATE_EMAIL) === false) {
+            $errors[] = 'Enter a valid admin login email address.';
+        }
+        if (strlen($adminPass) < 8 || strlen($adminPass) > 72 || !preg_match('/[A-Za-z]/', $adminPass) || !preg_match('/[0-9]/', $adminPass)) {
+            $errors[] = 'Admin password must be 8 to 72 characters and include at least one letter and one number.';
+        }
+
+        $allConcernModules = DB::fetchAll("SELECT id FROM modules WHERE is_super_admin_only = 0");
+        $allowedModuleIds = array_fill_keys(array_map('strval', array_column($allConcernModules, 'id')), true);
+        $rawModuleIds = $_POST['modules'] ?? [];
+        $pickedModuleIds = [];
+        if (!is_array($rawModuleIds)) {
+            $errors[] = 'Select valid modules for the concern.';
+        } else {
+            foreach ($rawModuleIds as $moduleId) {
+                if ((!is_string($moduleId) && !is_int($moduleId))
+                    || !preg_match('/^[1-9][0-9]*$/D', (string)$moduleId)
+                    || !isset($allowedModuleIds[(string)$moduleId])) {
+                    $errors[] = 'The selected module list contains an invalid module.';
+                    break;
+                }
+                $pickedModuleIds[] = (int)$moduleId;
+            }
+            $pickedModuleIds = array_values(array_unique($pickedModuleIds));
+        }
+        if (!$pickedModuleIds) {
+            $errors[] = 'Select at least one module for the concern.';
+        }
+
+        if ($adminEmail !== '' && DB::fetch("SELECT id FROM users WHERE email = ? LIMIT 1", [$adminEmail])) {
+            $errors[] = 'That admin login email is already in use.';
+        }
+
+        if ($errors) {
+            $this->flash('error', implode(' ', array_unique($errors)));
             $this->redirect('/admin/concerns');
+            return;
         }
 
         DB::beginTransaction();
         try {
+            $code = $this->generateConcernCode($name);
+
             // 1. Create Concern
             DB::query(
                 "INSERT INTO concerns (code, name, address, gstin, phone, email, status) VALUES (?, ?, ?, ?, ?, ?, 'active')",
-                [$code, $name, $address, $gstin, $phone, $email]
+                [
+                    $code,
+                    $name,
+                    $address !== '' ? $address : null,
+                    $gstin !== '' ? $gstin : null,
+                    $phone !== '' ? $phone : null,
+                    null,
+                ]
             );
             $concernId = (int)DB::lastInsertId();
 
             // 2. Assign Chosen Modules
-            $allConcernModules = DB::fetchAll("SELECT id FROM modules WHERE is_super_admin_only = 0");
             $insertCm = DB::pdo()->prepare("INSERT INTO concern_modules (concern_id, module_id, enabled) VALUES (?, ?, ?)");
             foreach ($allConcernModules as $m) {
-                $enabled = in_array((string)$m['id'], $pickedModuleIds) ? 1 : 0;
+                $enabled = in_array((int)$m['id'], $pickedModuleIds, true) ? 1 : 0;
                 $insertCm->execute([$concernId, $m['id'], $enabled]);
             }
 
@@ -134,7 +198,7 @@ class AdminController extends Controller {
             $passwordHash = password_hash($adminPass, PASSWORD_BCRYPT);
             DB::query(
                 "INSERT INTO users (concern_id, role_id, name, email, password_hash, phone, status) VALUES (?, ?, ?, ?, ?, ?, 'active')",
-                [$concernId, $roleId, $adminName ?: "{$name} Admin", $adminEmail, $passwordHash, $phone]
+                [$concernId, $roleId, $adminName, $adminEmail, $passwordHash, $phone !== '' ? $phone : null]
             );
 
             // 6. Seed Default Document Series
@@ -167,6 +231,29 @@ class AdminController extends Controller {
             $this->flash('error', 'Failed to create concern: ' . $e->getMessage());
             $this->redirect('/admin/concerns');
         }
+    }
+
+    private function generateConcernCode(string $name): string {
+        $words = preg_split('/[^A-Z0-9]+/', strtoupper($name), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        $token = '';
+        foreach (array_slice($words, 0, 3) as $word) {
+            $token .= $word[0];
+        }
+        if (strlen($token) < 2) {
+            $token = substr(implode('', $words), 0, 3);
+        }
+        if ($token === '') {
+            $token = 'NEW';
+        }
+
+        $baseCode = 'CON-' . $token;
+        $code = $baseCode;
+        $suffix = 2;
+        while (DB::fetch("SELECT id FROM concerns WHERE code = ? LIMIT 1", [$code])) {
+            $code = $baseCode . '-' . $suffix;
+            $suffix++;
+        }
+        return $code;
     }
 
     public function toggleModule(): void {

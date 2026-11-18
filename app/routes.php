@@ -105,10 +105,15 @@ $router->get('/m/purchase_billing/download_items', [PurchaseController::class, '
 // Purchase Stocks (3 Sections: Rolls, Trims/Other Garments, Finished Goods)
 $router->get('/m/purchase_stocks', [PurchaseStockController::class, 'index'], 'purchase_stocks', 'view');
 $router->post('/m/purchase_stocks/update_consolidated_roll', [PurchaseStockController::class, 'updateConsolidatedRoll'], 'purchase_stocks', 'edit');
+$router->post('/m/purchase_stocks/update_item', [PurchaseStockController::class, 'updateStockItem'], 'purchase_stocks', 'edit');
 $router->get('/m/purchase_stocks/export', [PurchaseStockController::class, 'export'], 'purchase_stocks', 'view');
 
 $router->get('/m/purchase_damage', [PurchaseController::class, 'damage'], 'purchase_damage', 'view');
+$router->post('/m/purchase_damage/scan', [PurchaseController::class, 'scanPurchaseDamageTag'], 'purchase_damage', 'add');
+$router->post('/m/purchase_damage/reasons/add', [PurchaseController::class, 'addDamageReason'], 'purchase_damage', 'add');
 $router->post('/m/purchase_damage/store', [PurchaseController::class, 'storeDamage'], 'purchase_damage', 'add');
+$router->post('/m/purchase_damage/update', [PurchaseController::class, 'updateDamageRecord'], 'purchase_damage', 'edit');
+$router->post('/m/purchase_damage/delete', [PurchaseController::class, 'deleteDamageRecord'], 'purchase_damage', 'delete');
 
 // Concern Damage
 $router->get('/m/concern_damage', [DamageController::class, 'index'], 'concern_damage', 'view');

@@ -88,7 +88,10 @@
                 <label for="password" class="form-label small fw-semibold text-secondary">Password</label>
                 <div class="input-group">
                     <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-lock"></i></span>
-                    <input type="password" class="form-control border-start-0" id="password" name="password" required placeholder="Enter password">
+                    <input type="password" class="form-control border-start-0 border-end-0" id="password" name="password" required placeholder="Enter password">
+                    <button type="button" class="btn btn-outline-secondary" id="togglePasswordVisibility" aria-label="Show password" aria-controls="password" aria-pressed="false">
+                        <i class="bi bi-eye" aria-hidden="true"></i>
+                    </button>
                 </div>
             </div>
 
@@ -136,6 +139,19 @@ function fillLogin(email, pass) {
     document.getElementById('email').value = email;
     document.getElementById('password').value = pass;
 }
+
+document.getElementById('togglePasswordVisibility').addEventListener('click', function () {
+    const password = document.getElementById('password');
+    const icon = this.querySelector('i');
+    const isVisible = password.type === 'password';
+
+    password.type = isVisible ? 'text' : 'password';
+    this.setAttribute('aria-label', isVisible ? 'Hide password' : 'Show password');
+    this.setAttribute('aria-pressed', String(isVisible));
+    icon.classList.toggle('bi-eye', !isVisible);
+    icon.classList.toggle('bi-eye-slash', isVisible);
+    password.focus();
+});
 </script>
 
 </body>
