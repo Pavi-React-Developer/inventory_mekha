@@ -1810,54 +1810,6 @@ class ProductionController extends Controller {
         $this->redirect('/production/catalog?tab=programs');
     }
 
-    public function updateProgram(): void {
-        $this->validateCsrf();
-        $id = (int)($_POST['id'] ?? 0);
-        $prog = DB::fetch("SELECT * FROM production_programs WHERE id = ?", [$id]);
-        if (!$prog) {
-            $this->flash('error', 'Program not found.');
-            $this->redirect('/m/catalog_program');
-        }
-
-        $plannedQty = (float)($_POST['planned_qty'] ?? $prog['planned_qty']);
-        $startDate  = $_POST['start_date'] ?: $prog['start_date'];
-        $targetDate = $_POST['target_date'] ?: $prog['target_date'];
-        $status     = trim($_POST['status'] ?? $prog['status']);
-
-        try {
-            DB::query(
-                "UPDATE production_programs SET planned_qty = ?, start_date = ?, target_date = ?, status = ? WHERE id = ?",
-                [$plannedQty, $startDate, $targetDate, $status, $id]
-            );
-            $this->flash('success', "Program '{$prog['program_no']}' updated successfully.");
-        } catch (Exception $e) {
-            $this->flash('error', 'Failed to update program: ' . $e->getMessage());
-        }
-
-        $this->redirect('/m/catalog_program');
-    }
-
-    public function deleteProgram(): void {
-        $this->validateCsrf();
-        $id = (int)($_POST['id'] ?? 0);
-        $prog = DB::fetch("SELECT * FROM production_programs WHERE id = ?", [$id]);
-        if (!$prog) {
-            $this->flash('error', 'Program not found.');
-            $this->redirect('/m/catalog_program');
-        }
-
-        $hasLogs = (int)DB::fetchValue("SELECT COUNT(*) FROM cutting_logs WHERE program_id = ?", [$id]);
-        if ($hasLogs > 0) {
-            DB::query("UPDATE production_programs SET status = 'cancelled' WHERE id = ?", [$id]);
-            $this->flash('warning', "Program '{$prog['program_no']}' has active cutting logs, so it has been marked as Cancelled.");
-        } else {
-            DB::query("DELETE FROM production_programs WHERE id = ?", [$id]);
-            $this->flash('success', "Program '{$prog['program_no']}' deleted successfully.");
-        }
-
-        $this->redirect('/m/catalog_program');
-    }
-
     // ========================================================
     // 3. CUTTING & WASTAGE
     // ========================================================
