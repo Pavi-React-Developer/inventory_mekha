@@ -348,6 +348,30 @@ CREATE TABLE IF NOT EXISTS `purchase_bill_items` (
     CONSTRAINT `fk_pbi_variant` FOREIGN KEY (`variant_id`) REFERENCES `variants`(`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS `purchase_stock_item_overrides` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `concern_id` INT NOT NULL,
+    `purchase_bill_item_id` INT NOT NULL,
+    `section_type` VARCHAR(30) NOT NULL,
+    `item_name` VARCHAR(255) NOT NULL DEFAULT '',
+    `item_code` VARCHAR(100) NOT NULL DEFAULT '',
+    `specification` VARCHAR(255) NOT NULL DEFAULT '',
+    `color` VARCHAR(100) NOT NULL DEFAULT '',
+    `unit` VARCHAR(50) NOT NULL DEFAULT '',
+    `qty` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    `unit_price` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    `mrp` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    `total_value` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    `label_job_baseline_id` INT NOT NULL DEFAULT 0,
+    `updated_by` INT NULL,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY `uk_psio_item` (`concern_id`, `purchase_bill_item_id`),
+    INDEX `idx_psio_section` (`concern_id`, `section_type`),
+    CONSTRAINT `fk_psio_concern` FOREIGN KEY (`concern_id`) REFERENCES `concerns`(`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_psio_item` FOREIGN KEY (`purchase_bill_item_id`) REFERENCES `purchase_bill_items`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- 16b. FABRIC ROLL SPECIFICATIONS & CONSOLIDATED STOCK REGISTRY
 CREATE TABLE IF NOT EXISTS `fabric_roll_specs` (
     `id` INT AUTO_INCREMENT PRIMARY KEY,
@@ -418,6 +442,45 @@ CREATE TABLE IF NOT EXISTS `purchase_damages` (
     CONSTRAINT `fk_pd_concern` FOREIGN KEY (`concern_id`) REFERENCES `concerns`(`id`) ON DELETE CASCADE,
     CONSTRAINT `fk_pd_supplier` FOREIGN KEY (`supplier_id`) REFERENCES `suppliers`(`id`),
     CONSTRAINT `fk_pd_variant` FOREIGN KEY (`variant_id`) REFERENCES `variants`(`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Purchase-stock damage records for scanned label quarantine
+CREATE TABLE IF NOT EXISTS `purchase_damage_quarantine` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `concern_id` INT NOT NULL,
+    `damage_no` VARCHAR(50) NOT NULL,
+    `item_type` VARCHAR(30) NOT NULL,
+    `purchase_bill_item_id` INT NULL,
+    `variant_id` INT NULL,
+    `supplier_name` VARCHAR(150) NULL,
+    `item_name` VARCHAR(255) NOT NULL,
+    `item_code` VARCHAR(100) NULL,
+    `tag_code` VARCHAR(30) NOT NULL,
+    `roll_source_color` VARCHAR(100) NULL,
+    `roll_source_design_name` VARCHAR(150) NULL,
+    `qty` DECIMAL(12,2) NOT NULL DEFAULT 1.00,
+    `damaged_weight` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    `estimated_loss` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    `location` VARCHAR(100) NOT NULL DEFAULT 'Main Store',
+    `reason` VARCHAR(255) NOT NULL,
+    `notes` TEXT NULL,
+    `status` VARCHAR(30) NOT NULL DEFAULT 'Quarantined',
+    `created_by` INT NULL,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX `idx_pdq_concern_date` (`concern_id`, `created_at`),
+    INDEX `idx_pdq_purchase_item` (`purchase_bill_item_id`),
+    INDEX `idx_pdq_variant` (`variant_id`),
+    CONSTRAINT `fk_pdq_concern` FOREIGN KEY (`concern_id`) REFERENCES `concerns`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `purchase_damage_reasons` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `concern_id` INT NOT NULL,
+    `reason` VARCHAR(255) NOT NULL,
+    `created_by` INT NULL,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY `uq_pdr_concern_reason` (`concern_id`, `reason`),
+    CONSTRAINT `fk_pdr_concern` FOREIGN KEY (`concern_id`) REFERENCES `concerns`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 19. CONCERN DAMAGE (Internal Stock Damage)

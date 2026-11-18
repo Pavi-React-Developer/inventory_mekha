@@ -15,7 +15,7 @@ class CatalogMappingController extends Controller {
     private static bool $schemaEnsured = false;
 
     /**
-     * Self-healing schema guard ensuring catalog_mappings and product_attributes exist
+     * Self-healing schema guard for catalog mapping tables and catalog columns
      */
     protected function ensureSchema(): void {
         if (self::$schemaEnsured) return;
@@ -27,7 +27,70 @@ class CatalogMappingController extends Controller {
                 DB::query("ALTER TABLE `purchase_bill_items` ADD COLUMN `catalog_id` INT NULL AFTER `variant_id`");
             }
 
-            // 2. Ensure catalog_mappings table
+            // 2. Ensure the third-level category table used by catalog mapping queries
+            DB::query("CREATE TABLE IF NOT EXISTS `sub_subcategories` (
+                `id` INT AUTO_INCREMENT PRIMARY KEY,
+                `concern_id` INT NOT NULL,
+                `subcategory_id` INT NOT NULL,
+                `name` VARCHAR(100) NOT NULL,
+                `code` VARCHAR(20) NULL,
+                `status` ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
+                `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX `idx_subsubcat_concern` (`concern_id`),
+                INDEX `idx_subsubcat_subcat` (`subcategory_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+            // 3. Ensure the catalog fields used by mapping views and forms
+            $catalogColumns = array_column(DB::fetchAll("DESCRIBE `catalogs`"), 'Field');
+            $catalogColumnChanges = [
+                'style_code' => "ADD COLUMN style_code VARCHAR(50) NULL AFTER code",
+                'short_code' => "ADD COLUMN short_code VARCHAR(50) NULL AFTER style_code",
+                'category_id' => "ADD COLUMN category_id INT NULL AFTER short_code",
+                'subcategory_id' => "ADD COLUMN subcategory_id INT NULL AFTER category_id",
+                'sub_sub_category_id' => "ADD COLUMN sub_sub_category_id INT NULL AFTER subcategory_id",
+                'main_category_code' => "ADD COLUMN main_category_code VARCHAR(20) NULL AFTER sub_sub_category_id",
+                'sub_category_code' => "ADD COLUMN sub_category_code VARCHAR(20) NULL AFTER main_category_code",
+                'sub_sub_category_code' => "ADD COLUMN sub_sub_category_code VARCHAR(20) NULL AFTER sub_category_code",
+                'hierarchy_path' => "ADD COLUMN hierarchy_path VARCHAR(255) NULL AFTER sub_sub_category_code",
+                'hsn_code' => "ADD COLUMN hsn_code VARCHAR(50) NULL AFTER hierarchy_path",
+                'gst_rate' => "ADD COLUMN gst_rate DECIMAL(5,2) NOT NULL DEFAULT 5.00 AFTER hsn_code",
+                'sizes' => "ADD COLUMN sizes TEXT NULL AFTER gst_rate",
+                'status' => "ADD COLUMN status ENUM('active', 'inactive', 'in_house') NOT NULL DEFAULT 'in_house' AFTER sizes",
+                'updated_at' => "ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at",
+            ];
+            foreach ($catalogColumnChanges as $column => $definition) {
+                if (!in_array($column, $catalogColumns, true)) {
+                    DB::query("ALTER TABLE `catalogs` {$definition}");
+                    $catalogColumns[] = $column;
+                }
+            }
+
+            // 4. Ensure category fields used by hierarchy management
+            $categoryColumns = array_column(DB::fetchAll("DESCRIBE `categories`"), 'Field');
+            if (!in_array('code', $categoryColumns, true)) {
+                DB::query("ALTER TABLE `categories` ADD COLUMN code VARCHAR(20) NULL AFTER name");
+            }
+            if (!in_array('default_hsn', $categoryColumns, true)) {
+                DB::query("ALTER TABLE `categories` ADD COLUMN default_hsn VARCHAR(50) NULL AFTER code");
+            }
+            if (!in_array('default_gst_rate', $categoryColumns, true)) {
+                DB::query("ALTER TABLE `categories` ADD COLUMN default_gst_rate DECIMAL(5,2) NOT NULL DEFAULT 5.00 AFTER default_hsn");
+            }
+
+            $subcategoryColumns = array_column(DB::fetchAll("DESCRIBE `subcategories`"), 'Field');
+            if (!in_array('code', $subcategoryColumns, true)) {
+                DB::query("ALTER TABLE `subcategories` ADD COLUMN code VARCHAR(20) NULL AFTER name");
+            }
+
+            // 5. Ensure variant fields used when creating catalog size variants
+            $variantColumns = array_column(DB::fetchAll("DESCRIBE `variants`"), 'Field');
+            if (!in_array('catalog_id', $variantColumns, true)) {
+                DB::query("ALTER TABLE `variants` ADD COLUMN catalog_id INT NULL AFTER concern_id");
+                DB::query("ALTER TABLE `variants` ADD INDEX idx_var_catalog (catalog_id)");
+            }
+            DB::query("ALTER TABLE `variants` MODIFY COLUMN subcategory_id INT NULL");
+
+            // 6. Ensure catalog_mappings table
             DB::query("CREATE TABLE IF NOT EXISTS `catalog_mappings` (
                 `id` INT AUTO_INCREMENT PRIMARY KEY,
                 `concern_id` INT NOT NULL,
@@ -49,7 +112,7 @@ class CatalogMappingController extends Controller {
                 INDEX `idx_cmap_catalog` (`catalog_id`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-            // 3. Ensure product_attributes table
+            // 7. Ensure product_attributes table
             DB::query("CREATE TABLE IF NOT EXISTS `product_attributes` (
                 `id` INT AUTO_INCREMENT PRIMARY KEY,
                 `concern_id` INT NOT NULL,
@@ -61,12 +124,17 @@ class CatalogMappingController extends Controller {
                 INDEX `idx_pattr_concern` (`concern_id`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-            // 4. Ensure module registered in `modules`
+            // 8. Ensure module registered in `modules`
             $existMod = DB::fetch("SELECT id FROM `modules` WHERE `code` = 'catalog_mapping'");
             if (!$existMod) {
                 DB::query(
                     "INSERT INTO `modules` (`code`, `name`, `icon`, `sort_order`, `group_name`, `is_super_admin_only`)
-                     VALUES ('catalog_mapping', 'Catalog Mapping', 'bi-diagram-3-fill', 30.5, 'Production', 0)"
+                     VALUES ('catalog_mapping', 'Catalog Mapping', 'bi-diagram-3-fill', 24, 'Purchase', 0)"
+                );
+            } else {
+                DB::query(
+                    "UPDATE `modules` SET `sort_order` = 24, `group_name` = 'Purchase', `icon` = 'bi-diagram-3-fill' WHERE id = ?",
+                    [(int)$existMod['id']]
                 );
             }
 
@@ -114,9 +182,9 @@ class CatalogMappingController extends Controller {
         }
 
         if ($statusFilter === 'unmapped') {
-            $sql .= " AND (cm.id IS NULL OR cm.status = 'unmapped' OR (pbi.catalog_id IS NULL AND pbi.variant_id IS NULL))";
+            $sql .= " AND (cm.id IS NULL OR cm.status = 'unmapped') AND (pbi.catalog_id IS NULL AND pbi.variant_id IS NULL)";
         } elseif ($statusFilter === 'mapped') {
-            $sql .= " AND (cm.id IS NOT NULL AND cm.status = 'mapped' OR (pbi.catalog_id IS NOT NULL OR pbi.variant_id IS NOT NULL))";
+            $sql .= " AND ((cm.id IS NOT NULL AND cm.status = 'mapped') OR (pbi.catalog_id IS NOT NULL OR pbi.variant_id IS NOT NULL))";
         }
 
         if (!empty($search)) {
@@ -141,7 +209,14 @@ class CatalogMappingController extends Controller {
         $totalPieces = 0;
 
         foreach ($items as &$it) {
-            $isMapped = (!empty($it['mapping_id']) && $it['mapping_status'] === 'mapped') || (!empty($it['catalog_name']) || !empty($it['variant_id']));
+            $isMapped = (!empty($it['mapping_id']) && $it['mapping_status'] === 'mapped') 
+                        || (!empty($it['catalog_id']) && !empty($it['variant_id']));
+            
+            // If item has no mapping record and no catalog_id, it is unmapped
+            if (empty($it['mapping_id']) && empty($it['catalog_id'])) {
+                $isMapped = false;
+            }
+
             $it['is_mapped'] = $isMapped;
             if ($isMapped) {
                 $mappedCount++;
@@ -525,7 +600,7 @@ class CatalogMappingController extends Controller {
         DB::beginTransaction();
         try {
             DB::query("DELETE FROM catalog_mappings WHERE purchase_bill_item_id = ?", [$itemId]);
-            DB::query("UPDATE purchase_bill_items SET catalog_id = NULL WHERE id = ?", [$itemId]);
+            DB::query("UPDATE purchase_bill_items SET catalog_id = NULL, variant_id = NULL WHERE id = ?", [$itemId]);
             AuditLog::log('DELETE', 'catalog_mappings', $itemId, null, ['action' => 'unmap']);
             DB::commit();
             $this->flash('success', "Item '{$item['item_name']}' unmapped successfully.");

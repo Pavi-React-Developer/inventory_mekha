@@ -15,7 +15,21 @@ if (!in_array('catalog_id', $pbiCols)) {
     echo "  + Added catalog_id column to purchase_bill_items\n";
 }
 
-// 2. Create catalog_mappings table
+// 2. Create the third-level category table used by catalog mapping
+DB::query("CREATE TABLE IF NOT EXISTS `sub_subcategories` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `concern_id` INT NOT NULL,
+    `subcategory_id` INT NOT NULL,
+    `name` VARCHAR(100) NOT NULL,
+    `code` VARCHAR(20) NULL,
+    `status` ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX `idx_subsubcat_concern` (`concern_id`),
+    INDEX `idx_subsubcat_subcat` (`subcategory_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+echo "  + Checked/Created sub_subcategories table\n";
+
+// 3. Create catalog_mappings table
 DB::query("CREATE TABLE IF NOT EXISTS `catalog_mappings` (
     `id` INT AUTO_INCREMENT PRIMARY KEY,
     `concern_id` INT NOT NULL,
@@ -38,7 +52,7 @@ DB::query("CREATE TABLE IF NOT EXISTS `catalog_mappings` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 echo "  + Checked/Created catalog_mappings table\n";
 
-// 3. Create product_attributes table
+// 4. Create product_attributes table
 DB::query("CREATE TABLE IF NOT EXISTS `product_attributes` (
     `id` INT AUTO_INCREMENT PRIMARY KEY,
     `concern_id` INT NOT NULL,
@@ -51,22 +65,22 @@ DB::query("CREATE TABLE IF NOT EXISTS `product_attributes` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 echo "  + Checked/Created product_attributes table\n";
 
-// 4. Register module in `modules` table
+// 5. Register module in `modules` table
 $existMod = DB::fetch("SELECT id FROM `modules` WHERE `code` = 'catalog_mapping'");
 if (!$existMod) {
     DB::query(
         "INSERT INTO `modules` (`code`, `name`, `icon`, `sort_order`, `group_name`, `is_super_admin_only`)
-         VALUES ('catalog_mapping', 'Catalog Mapping', 'bi-diagram-3-fill', 30.5, 'Production', 0)"
+         VALUES ('catalog_mapping', 'Catalog Mapping', 'bi-diagram-3-fill', 24, 'Purchase', 0)"
     );
     $modId = (int)DB::lastInsertId();
-    echo "  + Registered 'catalog_mapping' module (ID: {$modId}) in Production group\n";
+    echo "  + Registered 'catalog_mapping' module (ID: {$modId}) in Purchase group\n";
 } else {
     $modId = (int)$existMod['id'];
-    DB::query("UPDATE `modules` SET `sort_order` = 30.5, `group_name` = 'Production', `icon` = 'bi-diagram-3-fill' WHERE id = ?", [$modId]);
-    echo "  + 'catalog_mapping' module already exists (ID: {$modId})\n";
+    DB::query("UPDATE `modules` SET `sort_order` = 24, `group_name` = 'Purchase', `icon` = 'bi-diagram-3-fill' WHERE id = ?", [$modId]);
+    echo "  + Updated 'catalog_mapping' module to the Purchase group (ID: {$modId})\n";
 }
 
-// 5. Enable in `concern_modules` for all active concerns
+// 6. Enable in `concern_modules` for all active concerns
 $concerns = DB::fetchAll("SELECT id FROM concerns");
 foreach ($concerns as $con) {
     $cId = (int)$con['id'];
@@ -77,7 +91,7 @@ foreach ($concerns as $con) {
 }
 echo "  + Enabled catalog_mapping in concern_modules for all concerns\n";
 
-// 6. Assign permissions in `role_permissions` for admin roles
+// 7. Assign permissions in `role_permissions` for admin roles
 $adminRoles = DB::fetchAll("SELECT id FROM roles WHERE id IN (1, 2, 3) OR name LIKE '%Admin%'");
 foreach ($adminRoles as $r) {
     $rId = (int)$r['id'];
