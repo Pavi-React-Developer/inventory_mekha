@@ -33,6 +33,10 @@ class Router {
         $this->notFoundHandler = $handler;
     }
 
+    public function getRoutes(): array {
+        return $this->routes;
+    }
+
     public function dispatch(string $uri, string $method): void {
         if ($method === 'HEAD') {
             $method = 'GET';

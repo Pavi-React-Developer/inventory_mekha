@@ -1,6 +1,77 @@
+<?php
+if (!function_exists('amountToWordsINR')) {
+    function amountToWordsINR($amount) {
+        $amount = (float)$amount;
+        $num = (int)floor($amount);
+        $fraction = (int)round(($amount - $num) * 100);
+
+        $words = [
+            0 => '', 1 => 'One', 2 => 'Two', 3 => 'Three', 4 => 'Four', 5 => 'Five',
+            6 => 'Six', 7 => 'Seven', 8 => 'Eight', 9 => 'Nine', 10 => 'Ten',
+            11 => 'Eleven', 12 => 'Twelve', 13 => 'Thirteen', 14 => 'Fourteen', 15 => 'Fifteen',
+            16 => 'Sixteen', 17 => 'Seventeen', 18 => 'Eighteen', 19 => 'Nineteen', 20 => 'Twenty',
+            30 => 'Thirty', 40 => 'Forty', 50 => 'Fifty', 60 => 'Sixty', 70 => 'Seventy',
+            80 => 'Eighty', 90 => 'Ninety'
+        ];
+
+        $convertTwoDigits = function($n) use ($words) {
+            if ($n <= 20) return $words[$n];
+            $t = (int)floor($n / 10) * 10;
+            $u = $n % 10;
+            return trim($words[$t] . ' ' . $words[$u]);
+        };
+
+        $convertThreeDigits = function($n) use ($words, $convertTwoDigits) {
+            $h = (int)floor($n / 100);
+            $r = $n % 100;
+            $res = '';
+            if ($h > 0) {
+                $res .= $words[$h] . ' Hundred';
+                if ($r > 0) $res .= ' ';
+            }
+            if ($r > 0) {
+                $res .= $convertTwoDigits($r);
+            }
+            return trim($res);
+        };
+
+        if ($num === 0) {
+            $result = 'Zero';
+        } else {
+            $parts = [];
+            $crore = (int)floor($num / 10000000);
+            $rem = $num % 10000000;
+            if ($crore > 0) {
+                $parts[] = $convertThreeDigits($crore) . ' Crore';
+            }
+            $lakh = (int)floor($rem / 100000);
+            $rem = $rem % 100000;
+            if ($lakh > 0) {
+                $parts[] = $convertTwoDigits($lakh) . ' Lakh';
+            }
+            $thousand = (int)floor($rem / 1000);
+            $rem = $rem % 1000;
+            if ($thousand > 0) {
+                $parts[] = $convertTwoDigits($thousand) . ' Thousand';
+            }
+            if ($rem > 0) {
+                $parts[] = $convertThreeDigits($rem);
+            }
+            $result = implode(' ', $parts);
+        }
+
+        $out = 'INR ' . trim($result);
+        if ($fraction > 0) {
+            $out .= ' and ' . $convertTwoDigits($fraction) . ' Paise';
+        }
+        $out .= ' Only';
+        return $out;
+    }
+}
+?>
 <div class="container-fluid px-0">
     <!-- Header -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-4 d-print-none">
         <div>
             <div class="d-flex align-items-center gap-2">
                 <span class="badge bg-dark font-monospace fs-6 px-3 py-2"><?= htmlspecialchars($bill['bill_no']) ?></span>
@@ -371,7 +442,7 @@
                             <strong>Receiving Facility:</strong> Central Production Unit & Warehousing &bull; Tamil Nadu
                         </div>
                         <div class="mt-2">
-                            <span class="badge bg-dark font-monospace text-uppercase px-2 py-1" style="font-size: 0.75rem;">PURCHASE TAX INVOICE & GOODS INWARD VOUCHER</span>
+                            <span class="badge bg-dark text-white font-monospace text-uppercase px-2 py-1 print-invoice-badge" style="font-size: 0.75rem;">PURCHASE TAX INVOICE & GOODS INWARD VOUCHER</span>
                         </div>
                     </div>
                     <div class="col-4 text-end">
@@ -412,24 +483,19 @@
                     </div>
                 </div>
 
-                <!-- Consolidated Items Table -->
-                <div class="table-responsive mb-3">
-                    <table class="table table-bordered table-sm align-middle text-center small mb-0 print-items-table">
+                <!-- Consolidated Items Table (Print-Optimized 8 Columns) -->
+                <div class="table-responsive mb-3 print-table-container">
+                    <table class="table table-bordered table-sm align-middle small mb-0 print-items-table">
                         <thead class="table-light">
-                            <tr class="fw-bold text-uppercase" style="font-size: 0.72rem;">
-                                <th style="width: 35px;">#</th>
-                                <th>Section</th>
-                                <th>Item Code / Roll #</th>
-                                <th class="text-start">Description / Specification</th>
-                                <th>HSN</th>
-                                <th>Qty</th>
-                                <th>Unit</th>
-                                <th>Weight</th>
-                                <th>Rate (₹)</th>
-                                <th>Taxable Base (₹)</th>
-                                <th>GST</th>
-                                <th>Tax (₹)</th>
-                                <th class="text-end">Total (₹)</th>
+                            <tr class="fw-bold text-uppercase" style="font-size: 0.72rem; letter-spacing: 0.03em;">
+                                <th class="text-center" style="width: 3%; white-space: nowrap;">#</th>
+                                <th class="text-start" style="width: 13%; white-space: nowrap;">Item / Ref</th>
+                                <th class="text-start" style="width: 27%;">Description & Specification</th>
+                                <th class="text-center" style="width: 8%; white-space: nowrap;">HSN</th>
+                                <th class="text-center" style="width: 11%; white-space: nowrap;">Qty / Weight</th>
+                                <th class="text-end" style="width: 12%; white-space: nowrap;">Rate / Taxable</th>
+                                <th class="text-center" style="width: 12%; white-space: nowrap;">GST Tax</th>
+                                <th class="text-end" style="width: 14%; white-space: nowrap;">Total (₹)</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -442,10 +508,11 @@
                             $printWtTotal = 0.0;
 
                             foreach ($items as $it):
-                                $secName = match ($it['section_type'] ?? '') {
-                                    'rolls' => 'Fabric Rolls',
-                                    'garment_other' => 'Other Supplies',
-                                    'finished_goods' => 'Finished Goods',
+                                $secType = $it['section_type'] ?? '';
+                                $secName = match ($secType) {
+                                    'rolls' => 'Fabric Roll',
+                                    'garment_other' => 'Other Supply',
+                                    'finished_goods' => 'Finished Good',
                                     default => 'General'
                                 };
                                 $qty = (float)($it['qty'] ?? 1);
@@ -462,90 +529,176 @@
                                 $printQtyTotal += $qty;
                                 $printWtTotal += $wt;
 
-                                $desc = htmlspecialchars($it['item_name']);
-                                if (!empty($it['pattern'])) $desc .= ' &bull; ' . htmlspecialchars($it['pattern']);
-                                if (!empty($it['color'])) $desc .= ' (' . htmlspecialchars($it['color']) . ')';
-                                elseif (!empty($it['specification'])) $desc .= ' (' . htmlspecialchars($it['specification']) . ')';
+                                // Item Code display
+                                $rawCode = trim($it['item_code'] ?? '');
+                                if ($secType === 'rolls') {
+                                    $dispCode = (!empty($rawCode) && !preg_match('/^roll/i', $rawCode)) ? ('Roll #' . $rawCode) : ($rawCode ?: 'Roll #' . $printIdx);
+                                } else {
+                                    $dispCode = $rawCode ?: '-';
+                                }
+
+                                // Title formatting: avoid repetitive "1" or numeric title when pattern exists
+                                $rawName = trim($it['item_name'] ?? '');
+                                $isGenericRoll = ($secType === 'rolls') && ($rawName === $rawCode || is_numeric($rawName) || preg_match('/^roll\s*#?\d+$/i', $rawName));
+                                if ($isGenericRoll && !empty($it['pattern'])) {
+                                    $displayTitle = 'Fabric &bull; ' . htmlspecialchars(ucwords($it['pattern']));
+                                } elseif (!empty($rawName)) {
+                                    $displayTitle = htmlspecialchars($rawName);
+                                } elseif (!empty($it['pattern'])) {
+                                    $displayTitle = htmlspecialchars(ucwords($it['pattern']));
+                                } else {
+                                    $displayTitle = $secName;
+                                }
+
+                                // Specification details deduplication
+                                $specs = [];
+                                if (!empty($it['pattern']) && stripos($displayTitle, $it['pattern']) === false) {
+                                    $specs[] = 'Pattern: ' . htmlspecialchars($it['pattern']);
+                                }
+                                if (!empty($it['color'])) {
+                                    $specs[] = 'Color: ' . htmlspecialchars(ucwords($it['color']));
+                                }
+                                if (!empty($it['specification'])) {
+                                    $cleanSpec = trim($it['specification']);
+                                    $colorVal  = trim($it['color'] ?? '');
+                                    $patVal    = trim($it['pattern'] ?? '');
+                                    if (strcasecmp($cleanSpec, $colorVal) !== 0 && strcasecmp($cleanSpec, $patVal) !== 0 && strcasecmp($cleanSpec, $rawName) !== 0) {
+                                        $specs[] = htmlspecialchars($cleanSpec);
+                                    }
+                                }
+
+                                // Qty unit clean display
+                                $unitName = trim($it['unit'] ?? '');
+                                if ($unitName === 'RQ' || empty($unitName)) {
+                                    $unitName = ($secType === 'rolls') ? 'Rolls' : 'Pcs';
+                                }
                             ?>
                                 <tr>
-                                    <td><?= $printIdx++ ?></td>
-                                    <td><span class="badge bg-light text-dark border"><?= $secName ?></span></td>
-                                    <td class="font-monospace fw-semibold"><?= htmlspecialchars($it['item_code'] ?: '-') ?></td>
-                                    <td class="text-start"><?= $desc ?></td>
-                                    <td class="font-monospace"><?= htmlspecialchars($it['hsn_code'] ?: '-') ?></td>
-                                    <td class="fw-bold"><?= $qty ?></td>
-                                    <td><?= htmlspecialchars($it['unit'] ?: 'Pcs') ?></td>
-                                    <td><?= $wt > 0 ? number_format($wt, 2) . ' kg' : '-' ?></td>
-                                    <td>₹<?= number_format($price, 2) ?></td>
-                                    <td>₹<?= number_format($base, 2) ?></td>
+                                    <td class="text-center fw-semibold text-muted"><?= $printIdx++ ?></td>
                                     <td>
-                                        <?php if ($gstRate == 0 || ($it['gst_type'] ?? '') === 'Exempted'): ?>
-                                            <span class="badge bg-light text-dark border">EXEMPT</span>
-                                        <?php else: ?>
-                                            <?= htmlspecialchars($it['gst_type'] ?: 'GST') ?> (<?= $gstRate ?>%)
+                                        <div class="fw-bold font-monospace text-dark nowrap-num"><?= htmlspecialchars($dispCode) ?></div>
+                                        <span class="badge bg-light text-secondary border mt-1" style="font-size: 0.65rem; font-weight: normal;"><?= $secName ?></span>
+                                    </td>
+                                    <td class="text-start">
+                                        <div class="fw-bold text-dark"><?= $displayTitle ?></div>
+                                        <?php if (!empty($specs)): ?>
+                                            <div class="text-muted small mt-1" style="font-size: 0.72rem; line-height: 1.25;"><?= implode(' &bull; ', $specs) ?></div>
                                         <?php endif; ?>
                                     </td>
-                                    <td>₹<?= number_format($tax, 2) ?></td>
-                                    <td class="text-end fw-bold">₹<?= number_format($lineTotal, 2) ?></td>
+                                    <td class="text-center font-monospace small nowrap-num"><?= htmlspecialchars($it['hsn_code'] ?: '-') ?></td>
+                                    <td class="text-center">
+                                        <div class="fw-bold text-dark nowrap-num"><?= (float)$qty ?> <span class="fw-normal text-muted" style="font-size: 0.72rem;"><?= htmlspecialchars($unitName) ?></span></div>
+                                        <?php if ($wt > 0): ?>
+                                            <div class="text-secondary small mt-0 nowrap-num" style="font-size: 0.70rem;"><?= number_format($wt, 2) ?> kg</div>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td class="text-end">
+                                        <div class="fw-semibold text-dark nowrap-num">₹<?= number_format($price, 2) ?></div>
+                                        <?php if (($it['tax_mode'] ?? '') === 'Include GST'): ?>
+                                            <div class="text-muted small nowrap-num" style="font-size: 0.68rem;">Taxable: ₹<?= number_format($base, 2) ?></div>
+                                            <div class="text-muted" style="font-size: 0.62rem;">(Incl. GST)</div>
+                                        <?php else: ?>
+                                            <div class="text-muted small nowrap-num" style="font-size: 0.68rem;">Base: ₹<?= number_format($base, 2) ?></div>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td class="text-center">
+                                        <?php if ($gstRate == 0 || ($it['gst_type'] ?? '') === 'Exempted'): ?>
+                                            <span class="badge bg-light text-muted border" style="font-size: 0.65rem;">EXEMPT</span>
+                                        <?php else: ?>
+                                            <?php 
+                                            $gstLabel = htmlspecialchars($it['gst_type'] ?: 'GST');
+                                            $gstSub = '';
+                                            if (stripos($gstLabel, 'Both') !== false) {
+                                                $halfRate = $gstRate / 2;
+                                                $gstLabel = "CGST+SGST {$gstRate}%";
+                                                $gstSub = "({$halfRate}% + {$halfRate}%)";
+                                            } else {
+                                                $gstLabel = "{$gstLabel} {$gstRate}%";
+                                            }
+                                            ?>
+                                            <div class="fw-semibold text-dark small nowrap-num" style="font-size: 0.72rem;"><?= $gstLabel ?></div>
+                                            <?php if ($gstSub): ?>
+                                                <div class="text-muted" style="font-size: 0.62rem;"><?= $gstSub ?></div>
+                                            <?php endif; ?>
+                                            <div class="text-secondary small fw-semibold nowrap-num" style="font-size: 0.70rem;">₹<?= number_format($tax, 2) ?></div>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td class="text-end fw-bold text-dark nowrap-num">₹<?= number_format($lineTotal, 2) ?></td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
                         <tfoot class="table-light fw-bold">
                             <tr>
-                                <td colspan="5" class="text-end text-uppercase">Totals:</td>
-                                <td><?= number_format($printQtyTotal, 2) ?></td>
-                                <td></td>
-                                <td><?= $printWtTotal > 0 ? number_format($printWtTotal, 2) . ' kg' : '-' ?></td>
-                                <td></td>
-                                <td>₹<?= number_format($printBaseTotal, 2) ?></td>
-                                <td></td>
-                                <td>₹<?= number_format($printTaxTotal, 2) ?></td>
-                                <td class="text-end text-success fs-6">₹<?= number_format($printNetTotal, 2) ?></td>
+                                <td colspan="4" class="text-end text-uppercase" style="font-size: 0.75rem;">Totals:</td>
+                                <td class="text-center nowrap-num">
+                                    <div><?= number_format($printQtyTotal, 0) ?> Qty</div>
+                                    <?php if ($printWtTotal > 0): ?>
+                                        <div class="text-muted fw-normal" style="font-size: 0.70rem;"><?= number_format($printWtTotal, 2) ?> kg</div>
+                                    <?php endif; ?>
+                                </td>
+                                <td class="text-end nowrap-num">
+                                    <div>₹<?= number_format($printBaseTotal, 2) ?></div>
+                                    <div class="text-muted fw-normal" style="font-size: 0.65rem;">(Taxable Base)</div>
+                                </td>
+                                <td class="text-center nowrap-num">
+                                    <div>₹<?= number_format($printTaxTotal, 2) ?></div>
+                                    <div class="text-muted fw-normal" style="font-size: 0.65rem;">(Total Tax)</div>
+                                </td>
+                                <td class="text-end text-success fs-6 nowrap-num">₹<?= number_format($printNetTotal, 2) ?></td>
                             </tr>
                         </tfoot>
                     </table>
                 </div>
 
-                <!-- Financial Calculation & Declarations -->
+                <!-- Financial Calculation & Remarks -->
                 <div class="row pt-2 align-items-start">
                     <div class="col-7">
-                        <div class="border p-2 rounded bg-light small mb-2">
-                            <div class="fw-bold mb-1">Declaration & Terms:</div>
-                            <p class="mb-0 text-muted" style="font-size: 0.72rem; line-height: 1.4;">
-                                1. Goods received in sound condition and verified against supplier delivery memo.<br>
-                                2. Production raw materials subject to internal QA/QC testing prior to fabric batch release.<br>
-                                3. Certified that all taxable inputs and statutory GST amounts correspond to official invoicing.
-                            </p>
+                        <div class="border rounded p-2 bg-light small mb-2">
+                            <div class="text-uppercase text-muted fw-bold mb-1" style="font-size: 0.68rem; letter-spacing: 0.05em;">Amount Chargeable (in words)</div>
+                            <div class="fw-bold text-dark" style="font-size: 0.85rem;"><?= amountToWordsINR($bill['net_amount']) ?></div>
                         </div>
 
                         <?php if (!empty($bill['notes'])): ?>
-                            <div class="small text-muted mb-2">
-                                <strong>Audit / Consignment Notes:</strong> <?= htmlspecialchars($bill['notes']) ?>
+                            <div class="border rounded p-2 bg-white small mb-2">
+                                <strong class="text-secondary" style="font-size: 0.70rem; text-transform: uppercase;">Consignment / Inward Notes:</strong>
+                                <div class="text-dark mt-1" style="font-size: 0.80rem;"><?= htmlspecialchars($bill['notes']) ?></div>
                             </div>
                         <?php endif; ?>
+
+                        <div class="d-flex gap-3 text-muted small mt-2" style="font-size: 0.75rem;">
+                            <div><strong>Total Line Items:</strong> <?= count($items) ?></div>
+                            <div>&bull;</div>
+                            <div><strong>Total Qty:</strong> <?= number_format($printQtyTotal, 2) ?></div>
+                            <?php if ($printWtTotal > 0): ?>
+                                <div>&bull;</div>
+                                <div><strong>Total Net Wt:</strong> <?= number_format($printWtTotal, 2) ?> kg</div>
+                            <?php endif; ?>
+                        </div>
                     </div>
 
                     <div class="col-5">
-                        <div class="border rounded p-2 bg-light small">
+                        <div class="border rounded p-3 bg-light small">
                             <div class="d-flex justify-content-between mb-1">
-                                <span class="text-muted">Taxable Subtotal (Base):</span>
-                                <span class="fw-semibold">₹<?= number_format($bill['total_amount'], 2) ?></span>
+                                <span class="text-muted">Taxable Base Amount:</span>
+                                <span class="fw-semibold text-dark">₹<?= number_format($bill['total_amount'], 2) ?></span>
                             </div>
-                            <div class="d-flex justify-content-between mb-1">
+                            <div class="d-flex justify-content-between mb-2">
                                 <span class="text-muted">Total Tax Amount (GST):</span>
-                                <span class="fw-semibold">₹<?= number_format($bill['tax_amount'], 2) ?></span>
+                                <span class="fw-semibold text-dark">₹<?= number_format($bill['tax_amount'], 2) ?></span>
                             </div>
-                            <hr class="my-1">
-                            <div class="d-flex justify-content-between align-items-center py-1">
-                                <span class="fw-bold fs-6 text-dark">Invoice Grand Total:</span>
-                                <span class="fw-bold fs-5 text-success">₹<?= number_format($bill['net_amount'], 2) ?></span>
+                            <div class="d-flex justify-content-between border-top pt-2 align-items-center">
+                                <div>
+                                    <div class="fw-bold fs-6 text-dark">Invoice Grand Total:</div>
+                                    <div class="text-muted" style="font-size: 0.68rem;">(Inclusive of all taxes)</div>
+                                </div>
+                                <div class="fw-bold fs-5 text-success">₹<?= number_format($bill['net_amount'], 2) ?></div>
                             </div>
                         </div>
                     </div>
                 </div>
 
                 <!-- Signature Block -->
-                <div class="row text-center pt-4 mt-3 border-top small text-muted">
+                <div class="row text-center pt-4 mt-3 border-top small text-muted signature-block">
                     <div class="col-4">
                         <div class="pt-4 border-top border-dark mx-3 fw-semibold text-dark">Store In-Charge / Receiver</div>
                     </div>
@@ -564,6 +717,25 @@
 
 <!-- Print Styles & Scripts -->
 <style>
+/* Screen & Common Styles for Invoice Preview */
+.print-items-table {
+    border-collapse: collapse !important;
+}
+.print-items-table thead th {
+    white-space: nowrap !important;
+    padding: 6px 5px !important;
+    font-size: 0.72rem !important;
+    letter-spacing: 0.02em;
+}
+.print-items-table td {
+    padding: 6px 5px !important;
+    vertical-align: middle !important;
+}
+.nowrap-num {
+    white-space: nowrap !important;
+    word-break: keep-all !important;
+}
+
 @media print {
     /* Hide layout navigation, sidebars and headers */
     #sidebar,
@@ -573,7 +745,6 @@
     header,
     .btn,
     .nav-pills,
-    .badge.bg-dark,
     .alert {
         display: none !important;
     }
@@ -582,16 +753,20 @@
         margin: 0 !important;
         padding: 0 !important;
         width: 100% !important;
+        max-width: 100% !important;
     }
 
     body {
         background: #ffffff !important;
         color: #000000 !important;
-        font-size: 10pt !important;
+        font-size: 9pt !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
     }
 
     .container-fluid {
         padding: 0 !important;
+        max-width: 100% !important;
     }
 
     /* Force invoice print card to be visible even if other tab was active */
@@ -608,22 +783,80 @@
         border: none !important;
         box-shadow: none !important;
         padding: 0 !important;
+        margin: 0 !important;
     }
 
     .invoice-box {
-        border: 1px solid #000000 !important;
-        padding: 15px !important;
+        border: 1px solid #1e293b !important;
+        border-radius: 4px !important;
+        padding: 12px 14px !important;
+        margin: 0 !important;
+        background: #ffffff !important;
+        page-break-inside: auto;
+    }
+
+    .table-responsive {
+        overflow: visible !important;
+        display: block !important;
+        width: 100% !important;
+    }
+
+    .print-items-table {
+        width: 100% !important;
+        table-layout: fixed !important;
+        margin-bottom: 8px !important;
     }
 
     .print-items-table th,
     .print-items-table td {
-        border: 1px solid #333333 !important;
+        border: 1px solid #475569 !important;
         color: #000000 !important;
+        padding: 4px 5px !important;
+        font-size: 8.5pt !important;
+        vertical-align: middle !important;
+        word-wrap: break-word !important;
+        overflow-wrap: break-word !important;
+    }
+
+    .print-items-table thead th {
+        background-color: #f1f5f9 !important;
+        color: #0f172a !important;
+        font-weight: 700 !important;
+        white-space: nowrap !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    .print-items-table tfoot td {
+        background-color: #f8fafc !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    .nowrap-num {
+        white-space: nowrap !important;
+        word-break: keep-all !important;
+    }
+
+    .print-invoice-badge {
+        display: inline-block !important;
+        background-color: #0f172a !important;
+        color: #ffffff !important;
+        padding: 3px 6px !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    .signature-block {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        margin-top: 20px !important;
+        padding-top: 15px !important;
     }
 
     @page {
         size: A4 portrait;
-        margin: 10mm;
+        margin: 8mm 10mm;
     }
 }
 </style>
