@@ -8,6 +8,7 @@ use App\Core\DB;
 use App\Core\Auth;
 use App\Services\StockService;
 use App\Services\AuditLog;
+use App\Services\QrService;
 use Exception;
 
 class ProductionController extends Controller {
@@ -1018,20 +1019,20 @@ class ProductionController extends Controller {
      */
     public function createProgram(): void {
         $this->ensureCatalogSchema();
-        $cid = Auth::concernId() ?: 1;
+        $cid = Auth::concernId();
 
         // Auto-generate program code: # PRG-YYYYMMDD-XXXX
         $datePrefix = date('Ymd');
-        $progCount = (int)DB::fetchValue("SELECT COUNT(*) FROM production_programs WHERE concern_id = ?", [$cid]) + 1;
+        $progCount = (int)DB::fetchValue("SELECT COUNT(*) FROM production_programs" . ($cid ? " WHERE concern_id = ?" : ""), $cid ? [$cid] : []) + 1;
         $suggestedCode = sprintf("PRG-%s-%04d", $datePrefix, $progCount);
 
         // Planner Name
         $plannerName = Auth::user()['name'] ?? 'System Administrator';
 
         // Load Available Fabric Rolls from purchase_bill_items
-        $rollsSql = "SELECT pbi.id, pbi.item_code, pbi.item_name, pbi.color, pbi.unit,
-                            pbi.net_weight, pbi.qty AS total_qty,
-                            pb.bill_no, s.name AS supplier_name,
+        $rollsSql = "SELECT pbi.id, pbi.concern_id, pbi.item_code, pbi.item_name, pbi.pattern, pbi.color, pbi.unit,
+                            pbi.specification, pbi.net_weight, pbi.gross_weight, pbi.unit_price, pbi.qty AS total_qty,
+                            pbi.catalog_id, pb.bill_no, pb.bill_date, s.name AS supplier_name, s.company_name AS supplier_company,
                             COALESCE((
                                 SELECT SUM(pr.allocated_qty) 
                                 FROM program_rolls pr 
@@ -1042,9 +1043,9 @@ class ProductionController extends Controller {
                      FROM purchase_bill_items pbi
                      JOIN purchase_bills pb ON pbi.purchase_bill_id = pb.id
                      LEFT JOIN suppliers s ON pb.supplier_id = s.id
-                     WHERE pbi.section_type = 'rolls' AND pbi.concern_id = ?
+                     WHERE pbi.section_type = 'rolls'" . ($cid ? " AND pbi.concern_id = ?" : "") . "
                      ORDER BY pbi.id DESC";
-        $rawRolls = DB::fetchAll($rollsSql, [$cid]);
+        $rawRolls = DB::fetchAll($rollsSql, $cid ? [$cid] : []);
 
         $availableRolls = [];
         foreach ($rawRolls as $r) {
@@ -1052,13 +1053,64 @@ class ProductionController extends Controller {
             $allocated = (float)$r['allocated_qty'];
             $remaining = max(0.00, $total - $allocated);
             $r['remaining_qty'] = $remaining;
-            $r['out_of_label'] = sprintf("%.2f %s out of %.2f %s", $remaining, $r['unit'], $total, $r['unit']);
+            $unit = $r['unit'] ?: 'kg';
+            $r['unit_price'] = (float)($r['unit_price'] ?? 0.00);
+            $r['weight'] = (float)($r['net_weight'] ?: ($r['gross_weight'] ?: ($unit === 'kg' ? $remaining : 0.00)));
+            $r['supplier_display'] = $r['supplier_name'] ?: ($r['supplier_company'] ?: 'Direct');
+            $r['out_of_label'] = sprintf("%.2f %s out of %.2f %s", $remaining, $unit, $total, $unit);
+            $r['tag_code'] = QrService::generateTagCode($r['item_name'], $r['color'], $r['pattern'] ?: ($r['specification'] ?? ''), (string)$r['id']);
+
+            if (!empty($r['catalog_id'])) {
+                $cat = DB::fetch(
+                    "SELECT id, name, style_code, hierarchy_path, category_id, subcategory_id, sub_sub_category_id 
+                     FROM catalogs WHERE id = ?",
+                    [$r['catalog_id']]
+                );
+                if ($cat) {
+                    $r['catalog_style_code'] = $cat['style_code'];
+                    $r['catalog_name'] = $cat['name'];
+                    $r['hierarchy_path'] = $cat['hierarchy_path'];
+                    $r['category_id'] = $cat['category_id'];
+                    $r['subcategory_id'] = $cat['subcategory_id'];
+                    $r['sub_sub_category_id'] = $cat['sub_sub_category_id'];
+                }
+            }
             $availableRolls[] = $r;
         }
 
+        // Calculate accumulated stock per fabric specification (pattern/design + color)
+        $accumulatedBySpec = [];
+        foreach ($availableRolls as $r) {
+            $specKey = strtoupper(trim(($r['pattern'] ?: $r['item_name']) . '|' . ($r['color'] ?: '')));
+            if (!isset($accumulatedBySpec[$specKey])) {
+                $accumulatedBySpec[$specKey] = [
+                    'design_name' => strtoupper($r['pattern'] ?: $r['item_name']),
+                    'color'       => strtoupper($r['color'] ?: 'STANDARD'),
+                    'total_stock' => 0.00,
+                    'unit'        => $r['unit'] ?: 'kg',
+                    'unit_price'  => (float)($r['unit_price'] ?? 0),
+                    'bill_no'     => $r['bill_no'],
+                    'supplier'    => $r['supplier_display'],
+                ];
+            }
+            $accumulatedBySpec[$specKey]['total_stock'] += (float)$r['remaining_qty'];
+        }
+
+        foreach ($availableRolls as &$r) {
+            $specKey = strtoupper(trim(($r['pattern'] ?: $r['item_name']) . '|' . ($r['color'] ?: '')));
+            $r['design_accumulated_stock'] = $accumulatedBySpec[$specKey]['total_stock'] ?? $r['remaining_qty'];
+            $r['design_name'] = $accumulatedBySpec[$specKey]['design_name'] ?? $r['item_name'];
+        }
+        unset($r);
+
         // Load Categories for 3-tier hierarchy
-        $categories = DB::fetchAll("SELECT * FROM categories WHERE concern_id = ? AND status = 'active' ORDER BY name ASC", [$cid]);
-        $catalogs = DB::fetchAll("SELECT id, style_code, short_code, name FROM catalogs WHERE concern_id = ? AND status != 'inactive' ORDER BY id DESC", [$cid]);
+        if ($cid) {
+            $categories = DB::fetchAll("SELECT * FROM categories WHERE concern_id = ? AND status = 'active' ORDER BY name ASC", [$cid]);
+            $catalogs = DB::fetchAll("SELECT id, style_code, short_code, name FROM catalogs WHERE concern_id = ? AND status != 'inactive' ORDER BY id DESC", [$cid]);
+        } else {
+            $categories = DB::fetchAll("SELECT * FROM categories WHERE status = 'active' ORDER BY name ASC");
+            $catalogs = DB::fetchAll("SELECT id, style_code, short_code, name FROM catalogs WHERE status != 'inactive' ORDER BY id DESC");
+        }
 
         $this->render('concern/program_create', [
             'pageTitle'      => 'Create Production Program',
@@ -1078,11 +1130,11 @@ class ProductionController extends Controller {
     public function apiAvailableRolls(): void {
         header('Content-Type: application/json');
         $this->ensureCatalogSchema();
-        $cid = Auth::concernId() ?: 1;
+        $cid = Auth::concernId();
 
-        $rollsSql = "SELECT pbi.id, pbi.item_code, pbi.item_name, pbi.color, pbi.unit,
-                            pbi.net_weight, pbi.qty AS total_qty,
-                            pb.bill_no, s.name AS supplier_name,
+        $rollsSql = "SELECT pbi.id, pbi.concern_id, pbi.item_code, pbi.item_name, pbi.pattern, pbi.color, pbi.unit,
+                            pbi.specification, pbi.net_weight, pbi.gross_weight, pbi.unit_price, pbi.qty AS total_qty,
+                            pbi.catalog_id, pb.bill_no, pb.bill_date, s.name AS supplier_name, s.company_name AS supplier_company,
                             COALESCE((
                                 SELECT SUM(pr.allocated_qty) 
                                 FROM program_rolls pr 
@@ -1093,9 +1145,9 @@ class ProductionController extends Controller {
                      FROM purchase_bill_items pbi
                      JOIN purchase_bills pb ON pbi.purchase_bill_id = pb.id
                      LEFT JOIN suppliers s ON pb.supplier_id = s.id
-                     WHERE pbi.section_type = 'rolls' AND pbi.concern_id = ?
+                     WHERE pbi.section_type = 'rolls'" . ($cid ? " AND pbi.concern_id = ?" : "") . "
                      ORDER BY pbi.id DESC";
-        $rawRolls = DB::fetchAll($rollsSql, [$cid]);
+        $rawRolls = DB::fetchAll($rollsSql, $cid ? [$cid] : []);
 
         $data = [];
         foreach ($rawRolls as $r) {
@@ -1103,9 +1155,44 @@ class ProductionController extends Controller {
             $allocated = (float)$r['allocated_qty'];
             $remaining = max(0.00, $total - $allocated);
             $r['remaining_qty'] = $remaining;
-            $r['out_of_label'] = sprintf("%.2f %s out of %.2f %s", $remaining, $r['unit'], $total, $r['unit']);
+            $unit = $r['unit'] ?: 'kg';
+            $r['unit_price'] = (float)($r['unit_price'] ?? 0.00);
+            $r['weight'] = (float)($r['net_weight'] ?: ($r['gross_weight'] ?: ($unit === 'kg' ? $remaining : 0.00)));
+            $r['supplier_display'] = $r['supplier_name'] ?: ($r['supplier_company'] ?: 'Direct Purchase');
+            $r['out_of_label'] = sprintf("%.2f %s out of %.2f %s", $remaining, $unit, $total, $unit);
+            $r['tag_code'] = QrService::generateTagCode($r['item_name'], $r['color'], $r['pattern'] ?: ($r['specification'] ?? ''), (string)$r['id']);
+            $r['tag_code'] = QrService::generateTagCode($r['item_name'], $r['color'], $r['pattern'] ?: ($r['specification'] ?? ''), (string)$r['id']);
+
+            if (!empty($r['catalog_id'])) {
+                $cat = DB::fetch(
+                    "SELECT id, name, style_code, hierarchy_path, category_id, subcategory_id, sub_sub_category_id 
+                     FROM catalogs WHERE id = ?",
+                    [$r['catalog_id']]
+                );
+                if ($cat) {
+                    $r['catalog_style_code'] = $cat['style_code'];
+                    $r['catalog_name'] = $cat['name'];
+                    $r['hierarchy_path'] = $cat['hierarchy_path'];
+                    $r['category_id'] = $cat['category_id'];
+                    $r['subcategory_id'] = $cat['subcategory_id'];
+                    $r['sub_sub_category_id'] = $cat['sub_sub_category_id'];
+                }
+            }
             $data[] = $r;
         }
+
+        // Calculate accumulated stock
+        $accumBySpec = [];
+        foreach ($data as $d) {
+            $k = strtoupper(trim(($d['pattern'] ?: $d['item_name']) . '|' . ($d['color'] ?: '')));
+            if (!isset($accumBySpec[$k])) $accumBySpec[$k] = 0.00;
+            $accumBySpec[$k] += (float)$d['remaining_qty'];
+        }
+        foreach ($data as &$d) {
+            $k = strtoupper(trim(($d['pattern'] ?: $d['item_name']) . '|' . ($d['color'] ?: '')));
+            $d['design_accumulated_stock'] = $accumBySpec[$k] ?? $d['remaining_qty'];
+        }
+        unset($d);
 
         echo json_encode(['success' => true, 'data' => $data]);
         exit;
@@ -1117,7 +1204,7 @@ class ProductionController extends Controller {
     public function apiRollLookup(): void {
         header('Content-Type: application/json');
         $this->ensureCatalogSchema();
-        $cid = Auth::concernId() ?: 1;
+        $cid = Auth::concernId();
         $tag = trim($_GET['tag'] ?? '');
 
         if (empty($tag)) {
@@ -1125,9 +1212,9 @@ class ProductionController extends Controller {
             exit;
         }
 
-        $sql = "SELECT pbi.id, pbi.item_code, pbi.item_name, pbi.color, pbi.unit,
-                       pbi.net_weight, pbi.qty AS total_qty,
-                       pb.bill_no, s.name AS supplier_name,
+        $sql = "SELECT pbi.id, pbi.concern_id, pbi.item_code, pbi.item_name, pbi.pattern, pbi.color, pbi.unit,
+                       pbi.specification, pbi.net_weight, pbi.gross_weight, pbi.unit_price, pbi.qty AS total_qty,
+                       pbi.catalog_id, pb.bill_no, pb.bill_date, s.name AS supplier_name, s.company_name AS supplier_company,
                        COALESCE((
                            SELECT SUM(pr.allocated_qty) 
                            FROM program_rolls pr 
@@ -1138,11 +1225,37 @@ class ProductionController extends Controller {
                 FROM purchase_bill_items pbi
                 JOIN purchase_bills pb ON pbi.purchase_bill_id = pb.id
                 LEFT JOIN suppliers s ON pb.supplier_id = s.id
-                WHERE pbi.section_type = 'rolls' 
-                  AND pbi.concern_id = ?
-                  AND (pbi.item_code = ? OR pbi.item_name LIKE ?)
+                WHERE pbi.section_type = 'rolls' " . ($cid ? " AND pbi.concern_id = ?" : "") . "
+                  AND (pbi.item_code = ? OR pbi.item_name LIKE ? OR pbi.pattern LIKE ? OR pb.bill_no = ?)
                 LIMIT 1";
-        $row = DB::fetch($sql, [$cid, $tag, "%{$tag}%"]);
+        $params = $cid ? [$cid, $tag, "%{$tag}%", "%{$tag}%", $tag] : [$tag, "%{$tag}%", "%{$tag}%", $tag];
+        $row = DB::fetch($sql, $params);
+
+        // 2. If not found by direct match, match against generated QR / barcode tag codes (e.g. FLO-B-FL)
+        if (!$row) {
+            $allRollsSql = "SELECT pbi.id, pbi.concern_id, pbi.item_code, pbi.item_name, pbi.pattern, pbi.color, pbi.unit,
+                                   pbi.specification, pbi.net_weight, pbi.gross_weight, pbi.unit_price, pbi.qty AS total_qty,
+                                   pbi.catalog_id, pb.bill_no, pb.bill_date, s.name AS supplier_name, s.company_name AS supplier_company,
+                                   COALESCE((
+                                       SELECT SUM(pr.allocated_qty) 
+                                       FROM program_rolls pr 
+                                       JOIN production_programs pp ON pr.program_id = pp.id 
+                                       WHERE pr.purchase_bill_item_id = pbi.id 
+                                         AND pp.status != 'cancelled'
+                                   ), 0.00) AS allocated_qty
+                            FROM purchase_bill_items pbi
+                            JOIN purchase_bills pb ON pbi.purchase_bill_id = pb.id
+                            LEFT JOIN suppliers s ON pb.supplier_id = s.id
+                            WHERE pbi.section_type = 'rolls'" . ($cid ? " AND pbi.concern_id = ?" : "");
+            $candidates = DB::fetchAll($allRollsSql, $cid ? [$cid] : []);
+            foreach ($candidates as $cand) {
+                $candTag = QrService::generateTagCode($cand['item_name'], $cand['color'], $cand['pattern'] ?: ($cand['specification'] ?? ''), (string)$cand['id']);
+                if (strcasecmp($candTag, $tag) === 0 || strcasecmp($cand['item_code'] ?? '', $tag) === 0) {
+                    $row = $cand;
+                    break;
+                }
+            }
+        }
 
         if (!$row) {
             echo json_encode(['success' => false, 'message' => "No purchased fabric roll found matching '{$tag}'."]);
@@ -1153,7 +1266,28 @@ class ProductionController extends Controller {
         $allocated = (float)$row['allocated_qty'];
         $remaining = max(0.00, $total - $allocated);
         $row['remaining_qty'] = $remaining;
-        $row['out_of_label'] = sprintf("%.2f %s out of %.2f %s", $remaining, $row['unit'], $total, $row['unit']);
+        $unit = $row['unit'] ?: 'kg';
+        $row['unit_price'] = (float)($row['unit_price'] ?? 0.00);
+        $row['weight'] = (float)($row['net_weight'] ?: ($row['gross_weight'] ?: ($unit === 'kg' ? $remaining : 0.00)));
+        $row['supplier_display'] = $row['supplier_name'] ?: ($row['supplier_company'] ?: 'Direct Purchase');
+        $row['out_of_label'] = sprintf("%.2f %s out of %.2f %s", $remaining, $unit, $total, $unit);
+        $row['tag_code'] = QrService::generateTagCode($row['item_name'], $row['color'], $row['pattern'] ?: ($row['specification'] ?? ''), (string)$row['id']);
+
+        if (!empty($row['catalog_id'])) {
+            $cat = DB::fetch(
+                "SELECT id, name, style_code, hierarchy_path, category_id, subcategory_id, sub_sub_category_id 
+                 FROM catalogs WHERE id = ?",
+                [$row['catalog_id']]
+            );
+            if ($cat) {
+                $row['catalog_style_code'] = $cat['style_code'];
+                $row['catalog_name'] = $cat['name'];
+                $row['hierarchy_path'] = $cat['hierarchy_path'];
+                $row['category_id'] = $cat['category_id'];
+                $row['subcategory_id'] = $cat['subcategory_id'];
+                $row['sub_sub_category_id'] = $cat['sub_sub_category_id'];
+            }
+        }
 
         echo json_encode(['success' => true, 'roll' => $row]);
         exit;
@@ -1165,7 +1299,7 @@ class ProductionController extends Controller {
     public function storeProgramV2(): void {
         $this->ensureCatalogSchema();
         $this->validateCsrf();
-        $cid = Auth::concernId() ?: 1;
+        $cid = Auth::concernId();
 
         // 1. Program Overview Validations
         $programName = trim($_POST['program_name'] ?? '');
@@ -1178,7 +1312,7 @@ class ProductionController extends Controller {
         }
 
         if (empty($programCode)) {
-            $progCount = (int)DB::fetchValue("SELECT COUNT(*) FROM production_programs WHERE concern_id = ?", [$cid]) + 1;
+            $progCount = (int)DB::fetchValue("SELECT COUNT(*) FROM production_programs" . ($cid ? " WHERE concern_id = ?" : ""), $cid ? [$cid] : []) + 1;
             $programCode = sprintf("PRG-%s-%04d", date('Ymd'), $progCount);
         }
 
@@ -1215,24 +1349,27 @@ class ProductionController extends Controller {
                 $this->redirect('/production/programs/create');
             }
 
-            // Fetch roll and verify balance
-            $rollItem = DB::fetch(
-                "SELECT pbi.*, 
-                        COALESCE((
-                            SELECT SUM(pr.allocated_qty) 
-                            FROM program_rolls pr 
-                            JOIN production_programs pp ON pr.program_id = pp.id 
-                            WHERE pr.purchase_bill_item_id = pbi.id 
-                              AND pp.status != 'cancelled'
-                        ), 0.00) AS used_qty
-                 FROM purchase_bill_items pbi 
-                 WHERE pbi.id = ? AND pbi.concern_id = ?",
-                [$rollItemId, $cid]
-            );
+            // Fetch roll and verify balance (respecting concern if selected, or discovering from roll)
+            $rollSql = "SELECT pbi.*, 
+                               COALESCE((
+                                   SELECT SUM(pr.allocated_qty) 
+                                   FROM program_rolls pr 
+                                   JOIN production_programs pp ON pr.program_id = pp.id 
+                                   WHERE pr.purchase_bill_item_id = pbi.id 
+                                     AND pp.status != 'cancelled'
+                               ), 0.00) AS used_qty
+                        FROM purchase_bill_items pbi 
+                        WHERE pbi.id = ?" . ($cid ? " AND pbi.concern_id = ?" : "");
+            $rollItem = DB::fetch($rollSql, $cid ? [$rollItemId, $cid] : [$rollItemId]);
 
             if (!$rollItem) {
                 $this->flash('error', "Roll #" . ($index + 1) . ": Invalid purchased roll selected.");
                 $this->redirect('/production/programs/create');
+            }
+
+            // If concern was not set (Super Admin with All Concerns), inherit from roll
+            if (!$cid && !empty($rollItem['concern_id'])) {
+                $cid = (int)$rollItem['concern_id'];
             }
 
             $totalRollQty = (float)$rollItem['qty'];
@@ -1248,14 +1385,33 @@ class ProductionController extends Controller {
 
             $totalPlannedQty += $allocatedQty;
 
+            $rollWeight = isset($r['roll_weight']) ? (float)$r['roll_weight'] : 0.00;
+            if ($rollWeight <= 0) {
+                if ($rollItem['unit'] === 'kg') {
+                    $rollWeight = $allocatedQty;
+                } elseif ($totalRollQty > 0 && (float)($rollItem['net_weight'] ?? 0) > 0) {
+                    $rollWeight = round(($allocatedQty / $totalRollQty) * (float)$rollItem['net_weight'], 2);
+                }
+            }
+
+            $rollPrice = isset($r['roll_price']) ? (float)$r['roll_price'] : 0.00;
+            if ($rollPrice <= 0) {
+                $unitRate = (float)($rollItem['unit_price'] ?? 0.00);
+                $rollPrice = round($allocatedQty * $unitRate, 2);
+            }
+
+            $tagCode = QrService::generateTagCode($rollItem['item_name'], $rollItem['color'], $rollItem['pattern'] ?: ($rollItem['specification'] ?? ''), (string)$rollItem['id']);
+
             $validatedRolls[] = [
                 'purchase_bill_item_id' => $rollItemId,
-                'roll_piece_tag'        => $rollItem['item_code'] ?? '',
+                'roll_piece_tag'        => $tagCode ?: ($rollItem['item_code'] ?? ''),
                 'fabric_name'           => $rollItem['item_name'] ?? '',
                 'color'                 => $rollItem['color'] ?? '',
                 'unit'                  => $rollItem['unit'] ?? 'kg',
                 'total_roll_qty'        => $totalRollQty,
                 'allocated_qty'         => $allocatedQty,
+                'roll_weight'           => $rollWeight,
+                'roll_price'            => $rollPrice,
                 'target_pieces'         => $targetPieces,
                 'category_id'           => $catId,
                 'subcategory_id'        => $subcatId,
@@ -1292,10 +1448,10 @@ class ProductionController extends Controller {
                     "INSERT INTO program_rolls (
                         concern_id, program_id, purchase_bill_item_id,
                         roll_piece_tag, fabric_name, color, unit,
-                        total_roll_qty, allocated_qty, target_pieces,
+                        total_roll_qty, allocated_qty, roll_weight, roll_price, target_pieces,
                         category_id, subcategory_id, sub_sub_category_id, catalog_id,
                         created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())",
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())",
                     [
                         $cid,
                         $programId,
@@ -1306,6 +1462,8 @@ class ProductionController extends Controller {
                         $vr['unit'],
                         $vr['total_roll_qty'],
                         $vr['allocated_qty'],
+                        $vr['roll_weight'],
+                        $vr['roll_price'],
                         $vr['target_pieces'],
                         $vr['category_id'],
                         $vr['subcategory_id'],
@@ -1476,7 +1634,7 @@ class ProductionController extends Controller {
      */
     public function editProgram(): void {
         $this->ensureCatalogSchema();
-        $cid = Auth::concernId() ?: 1;
+        $cid = Auth::concernId();
         $id = (int)($_GET['id'] ?? 0);
 
         if (!$id) {
@@ -1492,6 +1650,9 @@ class ProductionController extends Controller {
             $this->flash('error', 'Program not found or access denied.');
             $this->redirect('/production/catalog?tab=programs');
         }
+        if (!$cid && !empty($program['concern_id'])) {
+            $cid = (int)$program['concern_id'];
+        }
 
         $existingRolls = DB::fetchAll(
             "SELECT pr.*, 
@@ -1504,9 +1665,9 @@ class ProductionController extends Controller {
         );
 
         // Load Available Fabric Rolls for this concern, discounting allocations in OTHER programs
-        $rollsSql = "SELECT pbi.id, pbi.item_code, pbi.item_name, pbi.color, pbi.unit,
-                            pbi.net_weight, pbi.qty AS total_qty,
-                            pb.bill_no, s.name AS supplier_name,
+        $rollsSql = "SELECT pbi.id, pbi.concern_id, pbi.item_code, pbi.item_name, pbi.pattern, pbi.color, pbi.unit,
+                            pbi.net_weight, pbi.gross_weight, pbi.unit_price, pbi.qty AS total_qty,
+                            pbi.catalog_id, pb.bill_no, pb.bill_date, s.name AS supplier_name, s.company_name AS supplier_company,
                             COALESCE((
                                 SELECT SUM(pr.allocated_qty) 
                                 FROM program_rolls pr 
@@ -1518,9 +1679,9 @@ class ProductionController extends Controller {
                      FROM purchase_bill_items pbi
                      JOIN purchase_bills pb ON pbi.purchase_bill_id = pb.id
                      LEFT JOIN suppliers s ON pb.supplier_id = s.id
-                     WHERE pbi.section_type = 'rolls' AND pbi.concern_id = ?
+                     WHERE pbi.section_type = 'rolls'" . ($cid ? " AND pbi.concern_id = ?" : "") . "
                      ORDER BY pbi.id DESC";
-        $rawRolls = DB::fetchAll($rollsSql, [$id, $cid]);
+        $rawRolls = DB::fetchAll($rollsSql, $cid ? [$id, $cid] : [$id]);
 
         $availableRolls = [];
         foreach ($rawRolls as $r) {
@@ -1528,9 +1689,55 @@ class ProductionController extends Controller {
             $allocatedOther = (float)$r['allocated_in_other_programs'];
             $remaining = max(0.00, $total - $allocatedOther);
             $r['remaining_qty'] = $remaining;
-            $r['out_of_label'] = sprintf("%.2f %s out of %.2f %s", $remaining, $r['unit'], $total, $r['unit']);
+            $unit = $r['unit'] ?: 'kg';
+            $r['unit_price'] = (float)($r['unit_price'] ?? 0.00);
+            $r['weight'] = (float)($r['net_weight'] ?: ($r['gross_weight'] ?: ($unit === 'kg' ? $remaining : 0.00)));
+            $r['supplier_display'] = $r['supplier_name'] ?: ($r['supplier_company'] ?: 'Direct Purchase');
+            $r['out_of_label'] = sprintf("%.2f %s out of %.2f %s", $remaining, $unit, $total, $unit);
+            $r['tag_code'] = QrService::generateTagCode($r['item_name'], $r['color'], $r['pattern'] ?: ($r['specification'] ?? ''), (string)$r['id']);
+
+            if (!empty($r['catalog_id'])) {
+                $cat = DB::fetch(
+                    "SELECT id, name, style_code, hierarchy_path, category_id, subcategory_id, sub_sub_category_id 
+                     FROM catalogs WHERE id = ?",
+                    [$r['catalog_id']]
+                );
+                if ($cat) {
+                    $r['catalog_style_code'] = $cat['style_code'];
+                    $r['catalog_name'] = $cat['name'];
+                    $r['hierarchy_path'] = $cat['hierarchy_path'];
+                    $r['category_id'] = $cat['category_id'];
+                    $r['subcategory_id'] = $cat['subcategory_id'];
+                    $r['sub_sub_category_id'] = $cat['sub_sub_category_id'];
+                }
+            }
             $availableRolls[] = $r;
         }
+
+        // Calculate accumulated stock per fabric specification (pattern/design + color)
+        $accumulatedBySpec = [];
+        foreach ($availableRolls as $r) {
+            $specKey = strtoupper(trim(($r['pattern'] ?: $r['item_name']) . '|' . ($r['color'] ?: '')));
+            if (!isset($accumulatedBySpec[$specKey])) {
+                $accumulatedBySpec[$specKey] = [
+                    'design_name' => strtoupper($r['pattern'] ?: $r['item_name']),
+                    'color'       => strtoupper($r['color'] ?: 'STANDARD'),
+                    'total_stock' => 0.00,
+                    'unit'        => $r['unit'] ?: 'kg',
+                    'unit_price'  => (float)($r['unit_price'] ?? 0),
+                    'bill_no'     => $r['bill_no'],
+                    'supplier'    => $r['supplier_display'],
+                ];
+            }
+            $accumulatedBySpec[$specKey]['total_stock'] += (float)$r['remaining_qty'];
+        }
+
+        foreach ($availableRolls as &$r) {
+            $specKey = strtoupper(trim(($r['pattern'] ?: $r['item_name']) . '|' . ($r['color'] ?: '')));
+            $r['design_accumulated_stock'] = $accumulatedBySpec[$specKey]['total_stock'] ?? $r['remaining_qty'];
+            $r['design_name'] = $accumulatedBySpec[$specKey]['design_name'] ?? $r['item_name'];
+        }
+        unset($r);
 
         $categories = DB::fetchAll("SELECT * FROM categories WHERE concern_id = ? AND status = 'active' ORDER BY name ASC", [$cid]);
         $subcategories = DB::fetchAll("SELECT * FROM subcategories WHERE concern_id = ? AND status = 'active' ORDER BY name ASC", [$cid]);
@@ -1557,7 +1764,7 @@ class ProductionController extends Controller {
     public function updateProgram(): void {
         $this->ensureCatalogSchema();
         $this->validateCsrf();
-        $cid = Auth::concernId() ?: 1;
+        $cid = Auth::concernId();
         $id = (int)($_POST['id'] ?? 0);
 
         if (!$id) {
@@ -1573,6 +1780,8 @@ class ProductionController extends Controller {
             $this->flash('error', 'Program not found or access denied.');
             $this->redirect('/production/catalog?tab=programs');
         }
+
+        $programConcernId = !empty($program['concern_id']) ? (int)$program['concern_id'] : ($cid ?: 1);
 
         $programName = trim($_POST['program_name'] ?? '');
         $status = $_POST['status'] ?? $program['status'];
@@ -1628,8 +1837,8 @@ class ProductionController extends Controller {
                               AND pp.id != ?
                         ), 0.00) AS used_qty_other
                  FROM purchase_bill_items pbi 
-                 WHERE pbi.id = ? AND pbi.concern_id = ?",
-                [$id, $rollItemId, $cid]
+                 WHERE pbi.id = ?" . ($cid ? " AND pbi.concern_id = ?" : ""),
+                $cid ? [$id, $rollItemId, $cid] : [$id, $rollItemId]
             );
 
             if (!$rollItem) {
@@ -1649,14 +1858,33 @@ class ProductionController extends Controller {
 
             $totalPlannedQty += $allocatedQty;
 
+            $rollWeight = isset($r['roll_weight']) ? (float)$r['roll_weight'] : 0.00;
+            if ($rollWeight <= 0) {
+                if ($rollItem['unit'] === 'kg') {
+                    $rollWeight = $allocatedQty;
+                } elseif ($totalRollQty > 0 && (float)($rollItem['net_weight'] ?? 0) > 0) {
+                    $rollWeight = round(($allocatedQty / $totalRollQty) * (float)$rollItem['net_weight'], 2);
+                }
+            }
+
+            $rollPrice = isset($r['roll_price']) ? (float)$r['roll_price'] : 0.00;
+            if ($rollPrice <= 0) {
+                $unitRate = (float)($rollItem['unit_price'] ?? 0.00);
+                $rollPrice = round($allocatedQty * $unitRate, 2);
+            }
+
+            $tagCode = QrService::generateTagCode($rollItem['item_name'], $rollItem['color'], $rollItem['pattern'] ?: ($rollItem['specification'] ?? ''), (string)$rollItem['id']);
+
             $validatedRolls[] = [
                 'purchase_bill_item_id' => $rollItemId,
-                'roll_piece_tag'        => $rollItem['item_code'] ?? '',
+                'roll_piece_tag'        => $tagCode ?: ($rollItem['item_code'] ?? ''),
                 'fabric_name'           => $rollItem['item_name'] ?? '',
                 'color'                 => $rollItem['color'] ?? '',
                 'unit'                  => $rollItem['unit'] ?? 'kg',
                 'total_roll_qty'        => $totalRollQty,
                 'allocated_qty'         => $allocatedQty,
+                'roll_weight'           => $rollWeight,
+                'roll_price'            => $rollPrice,
                 'target_pieces'         => $targetPieces,
                 'category_id'           => $catId,
                 'subcategory_id'        => $subcatId,
@@ -1696,12 +1924,12 @@ class ProductionController extends Controller {
                     "INSERT INTO program_rolls (
                         concern_id, program_id, purchase_bill_item_id,
                         roll_piece_tag, fabric_name, color, unit,
-                        total_roll_qty, allocated_qty, target_pieces,
+                        total_roll_qty, allocated_qty, roll_weight, roll_price, target_pieces,
                         category_id, subcategory_id, sub_sub_category_id, catalog_id,
                         created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())",
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())",
                     [
-                        $cid,
+                        $programConcernId,
                         $id,
                         $vr['purchase_bill_item_id'],
                         $vr['roll_piece_tag'],
@@ -1710,6 +1938,8 @@ class ProductionController extends Controller {
                         $vr['unit'],
                         $vr['total_roll_qty'],
                         $vr['allocated_qty'],
+                        $vr['roll_weight'],
+                        $vr['roll_price'],
                         $vr['target_pieces'],
                         $vr['category_id'],
                         $vr['subcategory_id'],
@@ -1811,16 +2041,148 @@ class ProductionController extends Controller {
     }
 
     // ========================================================
-    // 3. CUTTING & WASTAGE
+    // 3. CUTTING & WASTAGE FLOW (MATCHING UI IMAGES 1, 2, 3)
     // ========================================================
-    public function cutting(): void {
-        $cid = Auth::concernId();
 
-        $sql = "SELECT cl.*, pp.program_no, v.name AS raw_variant_name, v.sku_code,
-                       con.name AS concern_name, con.code AS concern_code
+    /**
+     * Ensure Cutting & Wastage Schema (Tables & Columns)
+     */
+    private function ensureCuttingSchema(): void {
+        static $checked = false;
+        if ($checked) return;
+        $checked = true;
+
+        DB::query("
+            CREATE TABLE IF NOT EXISTS cutting_masters (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                concern_id INT NOT NULL,
+                name VARCHAR(150) NOT NULL,
+                phone VARCHAR(30) NULL,
+                employee_code VARCHAR(50) NULL,
+                status ENUM('active', 'inactive') DEFAULT 'active',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                KEY idx_cm_concern (concern_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        ");
+
+        $existingCols = array_column(DB::fetchAll("DESCRIBE cutting_logs"), 'Field');
+        $colsToAdd = [
+            'batch_no'              => "VARCHAR(50) NULL AFTER log_no",
+            'cutting_name'          => "VARCHAR(255) NULL AFTER batch_no",
+            'status'                => "ENUM('in_progress', 'planned', 'completed') DEFAULT 'in_progress' AFTER cutting_name",
+            'cutting_master_id'     => "INT NULL AFTER status",
+            'cutting_master_name'   => "VARCHAR(150) NULL AFTER cutting_master_id",
+            'total_roll_weight'     => "DECIMAL(12,2) DEFAULT 0.00 AFTER consumed_qty",
+            'total_roll_price'      => "DECIMAL(12,2) DEFAULT 0.00 AFTER total_roll_weight",
+            'fabric_rate_per_kg'    => "DECIMAL(12,2) DEFAULT 0.00 AFTER total_roll_price",
+            'wastage_cost'          => "DECIMAL(12,2) DEFAULT 0.00 AFTER wastage_qty",
+            'wastage_percent'       => "DECIMAL(5,2) DEFAULT 0.00 AFTER wastage_cost",
+            'used_weight'           => "DECIMAL(12,2) DEFAULT 0.00 AFTER wastage_percent",
+            'fabric_cost_per_piece' => "DECIMAL(12,2) DEFAULT 0.00 AFTER used_weight",
+            'sold_wastage_qty'      => "DECIMAL(12,2) DEFAULT 0.00 AFTER wastage_unit",
+        ];
+
+        foreach ($colsToAdd as $col => $def) {
+            if (!in_array($col, $existingCols)) {
+                DB::query("ALTER TABLE cutting_logs ADD COLUMN $col $def");
+            }
+        }
+
+        DB::query("ALTER TABLE cutting_logs MODIFY COLUMN raw_variant_id INT NULL");
+
+        DB::query("
+            CREATE TABLE IF NOT EXISTS cutting_items (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                cutting_id INT NOT NULL,
+                program_roll_id INT NULL,
+                variant_id INT NULL,
+                size VARCHAR(50) NULL,
+                sku_code VARCHAR(100) NULL,
+                variant_name VARCHAR(255) NULL,
+                cut_pieces INT NOT NULL DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                KEY idx_ci_cutting (cutting_id),
+                KEY idx_ci_roll (program_roll_id),
+                KEY idx_ci_variant (variant_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        ");
+
+        DB::query("
+            CREATE TABLE IF NOT EXISTS cutting_wastage_sales (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                concern_id INT NOT NULL,
+                sale_no VARCHAR(50) NOT NULL,
+                cutting_id INT NOT NULL,
+                buyer_name VARCHAR(150) NOT NULL,
+                buyer_phone VARCHAR(20) NOT NULL,
+                buyer_company VARCHAR(200) NULL,
+                wastage_category VARCHAR(100) NOT NULL,
+                wastage_weight DECIMAL(12,2) NOT NULL,
+                selling_rate DECIMAL(12,2) NOT NULL,
+                total_price DECIMAL(12,2) NOT NULL,
+                amount_received DECIMAL(12,2) DEFAULT 0.00,
+                sale_date DATE NOT NULL,
+                payment_status ENUM('paid', 'partial', 'pending') DEFAULT 'paid',
+                notes TEXT NULL,
+                created_by INT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                KEY idx_cws_concern (concern_id),
+                KEY idx_cws_cutting (cutting_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        ");
+    }
+
+    /**
+     * Generate next Cutting Batch No: CUT-YYYYMMDD-XXXX
+     */
+    private function generateCuttingBatchNo(?int $cid = null): string {
+        $prefix = 'CUT-' . date('Ymd') . '-';
+        $sql = "SELECT batch_no FROM cutting_logs WHERE batch_no LIKE ? ORDER BY id DESC LIMIT 1";
+        $last = DB::fetch($sql, [$prefix . '%']);
+        $seq = 1;
+        if ($last && !empty($last['batch_no'])) {
+            $parts = explode('-', $last['batch_no']);
+            $lastNum = (int)end($parts);
+            $seq = $lastNum + 1;
+        }
+        return $prefix . str_pad((string)$seq, 4, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * Generate next Wastage Scrap Sale No: SCRAP-YYYYMMDD-XXXX
+     */
+    private function generateWastageSaleNo(?int $cid = null): string {
+        $prefix = 'SCRAP-' . date('Ymd') . '-';
+        $sql = "SELECT sale_no FROM cutting_wastage_sales WHERE sale_no LIKE ? ORDER BY id DESC LIMIT 1";
+        $last = DB::fetch($sql, [$prefix . '%']);
+        $seq = 1;
+        if ($last && !empty($last['sale_no'])) {
+            $parts = explode('-', $last['sale_no']);
+            $lastNum = (int)end($parts);
+            $seq = $lastNum + 1;
+        }
+        return $prefix . str_pad((string)$seq, 4, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * Cutting Module Index (List of Cutting Batches + Wastage Selling Register)
+     */
+    public function cuttingIndex(): void {
+        $this->ensureCuttingSchema();
+        $cid = Auth::concernId();
+        $tab = $_GET['tab'] ?? 'batches';
+
+        // 1. Fetch Cutting Batches
+        $sql = "SELECT cl.*, 
+                       pp.program_no, pp.program_name, pp.planned_qty AS program_planned_qty,
+                       COALESCE(cl.cutting_master_name, cm.name) AS master_name,
+                       con.name AS concern_name,
+                       (SELECT COUNT(*) FROM cutting_items WHERE cutting_id = cl.id) AS variant_count,
+                       (SELECT COALESCE(SUM(cut_pieces), 0) FROM cutting_items WHERE cutting_id = cl.id) AS total_cut_pieces_sum,
+                       (SELECT COUNT(DISTINCT program_roll_id) FROM cutting_items WHERE cutting_id = cl.id) AS rolls_used_count
                 FROM cutting_logs cl
                 LEFT JOIN production_programs pp ON cl.program_id = pp.id
-                JOIN variants v ON cl.raw_variant_id = v.id
+                LEFT JOIN cutting_masters cm ON cl.cutting_master_id = cm.id
                 LEFT JOIN concerns con ON cl.concern_id = con.id";
         $params = [];
         if ($cid) {
@@ -1828,76 +2190,750 @@ class ProductionController extends Controller {
             $params[] = $cid;
         }
         $sql .= " ORDER BY cl.id DESC";
-        $logs = DB::fetchAll($sql, $params);
+        $batches = DB::fetchAll($sql, $params);
 
+        // 2. Available Cutting Wastage for Scrap Sale
+        $availSql = "SELECT cl.*, 
+                            pp.program_no, pp.program_name,
+                            (cl.wastage_qty - cl.sold_wastage_qty) AS available_wastage_qty,
+                            COALESCE((
+                                SELECT s.name FROM program_rolls pr 
+                                JOIN purchase_bill_items pbi ON pr.purchase_bill_item_id = pbi.id 
+                                JOIN purchase_bills pb ON pbi.purchase_bill_id = pb.id 
+                                LEFT JOIN suppliers s ON pb.supplier_id = s.id 
+                                WHERE pr.program_id = cl.program_id LIMIT 1
+                            ), 'Direct Purchase') AS supplier_display
+                     FROM cutting_logs cl
+                     LEFT JOIN production_programs pp ON cl.program_id = pp.id
+                     WHERE (cl.wastage_qty - cl.sold_wastage_qty) > 0.001" . ($cid ? " AND cl.concern_id = ?" : "") . "
+                     ORDER BY cl.id DESC";
+        $availableWastages = DB::fetchAll($availSql, $cid ? [$cid] : []);
+
+        // 3. Scrap Sales History
+        $salesSql = "SELECT cws.*, 
+                            cl.batch_no, cl.cutting_name, pp.program_no,
+                            con.name AS concern_name
+                     FROM cutting_wastage_sales cws
+                     JOIN cutting_logs cl ON cws.cutting_id = cl.id
+                     LEFT JOIN production_programs pp ON cl.program_id = pp.id
+                     LEFT JOIN concerns con ON cws.concern_id = con.id";
         if ($cid) {
-            $programs = DB::fetchAll("SELECT id, program_no FROM production_programs WHERE concern_id = ? AND status != 'cancelled'", [$cid]);
-            $rawVariants = DB::fetchAll("SELECT id, sku_code, name, weight_unit FROM variants WHERE concern_id = ? AND status = 'active'", [$cid]);
-        } else {
-            $programs = DB::fetchAll("SELECT id, program_no FROM production_programs WHERE status != 'cancelled'");
-            $rawVariants = DB::fetchAll("SELECT id, sku_code, name, weight_unit FROM variants WHERE status = 'active'");
+            $salesSql .= " WHERE cws.concern_id = ?";
+        }
+        $salesSql .= " ORDER BY cws.id DESC";
+        $scrapSales = DB::fetchAll($salesSql, $cid ? [$cid] : []);
+
+        // Aggregate stats
+        $totalWastageGen = 0.00;
+        $totalWastageSold = 0.00;
+        foreach ($batches as $b) {
+            $totalWastageGen += (float)$b['wastage_qty'];
+            $totalWastageSold += (float)$b['sold_wastage_qty'];
+        }
+        $totalScrapRevenue = 0.00;
+        foreach ($scrapSales as $s) {
+            $totalScrapRevenue += (float)$s['total_price'];
         }
 
-        $this->render('concern/cutting_wastage', [
-            'pageTitle'     => 'Fabric Cutting & Wastage Tracking',
+        $this->render('concern/cutting_list', [
+            'pageTitle'         => 'Fabric Cutting & Wastage Tracking',
+            'currentModule'     => 'cutting_wastage',
+            'activeTab'         => $tab,
+            'batches'           => $batches,
+            'availableWastages' => $availableWastages,
+            'scrapSales'        => $scrapSales,
+            'totalWastageGen'   => $totalWastageGen,
+            'totalWastageSold'  => $totalWastageSold,
+            'availableWastage'  => max(0.00, $totalWastageGen - $totalWastageSold),
+            'totalScrapRevenue' => $totalScrapRevenue,
+            'selectedCid'       => $cid,
+        ]);
+    }
+
+    /**
+     * Backward-compatible alias for cutting()
+     */
+    public function cutting(): void {
+        $this->cuttingIndex();
+    }
+
+    /**
+     * Create Cutting Batch Form (Matching UI Images 1 & 2)
+     */
+    public function createCutting(): void {
+        $this->ensureCuttingSchema();
+        $cid = Auth::concernId();
+
+        $batchNo = $this->generateCuttingBatchNo($cid);
+
+        // Fetch active production programs that have assigned fabric rolls
+        $progSql = "SELECT pp.id, pp.concern_id, pp.program_no, pp.program_name, pp.planned_qty,
+                           COUNT(pr.id) AS rolls_count,
+                           COALESCE(SUM(pr.roll_weight), 0.00) AS total_rolls_weight,
+                           COALESCE(SUM(pr.roll_price), 0.00) AS total_rolls_price
+                    FROM production_programs pp
+                    JOIN program_rolls pr ON pp.id = pr.program_id
+                    WHERE pp.status != 'cancelled'" . ($cid ? " AND pp.concern_id = ?" : "") . "
+                    GROUP BY pp.id
+                    ORDER BY pp.id DESC";
+        $programs = DB::fetchAll($progSql, $cid ? [$cid] : []);
+
+        // Fetch active cutting masters
+        $masterSql = "SELECT * FROM cutting_masters WHERE status = 'active'" . ($cid ? " AND concern_id = ?" : "") . " ORDER BY name ASC";
+        $cuttingMasters = DB::fetchAll($masterSql, $cid ? [$cid] : []);
+
+        $this->render('concern/cutting_create', [
+            'pageTitle'      => 'New Cutting Batch',
+            'currentModule'  => 'cutting_wastage',
+            'batchNo'        => $batchNo,
+            'programs'       => $programs,
+            'cuttingMasters' => $cuttingMasters,
+            'selectedCid'    => $cid,
+        ]);
+    }
+
+    /**
+     * AJAX endpoint to fetch rolls & dynamic variant breakdown for a selected program
+     */
+    public function apiCuttingProgramDetails(): void {
+        header('Content-Type: application/json');
+        $this->ensureCuttingSchema();
+        $cid = Auth::concernId();
+        $progId = (int)($_GET['id'] ?? ($_GET['program_id'] ?? 0));
+
+        if (!$progId) {
+            echo json_encode(['success' => false, 'message' => 'Invalid program ID.']);
+            exit;
+        }
+
+        $program = DB::fetch(
+            "SELECT pp.*, c.name AS catalog_name, c.style_code AS catalog_code 
+             FROM production_programs pp 
+             LEFT JOIN catalogs c ON pp.catalog_id = c.id 
+             WHERE pp.id = ?" . ($cid ? " AND pp.concern_id = ?" : ""),
+            $cid ? [$progId, $cid] : [$progId]
+        );
+
+        if (!$program) {
+            echo json_encode(['success' => false, 'message' => 'Program not found or access denied.']);
+            exit;
+        }
+
+        $rolls = DB::fetchAll(
+            "SELECT pr.*, 
+                    pbi.item_code, pbi.item_name, pbi.pattern, pbi.color, pbi.unit, pbi.net_weight, pbi.unit_price,
+                    c.id AS roll_catalog_id, c.name AS roll_catalog_name, c.style_code AS roll_style_code, c.sizes AS roll_catalog_sizes
+             FROM program_rolls pr
+             LEFT JOIN purchase_bill_items pbi ON pr.purchase_bill_item_id = pbi.id
+             LEFT JOIN catalogs c ON pr.catalog_id = c.id
+             WHERE pr.program_id = ?
+             ORDER BY pr.id ASC",
+            [$progId]
+        );
+
+        $totalWeight = 0.00;
+        $totalPrice = 0.00;
+        $rollsData = [];
+
+        foreach ($rolls as $r) {
+            $weight = (float)$r['roll_weight'];
+            if ($weight <= 0) {
+                $weight = (float)$r['allocated_qty'];
+            }
+            $price = (float)$r['roll_price'];
+            if ($price <= 0) {
+                $price = (float)$r['allocated_qty'] * (float)($r['unit_price'] ?? 0);
+            }
+
+            $totalWeight += $weight;
+            $totalPrice += $price;
+
+            $catId = $r['catalog_id'] ?: $program['catalog_id'];
+            $variants = [];
+
+            if ($catId) {
+                $variants = DB::fetchAll(
+                    "SELECT id, sku_code, name, size, weight, price, mrp 
+                     FROM variants 
+                     WHERE catalog_id = ? AND status = 'active' 
+                     ORDER BY id ASC",
+                    [$catId]
+                );
+
+                if (empty($variants)) {
+                    $catRecord = DB::fetch("SELECT id, style_code, name, sizes FROM catalogs WHERE id = ?", [$catId]);
+                    if ($catRecord && !empty($catRecord['sizes'])) {
+                        $sizesList = json_decode($catRecord['sizes'], true);
+                        if (is_array($sizesList)) {
+                            foreach ($sizesList as $s) {
+                                $variants[] = [
+                                    'id'       => null,
+                                    'sku_code' => ($catRecord['style_code'] ?: 'STY') . '-' . strtoupper($s),
+                                    'name'     => $catRecord['name'] . ' - ' . strtoupper($s),
+                                    'size'     => strtoupper($s),
+                                    'price'    => 0.00,
+                                ];
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (empty($variants)) {
+                $defaultSizes = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'Free Size'];
+                foreach ($defaultSizes as $ds) {
+                    $variants[] = [
+                        'id'       => null,
+                        'sku_code' => ($r['roll_piece_tag'] ?: 'ROLL') . '-' . $ds,
+                        'name'     => ($r['fabric_name'] ?: 'Fabric') . ' (' . ($r['color'] ?: 'Standard') . ') - ' . $ds,
+                        'size'     => $ds,
+                        'price'    => 0.00,
+                    ];
+                }
+            }
+
+            $r['calculated_weight'] = round($weight, 2);
+            $r['calculated_price']  = round($price, 2);
+            $r['variants']          = $variants;
+            $rollsData[]            = $r;
+        }
+
+        $fabricRate = $totalWeight > 0 ? round($totalPrice / $totalWeight, 2) : 0.00;
+
+        echo json_encode([
+            'success'            => true,
+            'program'            => $program,
+            'rolls'              => $rollsData,
+            'total_roll_weight'  => round($totalWeight, 2),
+            'total_roll_price'   => round($totalPrice, 2),
+            'fabric_rate_per_kg' => $fabricRate,
+        ]);
+        exit;
+    }
+
+    /**
+     * AJAX endpoint to quickly add a cutting master / operator
+     */
+    public function apiQuickAddCuttingMaster(): void {
+        header('Content-Type: application/json');
+        $this->ensureCuttingSchema();
+        $cid = Auth::concernId() ?: 1;
+
+        $name = trim($_POST['name'] ?? '');
+        $phone = trim($_POST['phone'] ?? '');
+        $code = trim($_POST['employee_code'] ?? '');
+
+        if (empty($name)) {
+            echo json_encode(['success' => false, 'message' => 'Cutting Master Name is required.']);
+            exit;
+        }
+
+        try {
+            DB::query(
+                "INSERT INTO cutting_masters (concern_id, name, phone, employee_code, status, created_at)
+                 VALUES (?, ?, ?, ?, 'active', NOW())",
+                [$cid, $name, $phone, $code]
+            );
+            $id = (int)DB::lastInsertId();
+
+            echo json_encode([
+                'success' => true,
+                'id'      => $id,
+                'name'    => $name,
+                'phone'   => $phone,
+            ]);
+        } catch (Exception $e) {
+            echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Store Cutting Batch & Dynamic Variant Breakdown (Images 1 & 2)
+     */
+    public function storeCuttingBatch(): void {
+        $this->ensureCuttingSchema();
+        $this->validateCsrf();
+        $cid = Auth::concernId();
+
+        $progId = (int)($_POST['program_id'] ?? 0);
+        $cuttingName = trim($_POST['cutting_name'] ?? '');
+        $status = $_POST['status'] ?? 'in_progress';
+        if (!in_array($status, ['in_progress', 'planned', 'completed'])) {
+            $status = 'in_progress';
+        }
+        $cuttingMasterId = !empty($_POST['cutting_master_id']) ? (int)$_POST['cutting_master_id'] : null;
+        $notes = trim($_POST['notes'] ?? '');
+
+        if (!$progId) {
+            $this->flash('error', 'Please select a Production Program.');
+            $this->redirect('/production/cutting/create');
+        }
+
+        if (empty($cuttingName)) {
+            $this->flash('error', 'Cutting Name is required.');
+            $this->redirect('/production/cutting/create');
+        }
+
+        $program = DB::fetch(
+            "SELECT * FROM production_programs WHERE id = ?" . ($cid ? " AND concern_id = ?" : ""),
+            $cid ? [$progId, $cid] : [$progId]
+        );
+
+        if (!$program) {
+            $this->flash('error', 'Selected Production Program not found or access denied.');
+            $this->redirect('/production/cutting/create');
+        }
+
+        $batchConcernId = $cid ?: (int)$program['concern_id'];
+
+        $masterName = null;
+        if ($cuttingMasterId) {
+            $cm = DB::fetch("SELECT name FROM cutting_masters WHERE id = ?", [$cuttingMasterId]);
+            $masterName = $cm['name'] ?? null;
+        }
+
+        // Fetch rolls belonging to this program
+        $rolls = DB::fetchAll("SELECT * FROM program_rolls WHERE program_id = ?", [$progId]);
+        if (empty($rolls)) {
+            $this->flash('error', 'The selected Production Program has no assigned fabric rolls.');
+            $this->redirect('/production/cutting/create');
+        }
+
+        $totalRollWeight = 0.00;
+        $totalRollPrice = 0.00;
+        foreach ($rolls as $r) {
+            $w = (float)$r['roll_weight'] > 0 ? (float)$r['roll_weight'] : (float)$r['allocated_qty'];
+            $p = (float)$r['roll_price'] > 0 ? (float)$r['roll_price'] : 0.00;
+            $totalRollWeight += $w;
+            $totalRollPrice += $p;
+        }
+
+        $fabricRatePerKg = $totalRollWeight > 0 ? round($totalRollPrice / $totalRollWeight, 2) : 0.00;
+
+        $wastageWeight = (float)($_POST['wastage_qty'] ?? 0.00);
+        if ($wastageWeight < 0) {
+            $wastageWeight = 0.00;
+        }
+
+        if ($totalRollWeight > 0 && $wastageWeight > $totalRollWeight) {
+            $this->flash('error', "Wastage Fabric Weight ({$wastageWeight} kg) cannot exceed Total Roll Weight ({$totalRollWeight} kg).");
+            $this->redirect('/production/cutting/create');
+        }
+
+        $usedWeight = max(0.00, $totalRollWeight - $wastageWeight);
+        $wastageCost = round($wastageWeight * $fabricRatePerKg, 2);
+        $wastagePct = $totalRollWeight > 0 ? round(($wastageWeight / $totalRollWeight) * 100, 2) : 0.00;
+
+        // Process variant cut pieces breakdown from Section 3
+        $submittedRolls = $_POST['rolls'] ?? [];
+        $validatedItems = [];
+        $totalCutPieces = 0;
+
+        if (is_array($submittedRolls)) {
+            foreach ($submittedRolls as $rollId => $rollData) {
+                $varList = $rollData['variants'] ?? [];
+                if (is_array($varList)) {
+                    foreach ($varList as $vData) {
+                        $pieces = (int)($vData['cut_pieces'] ?? 0);
+                        if ($pieces > 0) {
+                            $totalCutPieces += $pieces;
+                            $validatedItems[] = [
+                                'program_roll_id' => (int)$rollId,
+                                'variant_id'      => !empty($vData['variant_id']) ? (int)$vData['variant_id'] : null,
+                                'size'            => trim($vData['size'] ?? ''),
+                                'sku_code'        => trim($vData['sku_code'] ?? ''),
+                                'variant_name'    => trim($vData['variant_name'] ?? ''),
+                                'cut_pieces'      => $pieces,
+                            ];
+                        }
+                    }
+                }
+            }
+        }
+
+        if ($totalCutPieces <= 0) {
+            $this->flash('error', 'Please enter cut pieces for at least one variant/size in Section 3.');
+            $this->redirect('/production/cutting/create');
+        }
+
+        $fabricCostPerPiece = $totalCutPieces > 0 ? round(($totalRollPrice - $wastageCost) / $totalCutPieces, 2) : 0.00;
+
+        $batchNo = $this->generateCuttingBatchNo($batchConcernId);
+
+        DB::beginTransaction();
+        try {
+            DB::query(
+                "INSERT INTO cutting_logs (
+                    concern_id, log_no, batch_no, cutting_name, status,
+                    program_id, cutting_master_id, cutting_master_name,
+                    consumed_qty, total_roll_weight, total_roll_price, fabric_rate_per_kg,
+                    cut_pieces, wastage_qty, wastage_cost, wastage_percent, used_weight, fabric_cost_per_piece,
+                    sold_wastage_qty, wastage_unit, notes, created_by, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0.00, 'kg', ?, ?, NOW())",
+                [
+                    $batchConcernId,
+                    $batchNo,
+                    $batchNo,
+                    $cuttingName,
+                    $status,
+                    $progId,
+                    $cuttingMasterId,
+                    $masterName,
+                    $usedWeight,
+                    $totalRollWeight,
+                    $totalRollPrice,
+                    $fabricRatePerKg,
+                    $totalCutPieces,
+                    $wastageWeight,
+                    $wastageCost,
+                    $wastagePct,
+                    $usedWeight,
+                    $fabricCostPerPiece,
+                    $notes,
+                    Auth::id()
+                ]
+            );
+            $cuttingId = (int)DB::lastInsertId();
+
+            // Insert each variant cutting item
+            foreach ($validatedItems as $it) {
+                DB::query(
+                    "INSERT INTO cutting_items (
+                        cutting_id, program_roll_id, variant_id, size, sku_code, variant_name, cut_pieces, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())",
+                    [
+                        $cuttingId,
+                        $it['program_roll_id'],
+                        $it['variant_id'],
+                        $it['size'],
+                        $it['sku_code'],
+                        $it['variant_name'],
+                        $it['cut_pieces']
+                    ]
+                );
+            }
+
+            // Update production program status
+            DB::query("UPDATE production_programs SET status = 'in_progress', updated_at = NOW() WHERE id = ? AND status = 'planned'", [$progId]);
+
+            AuditLog::log('CREATE', 'cutting_logs', $cuttingId, null, [
+                'batch_no'         => $batchNo,
+                'cutting_name'     => $cuttingName,
+                'program_id'       => $progId,
+                'total_cut_pieces' => $totalCutPieces,
+                'wastage_qty'      => $wastageWeight,
+            ]);
+
+            DB::commit();
+            $this->flash('success', "Cutting Batch '{$batchNo}' ({$cuttingName}) created successfully with {$totalCutPieces} cut pieces!");
+        } catch (Exception $e) {
+            DB::rollBack();
+            $this->flash('error', 'Failed to save cutting batch: ' . $e->getMessage());
+            $this->redirect('/production/cutting/create');
+        }
+
+        $this->redirect('/production/cutting');
+    }
+
+    /**
+     * View Cutting Batch Details
+     */
+    public function viewCuttingBatch(): void {
+        $this->ensureCuttingSchema();
+        $cid = Auth::concernId();
+        $id = (int)($_GET['id'] ?? 0);
+
+        if (!$id) {
+            $this->flash('error', 'Invalid cutting batch ID.');
+            $this->redirect('/production/cutting');
+        }
+
+        $batch = DB::fetch(
+            "SELECT cl.*, pp.program_no, pp.program_name, cm.name AS master_name, con.name AS concern_name
+             FROM cutting_logs cl
+             LEFT JOIN production_programs pp ON cl.program_id = pp.id
+             LEFT JOIN cutting_masters cm ON cl.cutting_master_id = cm.id
+             LEFT JOIN concerns con ON cl.concern_id = con.id
+             WHERE cl.id = ?" . ($cid ? " AND cl.concern_id = ?" : ""),
+            $cid ? [$id, $cid] : [$id]
+        );
+
+        if (!$batch) {
+            $this->flash('error', 'Cutting batch not found or access denied.');
+            $this->redirect('/production/cutting');
+        }
+
+        $items = DB::fetchAll(
+            "SELECT ci.*, pr.roll_piece_tag, pr.fabric_name, pr.color 
+             FROM cutting_items ci
+             LEFT JOIN program_rolls pr ON ci.program_roll_id = pr.id
+             WHERE ci.cutting_id = ?
+             ORDER BY ci.id ASC",
+            [$id]
+        );
+
+        $sales = DB::fetchAll(
+            "SELECT * FROM cutting_wastage_sales WHERE cutting_id = ? ORDER BY id DESC",
+            [$id]
+        );
+
+        $this->render('concern/cutting_view', [
+            'pageTitle'     => 'Cutting Batch: ' . ($batch['batch_no'] ?: $batch['log_no']),
             'currentModule' => 'cutting_wastage',
-            'logs'          => $logs,
-            'programs'      => $programs,
-            'rawVariants'   => $rawVariants,
+            'batch'         => $batch,
+            'items'         => $items,
+            'sales'         => $sales,
             'selectedCid'   => $cid,
         ]);
     }
 
-    public function storeCutting(): void {
+    /**
+     * Delete Cutting Batch
+     */
+    public function deleteCuttingBatch(): void {
+        $this->ensureCuttingSchema();
         $this->validateCsrf();
-        $cid = Auth::concernId() ?: (int)($_POST['concern_id'] ?? 0);
+        $cid = Auth::concernId();
+        $id = (int)($_POST['id'] ?? 0);
 
-        if (!$cid) {
-            $this->flash('error', 'Please choose a concern.');
+        if (!$id) {
+            $this->flash('error', 'Invalid cutting batch ID.');
+            $this->redirect('/production/cutting');
+        }
+
+        $batch = DB::fetch("SELECT * FROM cutting_logs WHERE id = ?" . ($cid ? " AND concern_id = ?" : ""), $cid ? [$id, $cid] : [$id]);
+        if (!$batch) {
+            $this->flash('error', 'Cutting batch not found or access denied.');
+            $this->redirect('/production/cutting');
+        }
+
+        // Check if wastage has already been sold
+        $salesCount = DB::fetch("SELECT COUNT(*) AS c FROM cutting_wastage_sales WHERE cutting_id = ?", [$id]);
+        if (!empty($salesCount['c']) && (int)$salesCount['c'] > 0) {
+            $this->flash('error', 'Cannot delete this cutting batch because wastage scrap sales have already been recorded against it.');
+            $this->redirect('/production/cutting');
+        }
+
+        DB::beginTransaction();
+        try {
+            DB::query("DELETE FROM cutting_items WHERE cutting_id = ?", [$id]);
+            DB::query("DELETE FROM cutting_logs WHERE id = ?", [$id]);
+            AuditLog::log('DELETE', 'cutting_logs', $id, $batch, null);
+            DB::commit();
+            $this->flash('success', "Cutting Batch '{$batch['batch_no']}' deleted successfully.");
+        } catch (Exception $e) {
+            DB::rollBack();
+            $this->flash('error', 'Failed to delete cutting batch: ' . $e->getMessage());
+        }
+
+        $this->redirect('/production/cutting');
+    }
+
+    /**
+     * Wastage Selling View Alias
+     */
+    public function cuttingWastageIndex(): void {
+        $_GET['tab'] = 'wastage';
+        $this->cuttingIndex();
+    }
+
+    /**
+     * Store Wastage Scrap Sale (Matching UI Image 3)
+     */
+    public function storeWastageSale(): void {
+        $this->ensureCuttingSchema();
+        $this->validateCsrf();
+        $cid = Auth::concernId();
+
+        $cuttingId = (int)($_POST['cutting_id'] ?? 0);
+        $buyerName = trim($_POST['buyer_name'] ?? '');
+        $buyerPhone = trim($_POST['buyer_phone'] ?? '');
+        $buyerCompany = trim($_POST['buyer_company'] ?? '');
+        $wastageCategory = trim($_POST['wastage_category'] ?? 'Cutting End-Bits (Short length ends & trims)');
+        $wastageWeight = (float)($_POST['wastage_weight'] ?? 0);
+        $sellingRate = (float)($_POST['selling_rate'] ?? 0);
+        $totalPrice = (float)($_POST['total_price'] ?? 0);
+        $amountReceived = (float)($_POST['amount_received'] ?? 0);
+        $saleDate = !empty($_POST['sale_date']) ? $_POST['sale_date'] : date('Y-m-d');
+        $notes = trim($_POST['notes'] ?? '');
+
+        if (!$cuttingId) {
+            $this->flash('error', 'Please select a Cutting Wastage Batch.');
+            $this->redirect('/production/cutting?tab=wastage');
+        }
+
+        $cutting = DB::fetch(
+            "SELECT * FROM cutting_logs WHERE id = ?" . ($cid ? " AND concern_id = ?" : ""),
+            $cid ? [$cuttingId, $cid] : [$cuttingId]
+        );
+
+        if (!$cutting) {
+            $this->flash('error', 'Cutting batch not found or access denied.');
+            $this->redirect('/production/cutting?tab=wastage');
+        }
+
+        $batchConcernId = $cid ?: (int)$cutting['concern_id'];
+        $availWastage = max(0.00, (float)$cutting['wastage_qty'] - (float)$cutting['sold_wastage_qty']);
+
+        if (empty($buyerName)) {
+            $this->flash('error', 'Scrap Buyer / Vendor Name is required.');
+            $this->redirect('/production/cutting?tab=wastage');
+        }
+
+        // Phone validation (10 digits) matching Image 3: "Buyer Phone / Mobile * (10 digits)"
+        $cleanPhone = preg_replace('/[^0-9]/', '', $buyerPhone);
+        if (strlen($cleanPhone) < 10) {
+            $this->flash('error', 'Buyer Phone / Mobile must be at least 10 digits.');
+            $this->redirect('/production/cutting?tab=wastage');
+        }
+
+        if ($wastageWeight <= 0) {
+            $this->flash('error', 'Wastage Weight must be greater than zero.');
+            $this->redirect('/production/cutting?tab=wastage');
+        }
+
+        if ($wastageWeight > ($availWastage + 0.001)) {
+            $this->flash('error', "Wastage Weight ({$wastageWeight} kg) exceeds available balance ({$availWastage} kg).");
+            $this->redirect('/production/cutting?tab=wastage');
+        }
+
+        if ($totalPrice <= 0 && $sellingRate > 0) {
+            $totalPrice = round($wastageWeight * $sellingRate, 2);
+        }
+
+        $saleNo = $this->generateWastageSaleNo($batchConcernId);
+        $paymentStatus = ($amountReceived >= $totalPrice && $totalPrice > 0) ? 'paid' : ($amountReceived > 0 ? 'partial' : 'pending');
+
+        DB::beginTransaction();
+        try {
+            DB::query(
+                "INSERT INTO cutting_wastage_sales (
+                    concern_id, sale_no, cutting_id, buyer_name, buyer_phone, buyer_company,
+                    wastage_category, wastage_weight, selling_rate, total_price, amount_received,
+                    sale_date, payment_status, notes, created_by, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())",
+                [
+                    $batchConcernId,
+                    $saleNo,
+                    $cuttingId,
+                    $buyerName,
+                    $cleanPhone,
+                    $buyerCompany,
+                    $wastageCategory,
+                    $wastageWeight,
+                    $sellingRate,
+                    $totalPrice,
+                    $amountReceived,
+                    $saleDate,
+                    $paymentStatus,
+                    $notes,
+                    Auth::id()
+                ]
+            );
+            $saleId = (int)DB::lastInsertId();
+
+            // Update sold_wastage_qty in cutting_logs
+            DB::query(
+                "UPDATE cutting_logs SET sold_wastage_qty = sold_wastage_qty + ? WHERE id = ?",
+                [$wastageWeight, $cuttingId]
+            );
+
+            // Log to Finance Cash Transactions if amount received > 0
+            if ($amountReceived > 0) {
+                $cashAccount = DB::fetch("SELECT id FROM cash_accounts WHERE concern_id = ? LIMIT 1", [$batchConcernId]);
+                if ($cashAccount) {
+                    DB::query(
+                        "INSERT INTO cash_transactions (
+                            concern_id, account_id, txn_date, type, amount, ref_module, ref_id, description, created_by, created_at
+                        ) VALUES (?, ?, ?, 'in', ?, 'scrap_sales', ?, ?, ?, NOW())",
+                        [
+                            $batchConcernId,
+                            $cashAccount['id'],
+                            $saleDate,
+                            $amountReceived,
+                            $saleId,
+                            "Cutting Scrap Sale [{$saleNo}] from Buyer {$buyerName}",
+                            Auth::id()
+                        ]
+                    );
+                }
+            }
+
+            AuditLog::log('CREATE', 'cutting_wastage_sales', $saleId, null, [
+                'sale_no'        => $saleNo,
+                'cutting_id'     => $cuttingId,
+                'buyer_name'     => $buyerName,
+                'wastage_weight' => $wastageWeight,
+                'total_price'    => $totalPrice,
+            ]);
+
+            DB::commit();
+            $this->flash('success', "Scrap Sale '{$saleNo}' recorded successfully! Sold {$wastageWeight} kg for ₹" . number_format($totalPrice, 2) . ".");
+        } catch (Exception $e) {
+            DB::rollBack();
+            $this->flash('error', 'Failed to record scrap sale: ' . $e->getMessage());
+        }
+
+        $this->redirect('/production/cutting?tab=wastage');
+    }
+
+    public function updateCutting(): void {
+        $this->validateCsrf();
+        $id = (int)($_POST['id'] ?? 0);
+        $cut = DB::fetch("SELECT * FROM cutting_logs WHERE id = ?", [$id]);
+        if (!$cut) {
+            $this->flash('error', 'Cutting log not found.');
             $this->redirect('/m/cutting_wastage');
         }
 
-        $progId      = !empty($_POST['program_id']) ? (int)$_POST['program_id'] : null;
-        $rawVarId    = (int)($_POST['raw_variant_id'] ?? 0);
-        $consumedQty = (float)($_POST['consumed_qty'] ?? 0);
-        $cutPieces   = (int)($_POST['cut_pieces'] ?? 0);
-        $wastageQty  = (float)($_POST['wastage_qty'] ?? 0);
-        $notes       = trim($_POST['notes'] ?? '');
+        $cutPieces  = (int)($_POST['cut_pieces'] ?? $cut['cut_pieces']);
+        $wastageQty = (float)($_POST['wastage_qty'] ?? $cut['wastage_qty']);
+        $notes      = trim($_POST['notes'] ?? $cut['notes']);
 
-        if (!$rawVarId || $consumedQty <= 0 || $cutPieces <= 0) {
-            $this->flash('error', 'Raw Fabric Variant, Consumed Quantity, and Cut Pieces are required.');
+        try {
+            DB::query(
+                "UPDATE cutting_logs SET cut_pieces = ?, wastage_qty = ?, notes = ? WHERE id = ?",
+                [$cutPieces, $wastageQty, $notes, $id]
+            );
+            $this->flash('success', "Cutting log '{$cut['log_no']}' updated successfully.");
+        } catch (Exception $e) {
+            $this->flash('error', 'Failed to update cutting log: ' . $e->getMessage());
+        }
+
+        $this->redirect('/m/cutting_wastage');
+    }
+
+    public function deleteCutting(): void {
+        $this->validateCsrf();
+        $id = (int)($_POST['id'] ?? 0);
+        $cut = DB::fetch("SELECT * FROM cutting_logs WHERE id = ?", [$id]);
+        if (!$cut) {
+            $this->flash('error', 'Cutting log not found.');
             $this->redirect('/m/cutting_wastage');
         }
 
         DB::beginTransaction();
         try {
-            $lotNo = 'CUT-' . date('Ymd') . '-' . rand(100, 999);
-
-            DB::query(
-                "INSERT INTO cutting_logs (concern_id, lot_no, program_id, raw_variant_id, consumed_qty, cut_pieces, wastage_qty, notes, created_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())",
-                [$cid, $lotNo, $progId, $rawVarId, $consumedQty, $cutPieces, $wastageQty, $notes]
-            );
-            $cutId = (int)DB::lastInsertId();
-
-            // Single stock gateway: deduct consumed fabric from warehouse stock
+            // Restore consumed stock
             StockService::move(
-                $cid,
-                $rawVarId,
+                $cut['concern_id'],
+                $cut['raw_variant_id'],
                 'Main Store',
+                (float)$cut['consumed_qty'],
                 0.00,
-                $consumedQty,
-                'Cutting',
-                $cutId,
-                "Cutting Lot [{$lotNo}]: Consumed {$consumedQty} units to produce {$cutPieces} cut pieces",
+                'Cutting & Wastage',
+                $id,
+                "Reversal of deleted cutting job [{$cut['log_no']}]",
                 Auth::id()
             );
 
+            DB::query("DELETE FROM cutting_logs WHERE id = ?", [$id]);
             DB::commit();
-            $this->flash('success', "Cutting Lot '{$lotNo}' recorded! Deducted {$consumedQty} fabric units from stock.");
+            $this->flash('success', "Cutting log '{$cut['log_no']}' deleted and consumed stock restored.");
         } catch (Exception $e) {
             DB::rollBack();
-            $this->flash('error', 'Cutting deduction failed: ' . $e->getMessage());
+            $this->flash('error', 'Failed to delete cutting log: ' . $e->getMessage());
         }
 
         $this->redirect('/m/cutting_wastage');
@@ -1977,6 +3013,51 @@ class ProductionController extends Controller {
         } catch (Exception $e) {
             DB::rollBack();
             $this->flash('error', 'Stitching entry error: ' . $e->getMessage());
+        }
+
+        $this->redirect('/m/stitching_wastage');
+    }
+
+    public function updateStitching(): void {
+        $this->validateCsrf();
+        $id = (int)($_POST['id'] ?? 0);
+        $stt = DB::fetch("SELECT * FROM stitching_logs WHERE id = ?", [$id]);
+        if (!$stt) {
+            $this->flash('error', 'Stitching log not found.');
+            $this->redirect('/m/stitching_wastage');
+        }
+
+        $stitchedPcs = (int)($_POST['stitched_pieces'] ?? $stt['stitched_pieces']);
+        $wastagePcs  = (int)($_POST['wastage_pieces'] ?? $stt['wastage_pieces']);
+        $notes       = trim($_POST['notes'] ?? $stt['notes']);
+
+        try {
+            DB::query(
+                "UPDATE stitching_logs SET stitched_pieces = ?, wastage_pieces = ?, notes = ? WHERE id = ?",
+                [$stitchedPcs, $wastagePcs, $notes, $id]
+            );
+            $this->flash('success', "Stitching log '{$stt['log_no']}' updated successfully.");
+        } catch (Exception $e) {
+            $this->flash('error', 'Failed to update stitching log: ' . $e->getMessage());
+        }
+
+        $this->redirect('/m/stitching_wastage');
+    }
+
+    public function deleteStitching(): void {
+        $this->validateCsrf();
+        $id = (int)($_POST['id'] ?? 0);
+        $stt = DB::fetch("SELECT * FROM stitching_logs WHERE id = ?", [$id]);
+        if (!$stt) {
+            $this->flash('error', 'Stitching log not found.');
+            $this->redirect('/m/stitching_wastage');
+        }
+
+        try {
+            DB::query("DELETE FROM stitching_logs WHERE id = ?", [$id]);
+            $this->flash('success', "Stitching log '{$stt['log_no']}' deleted successfully.");
+        } catch (Exception $e) {
+            $this->flash('error', 'Failed to delete stitching log: ' . $e->getMessage());
         }
 
         $this->redirect('/m/stitching_wastage');
@@ -2072,5 +3153,419 @@ class ProductionController extends Controller {
         }
 
         $this->redirect('/m/qc_stocks');
+    }
+
+    public function updateQc(): void {
+        $this->validateCsrf();
+        $id = (int)($_POST['id'] ?? 0);
+        $qc = DB::fetch("SELECT * FROM qc_inspections WHERE id = ?", [$id]);
+        if (!$qc) {
+            $this->flash('error', 'QC inspection not found.');
+            $this->redirect('/m/qc_stocks');
+        }
+
+        $inspectedQty = (float)($_POST['inspected_qty'] ?? $qc['inspected_qty']);
+        $newPassed    = (float)($_POST['passed_qty'] ?? $qc['passed_qty']);
+        $rejectedQty  = (float)($_POST['rejected_qty'] ?? $qc['rejected_qty']);
+        $location     = trim($_POST['location'] ?? $qc['location']);
+        $defectNotes  = trim($_POST['defect_notes'] ?? $qc['defect_notes']);
+
+        DB::beginTransaction();
+        try {
+            $diff = $newPassed - (float)$qc['passed_qty'];
+            if ($diff != 0) {
+                if ($diff > 0) {
+                    StockService::move($qc['concern_id'], $qc['variant_id'], $location, $diff, 0.00, 'QC Stocks', $id, "Updated QC Inspection [{$qc['qc_no']}]: Additional approved units", Auth::id());
+                } else {
+                    StockService::move($qc['concern_id'], $qc['variant_id'], $location, 0.00, abs($diff), 'QC Stocks', $id, "Updated QC Inspection [{$qc['qc_no']}]: Reduced approved units", Auth::id());
+                }
+            }
+
+            DB::query(
+                "UPDATE qc_inspections SET inspected_qty = ?, passed_qty = ?, rejected_qty = ?, location = ?, defect_notes = ? WHERE id = ?",
+                [$inspectedQty, $newPassed, $rejectedQty, $location, $defectNotes, $id]
+            );
+
+            DB::commit();
+            $this->flash('success', "QC Inspection '{$qc['qc_no']}' updated successfully.");
+        } catch (Exception $e) {
+            DB::rollBack();
+            $this->flash('error', 'Failed to update QC inspection: ' . $e->getMessage());
+        }
+
+        $this->redirect('/m/qc_stocks');
+    }
+
+    public function deleteQc(): void {
+        $this->validateCsrf();
+        $id = (int)($_POST['id'] ?? 0);
+        $qc = DB::fetch("SELECT * FROM qc_inspections WHERE id = ?", [$id]);
+        if (!$qc) {
+            $this->flash('error', 'QC inspection not found.');
+            $this->redirect('/m/qc_stocks');
+        }
+
+        DB::beginTransaction();
+        try {
+            // Reverse approved stock
+            if ((float)$qc['passed_qty'] > 0) {
+                StockService::move(
+                    $qc['concern_id'],
+                    $qc['variant_id'],
+                    $qc['location'],
+                    0.00,
+                    (float)$qc['passed_qty'],
+                    'QC Stocks',
+                    $id,
+                    "Reversal of deleted QC Inspection [{$qc['qc_no']}]",
+                    Auth::id()
+                );
+            }
+
+            DB::query("DELETE FROM qc_inspections WHERE id = ?", [$id]);
+            DB::commit();
+            $this->flash('success', "QC Inspection '{$qc['qc_no']}' deleted and stock reversed.");
+        } catch (Exception $e) {
+            DB::rollBack();
+            $this->flash('error', 'Failed to delete QC inspection: ' . $e->getMessage());
+        }
+
+        $this->redirect('/m/qc_stocks');
+    }
+
+    public function exportCatalogProgram(): void {
+        $cid = Auth::concernId();
+        $format = strtolower($_GET['format'] ?? 'excel');
+        $period = $_GET['period'] ?? 'all';
+        $singleDate = $_GET['single_date'] ?? null;
+        $fromDate = $_GET['from_date'] ?? null;
+        $toDate = $_GET['to_date'] ?? null;
+
+        $dateScope = \App\Services\ExportService::resolveDateRange($period, $singleDate, $fromDate, $toDate);
+
+        $sql = "SELECT pp.*, c.name AS catalog_name, v.name AS target_variant_name, v.sku_code,
+                       con.name AS concern_name, con.code AS concern_code
+                FROM production_programs pp
+                LEFT JOIN catalogs c ON pp.catalog_id = c.id
+                JOIN variants v ON pp.target_variant_id = v.id
+                LEFT JOIN concerns con ON pp.concern_id = con.id";
+        $params = [];
+        $where = [];
+        if ($cid) {
+            $where[] = "pp.concern_id = ?";
+            $params[] = $cid;
+        }
+        if ($dateScope['start_date'] && $dateScope['end_date']) {
+            $where[] = "DATE(pp.created_at) BETWEEN ? AND ?";
+            $params[] = $dateScope['start_date'];
+            $params[] = $dateScope['end_date'];
+        }
+        if (!empty($where)) {
+            $sql .= " WHERE " . implode(" AND ", $where);
+        }
+        $sql .= " ORDER BY pp.id DESC";
+        $programs = DB::fetchAll($sql, $params);
+
+        $headers = [
+            'Program No', 'Catalog / Style', 'SKU Code', 'Target Product', 
+            'Planned Qty', 'Produced Qty', 'Wastage Qty', 'Status', 'Start Date', 'End Date', 'Concern'
+        ];
+
+        $rows = [];
+        $totPlanned = 0; $totProd = 0; $totWaste = 0;
+        foreach ($programs as $p) {
+            $planned = (int)($p['planned_qty'] ?? 0);
+            $produced = (int)($p['produced_qty'] ?? 0);
+            $waste = (int)($p['wastage_qty'] ?? 0);
+            $totPlanned += $planned;
+            $totProd += $produced;
+            $totWaste += $waste;
+
+            $endDate = $p['end_date'] ?? $p['target_date'] ?? null;
+            $rows[] = [
+                $p['program_no'],
+                $p['catalog_name'] ?: 'Custom Production',
+                $p['sku_code'],
+                $p['target_variant_name'],
+                $planned,
+                $produced,
+                $waste,
+                strtoupper($p['status']),
+                $p['start_date'] ? date('d M Y', strtotime($p['start_date'])) : '-',
+                $endDate ? date('d M Y', strtotime($endDate)) : '-',
+                $p['concern_name'] ?? 'Consolidated'
+            ];
+        }
+
+        $totals = ['Total Programs: ' . count($programs), '', '', '', $totPlanned, $totProd, $totWaste, '', '', '', ''];
+        $metadata = [
+            'Report Title' => 'Production Catalogs & Scheduling Programs',
+            'Scope / Period' => $dateScope['label'],
+            'Generated At' => date('d M Y, h:i A'),
+            'Total Programs' => count($programs),
+            'Total Planned Output' => number_format($totPlanned)
+        ];
+
+        $filename = 'production_programs_' . date('Ymd_His');
+
+        if ($format === 'pdf') {
+            \App\Services\ExportService::renderPdfView('Production Scheduling Programs Report', $metadata, $headers, $rows, $totals);
+        } elseif ($format === 'csv') {
+            \App\Services\ExportService::downloadCsv($filename, $headers, $rows, $totals);
+        } else {
+            \App\Services\ExportService::downloadExcel($filename, 'Production Scheduling Programs Report', $metadata, $headers, $rows, $totals);
+        }
+    }
+
+    public function exportCutting(): void {
+        $cid = Auth::concernId();
+        $format = strtolower($_GET['format'] ?? 'excel');
+        $period = $_GET['period'] ?? 'all';
+        $singleDate = $_GET['single_date'] ?? null;
+        $fromDate = $_GET['from_date'] ?? null;
+        $toDate = $_GET['to_date'] ?? null;
+
+        $dateScope = \App\Services\ExportService::resolveDateRange($period, $singleDate, $fromDate, $toDate);
+
+        $sql = "SELECT cl.*, pp.program_no, v.name AS raw_variant_name, v.sku_code,
+                       con.name AS concern_name, con.code AS concern_code
+                FROM cutting_logs cl
+                LEFT JOIN production_programs pp ON cl.program_id = pp.id
+                JOIN variants v ON cl.raw_variant_id = v.id
+                LEFT JOIN concerns con ON cl.concern_id = con.id";
+        $params = [];
+        $where = [];
+        if ($cid) {
+            $where[] = "cl.concern_id = ?";
+            $params[] = $cid;
+        }
+        if ($dateScope['start_date'] && $dateScope['end_date']) {
+            $where[] = "DATE(cl.created_at) BETWEEN ? AND ?";
+            $params[] = $dateScope['start_date'];
+            $params[] = $dateScope['end_date'];
+        }
+        if (!empty($where)) {
+            $sql .= " WHERE " . implode(" AND ", $where);
+        }
+        $sql .= " ORDER BY cl.id DESC";
+        $logs = DB::fetchAll($sql, $params);
+
+        $headers = [
+            'Log No', 'Date', 'Program Ref', 'Raw Fabric / Variant', 'SKU', 
+            'Input Fabric (Mtr/Kg)', 'Cut Pieces', 'Wastage (Kg)', 'Wastage %', 'Notes', 'Concern'
+        ];
+
+        $rows = [];
+        $totInput = 0; $totCut = 0; $totWaste = 0;
+        foreach ($logs as $l) {
+            $inp = (float)$l['input_fabric_qty'];
+            $cut = (int)$l['cut_pieces'];
+            $wst = (float)$l['wastage_fabric_qty'];
+            $pct = $inp > 0 ? round(($wst / $inp) * 100, 1) . '%' : '0%';
+
+            $totInput += $inp; $totCut += $cut; $totWaste += $wst;
+
+            $rows[] = [
+                $l['log_no'],
+                date('d M Y, h:i A', strtotime($l['created_at'])),
+                $l['program_no'] ?: 'Direct',
+                $l['raw_variant_name'],
+                $l['sku_code'],
+                $inp,
+                $cut,
+                $wst,
+                $pct,
+                $l['notes'] ?: '-',
+                $l['concern_name'] ?? 'Consolidated'
+            ];
+        }
+
+        $totals = ['Total Logs: ' . count($logs), '', '', '', '', $totInput, $totCut, $totWaste, '', '', ''];
+        $metadata = [
+            'Report Title' => 'Fabric Cutting Operations & Material Wastage Audit',
+            'Scope / Period' => $dateScope['label'],
+            'Generated At' => date('d M Y, h:i A'),
+            'Total Cutting Logs' => count($logs),
+            'Total Cut Pieces' => number_format($totCut),
+            'Total Fabric Input' => number_format($totInput, 2)
+        ];
+
+        $filename = 'cutting_wastage_' . date('Ymd_His');
+
+        if ($format === 'pdf') {
+            \App\Services\ExportService::renderPdfView('Cutting & Wastage Log Report', $metadata, $headers, $rows, $totals);
+        } elseif ($format === 'csv') {
+            \App\Services\ExportService::downloadCsv($filename, $headers, $rows, $totals);
+        } else {
+            \App\Services\ExportService::downloadExcel($filename, 'Cutting & Wastage Log Report', $metadata, $headers, $rows, $totals);
+        }
+    }
+
+    public function exportStitching(): void {
+        $cid = Auth::concernId();
+        $format = strtolower($_GET['format'] ?? 'excel');
+        $period = $_GET['period'] ?? 'all';
+        $singleDate = $_GET['single_date'] ?? null;
+        $fromDate = $_GET['from_date'] ?? null;
+        $toDate = $_GET['to_date'] ?? null;
+
+        $dateScope = \App\Services\ExportService::resolveDateRange($period, $singleDate, $fromDate, $toDate);
+
+        $sql = "SELECT sl.*, pp.program_no, v.name AS produced_variant_name, v.sku_code,
+                       con.name AS concern_name, con.code AS concern_code
+                FROM stitching_logs sl
+                LEFT JOIN production_programs pp ON sl.program_id = pp.id
+                JOIN variants v ON sl.produced_variant_id = v.id
+                LEFT JOIN concerns con ON sl.concern_id = con.id";
+        $params = [];
+        $where = [];
+        if ($cid) {
+            $where[] = "sl.concern_id = ?";
+            $params[] = $cid;
+        }
+        if ($dateScope['start_date'] && $dateScope['end_date']) {
+            $where[] = "DATE(sl.created_at) BETWEEN ? AND ?";
+            $params[] = $dateScope['start_date'];
+            $params[] = $dateScope['end_date'];
+        }
+        if (!empty($where)) {
+            $sql .= " WHERE " . implode(" AND ", $where);
+        }
+        $sql .= " ORDER BY sl.id DESC";
+        $logs = DB::fetchAll($sql, $params);
+
+        $headers = [
+            'Log No', 'Date', 'Program Ref', 'Finished Variant', 'SKU', 
+            'Input Panels', 'Stitched Pcs', 'Defective Pcs', 'Defect %', 'Notes', 'Concern'
+        ];
+
+        $rows = [];
+        $totIn = 0; $totStitch = 0; $totWaste = 0;
+        foreach ($logs as $l) {
+            $in = (int)$l['input_pieces'];
+            $st = (int)$l['stitched_pieces'];
+            $ws = (int)$l['wastage_pieces'];
+            $pct = $in > 0 ? round(($ws / $in) * 100, 1) . '%' : '0%';
+
+            $totIn += $in; $totStitch += $st; $totWaste += $ws;
+
+            $rows[] = [
+                $l['log_no'],
+                date('d M Y, h:i A', strtotime($l['created_at'])),
+                $l['program_no'] ?: 'Direct',
+                $l['produced_variant_name'],
+                $l['sku_code'],
+                $in,
+                $st,
+                $ws,
+                $pct,
+                $l['notes'] ?: '-',
+                $l['concern_name'] ?? 'Consolidated'
+            ];
+        }
+
+        $totals = ['Total Records: ' . count($logs), '', '', '', '', $totIn, $totStitch, $totWaste, '', '', ''];
+        $metadata = [
+            'Report Title' => 'Garment Stitching Production & Defect Tracking',
+            'Scope / Period' => $dateScope['label'],
+            'Generated At' => date('d M Y, h:i A'),
+            'Total Stitching Logs' => count($logs),
+            'Total Finished Garments' => number_format($totStitch)
+        ];
+
+        $filename = 'stitching_wastage_' . date('Ymd_His');
+
+        if ($format === 'pdf') {
+            \App\Services\ExportService::renderPdfView('Stitching Production & Defect Report', $metadata, $headers, $rows, $totals);
+        } elseif ($format === 'csv') {
+            \App\Services\ExportService::downloadCsv($filename, $headers, $rows, $totals);
+        } else {
+            \App\Services\ExportService::downloadExcel($filename, 'Stitching Production & Defect Report', $metadata, $headers, $rows, $totals);
+        }
+    }
+
+    public function exportQc(): void {
+        $cid = Auth::concernId();
+        $format = strtolower($_GET['format'] ?? 'excel');
+        $period = $_GET['period'] ?? 'all';
+        $singleDate = $_GET['single_date'] ?? null;
+        $fromDate = $_GET['from_date'] ?? null;
+        $toDate = $_GET['to_date'] ?? null;
+
+        $dateScope = \App\Services\ExportService::resolveDateRange($period, $singleDate, $fromDate, $toDate);
+
+        $sql = "SELECT qc.*, v.name AS variant_name, v.sku_code, v.size, u.name AS inspector_name,
+                       con.name AS concern_name, con.code AS concern_code
+                FROM qc_inspections qc
+                JOIN variants v ON qc.variant_id = v.id
+                LEFT JOIN concerns con ON qc.concern_id = con.id
+                LEFT JOIN users u ON qc.inspector_id = u.id";
+        $params = [];
+        $where = [];
+        if ($cid) {
+            $where[] = "qc.concern_id = ?";
+            $params[] = $cid;
+        }
+        if ($dateScope['start_date'] && $dateScope['end_date']) {
+            $where[] = "DATE(qc.created_at) BETWEEN ? AND ?";
+            $params[] = $dateScope['start_date'];
+            $params[] = $dateScope['end_date'];
+        }
+        if (!empty($where)) {
+            $sql .= " WHERE " . implode(" AND ", $where);
+        }
+        $sql .= " ORDER BY qc.id DESC";
+        $inspections = DB::fetchAll($sql, $params);
+
+        $headers = [
+            'QC No', 'Date', 'SKU Code', 'Variant Name', 'Size', 
+            'Inspected Qty', 'Passed Qty', 'Rejected Qty', 'Pass Rate %', 'Location', 'Inspector', 'Concern'
+        ];
+
+        $rows = [];
+        $totInsp = 0; $totPass = 0; $totRej = 0;
+        foreach ($inspections as $q) {
+            $ins = (float)$q['inspected_qty'];
+            $pas = (float)$q['passed_qty'];
+            $rej = (float)$q['rejected_qty'];
+            $rate = $ins > 0 ? round(($pas / $ins) * 100, 1) . '%' : '100%';
+
+            $totInsp += $ins; $totPass += $pas; $totRej += $rej;
+
+            $rows[] = [
+                $q['qc_no'],
+                date('d M Y, h:i A', strtotime($q['created_at'])),
+                $q['sku_code'],
+                $q['variant_name'],
+                $q['size'] ?? '-',
+                $ins,
+                $pas,
+                $rej,
+                $rate,
+                $q['location'] ?? 'QC Department',
+                $q['inspector_name'] ?? 'QC Officer',
+                $q['concern_name'] ?? 'Consolidated'
+            ];
+        }
+
+        $totals = ['Total Inspections: ' . count($inspections), '', '', '', '', $totInsp, $totPass, $totRej, '', '', '', ''];
+        $metadata = [
+            'Report Title' => 'Quality Control (QC) & Stock Approval Audit',
+            'Scope / Period' => $dateScope['label'],
+            'Generated At' => date('d M Y, h:i A'),
+            'Total Inspections' => count($inspections),
+            'Total Passed Units' => number_format($totPass, 2),
+            'Total Rejected Units' => number_format($totRej, 2)
+        ];
+
+        $filename = 'qc_inspections_' . date('Ymd_His');
+
+        if ($format === 'pdf') {
+            \App\Services\ExportService::renderPdfView('QC & Stock Approval Audit Report', $metadata, $headers, $rows, $totals);
+        } elseif ($format === 'csv') {
+            \App\Services\ExportService::downloadCsv($filename, $headers, $rows, $totals);
+        } else {
+            \App\Services\ExportService::downloadExcel($filename, 'QC & Stock Approval Audit Report', $metadata, $headers, $rows, $totals);
+        }
     }
 }

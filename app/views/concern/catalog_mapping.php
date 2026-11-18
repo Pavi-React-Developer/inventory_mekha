@@ -38,6 +38,21 @@
         </div>
     </div>
 
+    <?php if (!empty($flashSuccess)): ?>
+        <div class="alert alert-success alert-dismissible fade show rounded-3 shadow-xs d-flex align-items-center mb-3" role="alert">
+            <i class="bi bi-check-circle-fill fs-5 me-2"></i>
+            <div><?= htmlspecialchars($flashSuccess) ?></div>
+            <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    <?php endif; ?>
+    <?php if (!empty($flashError)): ?>
+        <div class="alert alert-danger alert-dismissible fade show rounded-3 shadow-xs d-flex align-items-center mb-3" role="alert">
+            <i class="bi bi-exclamation-triangle-fill fs-5 me-2"></i>
+            <div><?= htmlspecialchars($flashError) ?></div>
+            <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    <?php endif; ?>
+
     <!-- Summary Metrics Row -->
     <div class="row g-3 mb-4">
         <div class="col-md-3">
@@ -583,7 +598,7 @@
 <div class="modal fade" id="modalConfirmUnmap" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <form action="<?= \App\Core\Controller::url('/production/catalog-mapping/unmap') ?>" method="POST" class="modal-content border-0 shadow">
-            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken ?? '') ?>">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(!empty($csrfToken) ? $csrfToken : \App\Core\Auth::csrfToken()) ?>">
             <input type="hidden" name="purchase_bill_item_id" id="unmapItemId" value="">
             <div class="modal-header bg-danger text-white">
                 <h6 class="modal-title fw-bold"><i class="bi bi-exclamation-triangle-fill me-2"></i> Unmap Finished Good Item</h6>

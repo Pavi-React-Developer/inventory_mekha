@@ -9,6 +9,15 @@
         </button>
     </div>
 
+    <!-- Export Intelligence Toolbar -->
+    <?php
+    $exportTitle = 'Export Concern Directory (Excel & PDF)';
+    $exportSubtitle = 'Download registered enterprise business units, tenant configurations & licensed modules';
+    $exportUrl = \App\Core\Controller::url('/admin/concerns/export');
+    $prefix = 'concerns_exp';
+    include __DIR__ . '/../partials/export_card.php';
+    ?>
+
     <!-- Concerns List Card -->
     <div class="card border-0 shadow-sm rounded-3">
         <div class="card-header bg-white py-3 border-bottom">
@@ -24,7 +33,7 @@
                         <th>Active Modules</th>
                         <th>Catalog Items</th>
                         <th>Status</th>
-                        <th class="text-end">Module Licenses</th>
+                        <th class="text-end">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -57,9 +66,24 @@
                                 </span>
                             </td>
                             <td class="text-end">
-                                <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalModules<?= $c['id'] ?>">
-                                    <i class="bi bi-toggles"></i> Manage Modules
-                                </button>
+                                <div class="d-inline-flex align-items-center gap-1">
+                                    <button type="button" class="btn btn-sm btn-outline-info" onclick='openViewConcernModal(<?= json_encode($c, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>)' title="View Concern Details">
+                                        <i class="bi bi-eye"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalModules<?= $c['id'] ?>" title="Manage Modules">
+                                        <i class="bi bi-toggles"></i> Modules
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick='openEditConcernModal(<?= json_encode($c, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>)' title="Edit Concern Profile">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <form action="<?= \App\Core\Controller::url('/admin/concerns/delete') ?>" method="POST" class="d-inline" onsubmit="return confirm('Permanently delete concern <?= htmlspecialchars(addslashes($c['name'])) ?> and all its associated data?');">
+                                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
+                                        <input type="hidden" name="id" value="<?= $c['id'] ?>">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete Concern">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                </div>
                             </td>
                         </tr>
 
@@ -249,7 +273,124 @@
     </div>
 </div>
 
+<!-- EDIT CONCERN MODAL -->
+<div class="modal fade" id="modalEditConcern" tabindex="-1">
+    <div class="modal-dialog">
+        <form action="<?= \App\Core\Controller::url('/admin/concerns/update') ?>" method="POST" class="modal-content">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
+            <input type="hidden" name="id" id="edit_concern_id" value="">
+
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold"><i class="bi bi-pencil-square me-1 text-primary"></i> Edit Business Concern</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-2 mb-3">
+                    <div class="col-md-8">
+                        <label class="form-label small fw-semibold">Concern Name *</label>
+                        <input type="text" name="name" id="edit_concern_name" class="form-control" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small fw-semibold">Code *</label>
+                        <input type="text" name="code" id="edit_concern_code" class="form-control text-uppercase" required>
+                    </div>
+                </div>
+                <div class="row g-2 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold">Phone</label>
+                        <input type="text" name="phone" id="edit_concern_phone" class="form-control">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold">Email</label>
+                        <input type="email" name="email" id="edit_concern_email" class="form-control">
+                    </div>
+                </div>
+                <div class="row g-2 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold">GSTIN</label>
+                        <input type="text" name="gstin" id="edit_concern_gstin" class="form-control text-uppercase">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold">Status *</label>
+                        <select name="status" id="edit_concern_status" class="form-select" required>
+                            <option value="active">Active</option>
+                            <option value="inactive">Inactive</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Physical Address</label>
+                    <textarea name="address" id="edit_concern_address" class="form-control" rows="2"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-primary px-4 fw-semibold">Update Concern</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- VIEW CONCERN PROFILE MODAL -->
+<div class="modal fade" id="modalViewConcern" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
+            <div class="modal-header border-bottom px-4 py-3 bg-light">
+                <div class="d-flex align-items-center gap-2">
+                    <span style="width: 36px; height: 36px; background: #e0f2fe; color: #0284c7; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1.15rem;">
+                        <i class="bi bi-building"></i>
+                    </span>
+                    <div>
+                        <h6 class="modal-title fw-bold text-dark mb-0" id="view_concern_name">Concern Details</h6>
+                        <small class="badge bg-dark font-monospace" id="view_concern_code"></small>
+                    </div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="d-flex justify-content-between align-items-center p-3 rounded-3 mb-3" style="background: #f8fafc; border: 1px solid #e2e8f0;">
+                    <div>
+                        <span class="text-secondary small d-block">Operating Status</span>
+                        <span class="badge" id="view_concern_status_badge">Active</span>
+                    </div>
+                    <div class="text-end">
+                        <span class="text-secondary small d-block">Catalog Items</span>
+                        <span class="fw-bold text-dark font-monospace" id="view_concern_variants">0 Variants</span>
+                    </div>
+                </div>
+
+                <ul class="list-group list-group-flush small">
+                    <li class="list-group-item px-0 d-flex justify-content-between">
+                        <span class="text-muted"><i class="bi bi-telephone text-primary me-2"></i>Phone:</span>
+                        <strong class="text-dark" id="view_concern_phone">-</strong>
+                    </li>
+                    <li class="list-group-item px-0 d-flex justify-content-between">
+                        <span class="text-muted"><i class="bi bi-envelope text-primary me-2"></i>Email:</span>
+                        <strong class="text-dark" id="view_concern_email">-</strong>
+                    </li>
+                    <li class="list-group-item px-0 d-flex justify-content-between">
+                        <span class="text-muted"><i class="bi bi-receipt text-primary me-2"></i>GSTIN:</span>
+                        <span class="badge bg-light text-dark border font-monospace" id="view_concern_gstin">Unregistered</span>
+                    </li>
+                    <li class="list-group-item px-0 d-flex justify-content-between">
+                        <span class="text-muted"><i class="bi bi-check2-circle text-primary me-2"></i>Active Modules:</span>
+                        <span class="badge bg-primary bg-opacity-10 text-primary border" id="view_concern_modules">0 Modules</span>
+                    </li>
+                    <li class="list-group-item px-0">
+                        <span class="text-muted d-block mb-1"><i class="bi bi-geo-alt text-primary me-2"></i>Address:</span>
+                        <div class="text-dark p-2 bg-light rounded" id="view_concern_address">-</div>
+                    </li>
+                </ul>
+            </div>
+            <div class="modal-footer border-top px-4 py-2 bg-light">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
+<<<<<<< HEAD
 const createConcernModal = document.getElementById('modalCreateConcern');
 const createConcernForm = createConcernModal.querySelector('form');
 const newConcernName = document.getElementById('newConcernName');
@@ -294,6 +435,45 @@ createConcernForm.querySelectorAll('.module-check').forEach(checkbox => {
     });
 });
 
+=======
+function openViewConcernModal(con) {
+    if (!con) return;
+    document.getElementById('view_concern_name').innerText = con.name || 'Concern';
+    document.getElementById('view_concern_code').innerText = con.code || '';
+    document.getElementById('view_concern_phone').innerText = con.phone || '-';
+    document.getElementById('view_concern_email').innerText = con.email || '-';
+    document.getElementById('view_concern_gstin').innerText = con.gstin || 'Unregistered';
+    document.getElementById('view_concern_address').innerText = con.address || 'No address specified';
+    document.getElementById('view_concern_variants').innerText = (con.variants_count || 0) + ' Variants';
+    document.getElementById('view_concern_modules').innerText = (con.active_modules_count || 0) + ' Active Modules';
+
+    const statusBadge = document.getElementById('view_concern_status_badge');
+    if (con.status === 'active') {
+        statusBadge.className = 'badge bg-success';
+        statusBadge.innerText = 'Active';
+    } else {
+        statusBadge.className = 'badge bg-secondary';
+        statusBadge.innerText = 'Inactive';
+    }
+
+    const modal = new bootstrap.Modal(document.getElementById('modalViewConcern'));
+    modal.show();
+}
+function openEditConcernModal(con) {
+    if (!con) return;
+    document.getElementById('edit_concern_id').value = con.id || '';
+    document.getElementById('edit_concern_name').value = con.name || '';
+    document.getElementById('edit_concern_code').value = con.code || '';
+    document.getElementById('edit_concern_phone').value = con.phone || '';
+    document.getElementById('edit_concern_email').value = con.email || '';
+    document.getElementById('edit_concern_gstin').value = con.gstin || '';
+    document.getElementById('edit_concern_address').value = con.address || '';
+    document.getElementById('edit_concern_status').value = con.status || 'active';
+
+    const modal = new bootstrap.Modal(document.getElementById('modalEditConcern'));
+    modal.show();
+}
+>>>>>>> ddd9e83ddd4d6689ac8e63081f824f6478e49dbe
 function selectAllModules(check) {
     document.querySelectorAll('.module-check').forEach(cb => cb.checked = check);
     moduleSelectionError.classList.toggle('d-none', check);

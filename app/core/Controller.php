@@ -17,8 +17,9 @@ abstract class Controller {
 
         // Flash messages
         $flashSuccess = $_SESSION['flash_success'] ?? null;
+        $flashWarning = $_SESSION['flash_warning'] ?? null;
         $flashError   = $_SESSION['flash_error'] ?? null;
-        unset($_SESSION['flash_success'], $_SESSION['flash_error']);
+        unset($_SESSION['flash_success'], $_SESSION['flash_warning'], $_SESSION['flash_error']);
 
         // Load modules for sidebar
         $sidebarModules = [];

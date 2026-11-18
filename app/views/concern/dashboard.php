@@ -55,6 +55,45 @@
                 </button>
             </div>
         </div>
+
+        <!-- 1-Click Fast Track Date Shortcuts -->
+        <div class="d-flex flex-wrap align-items-center gap-2 pt-3 mt-3 border-top" style="font-size: 0.82rem;">
+            <span class="text-secondary fw-semibold"><i class="bi bi-lightning-charge text-warning"></i> 1-Click Fast Export:</span>
+            
+            <a href="<?= \App\Core\Controller::url('/dashboard/export?format=excel&period=single_day') ?>" class="badge text-decoration-none px-2 py-1 fw-semibold d-flex align-items-center gap-1" style="background: #ecfdf5; color: #15803d; border: 1px solid #bbf7d0;">
+                <i class="bi bi-file-earmark-excel"></i> Single Day Excel
+            </a>
+            <a href="<?= \App\Core\Controller::url('/dashboard/export?format=pdf&period=single_day') ?>" target="_blank" class="badge text-decoration-none px-2 py-1 fw-semibold d-flex align-items-center gap-1" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca;">
+                <i class="bi bi-file-earmark-pdf"></i> Single Day PDF
+            </a>
+
+            <span class="text-muted">|</span>
+
+            <a href="<?= \App\Core\Controller::url('/dashboard/export?format=excel&period=this_month') ?>" class="badge text-decoration-none px-2 py-1 fw-semibold d-flex align-items-center gap-1" style="background: #ecfdf5; color: #15803d; border: 1px solid #bbf7d0;">
+                <i class="bi bi-file-earmark-excel"></i> Monthly Excel
+            </a>
+            <a href="<?= \App\Core\Controller::url('/dashboard/export?format=pdf&period=this_month') ?>" target="_blank" class="badge text-decoration-none px-2 py-1 fw-semibold d-flex align-items-center gap-1" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca;">
+                <i class="bi bi-file-earmark-pdf"></i> Monthly PDF
+            </a>
+
+            <span class="text-muted">|</span>
+
+            <a href="<?= \App\Core\Controller::url('/dashboard/export?format=excel&period=3_months') ?>" class="badge text-decoration-none px-2 py-1 fw-semibold d-flex align-items-center gap-1" style="background: #ecfdf5; color: #15803d; border: 1px solid #bbf7d0;">
+                <i class="bi bi-file-earmark-excel"></i> 3 Months Excel
+            </a>
+            <a href="<?= \App\Core\Controller::url('/dashboard/export?format=pdf&period=3_months') ?>" target="_blank" class="badge text-decoration-none px-2 py-1 fw-semibold d-flex align-items-center gap-1" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca;">
+                <i class="bi bi-file-earmark-pdf"></i> 3 Months PDF
+            </a>
+
+            <span class="text-muted">|</span>
+
+            <a href="<?= \App\Core\Controller::url('/dashboard/export?format=excel&period=6_months') ?>" class="badge text-decoration-none px-2 py-1 fw-semibold d-flex align-items-center gap-1" style="background: #ecfdf5; color: #15803d; border: 1px solid #bbf7d0;">
+                <i class="bi bi-file-earmark-excel"></i> 6 Months Excel
+            </a>
+            <a href="<?= \App\Core\Controller::url('/dashboard/export?format=pdf&period=6_months') ?>" target="_blank" class="badge text-decoration-none px-2 py-1 fw-semibold d-flex align-items-center gap-1" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca;">
+                <i class="bi bi-file-earmark-pdf"></i> 6 Months PDF
+            </a>
+        </div>
     </div>
 
     <!-- Concern KPI Cards -->

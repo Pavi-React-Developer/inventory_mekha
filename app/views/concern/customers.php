@@ -10,73 +10,14 @@
         </div>
     </div>
 
-    <!-- Export Report Card (Image 1 Top with Excel, PDF, Single Day & Monthly Scopes) -->
-    <div class="card border-0 shadow-sm rounded-4 p-3 bg-white mb-4" style="border: 1px solid #e2e8f0 !important;">
-        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
-            <div class="d-flex align-items-center gap-3">
-                <div id="export_icon_box" style="width: 44px; height: 44px; background: #ecfdf5; color: #16a34a; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.35rem; flex-shrink: 0; border: 1px solid #bbf7d0;">
-                    <i class="bi bi-file-earmark-excel" id="export_header_icon"></i>
-                </div>
-                <div>
-                    <h6 class="fw-bold text-dark mb-0">Export report</h6>
-                    <small class="text-muted">Choose format, date period (single day, monthly, 3/6 months), and scope</small>
-                </div>
-            </div>
-
-            <div class="d-flex flex-wrap align-items-center gap-2">
-                <!-- Format Selector -->
-                <div class="d-flex align-items-center gap-1">
-                    <label class="small text-muted mb-0 fw-semibold" style="font-size: 0.76rem;">Format:</label>
-                    <select id="export_format" class="form-select form-select-sm" style="width: 130px; border-radius: 8px; font-size: 0.84rem;">
-                        <option value="excel" selected>Excel (.xls)</option>
-                        <option value="pdf">PDF (.pdf)</option>
-                        <option value="csv">CSV (.csv)</option>
-                    </select>
-                </div>
-
-                <!-- Date Period Selector (Single Day, Monthly, 3 Months, 6 Months) -->
-                <div class="d-flex align-items-center gap-1">
-                    <label class="small text-muted mb-0 fw-semibold" style="font-size: 0.76rem;">Period:</label>
-                    <select id="export_period" class="form-select form-select-sm" style="width: 165px; border-radius: 8px; font-size: 0.84rem;">
-                        <option value="all" selected>All Time</option>
-                        <option value="single_day">Single Day</option>
-                        <option value="this_month">This Month</option>
-                        <option value="last_month">Last Month</option>
-                        <option value="3_months">Particular 3 Months</option>
-                        <option value="6_months">Six Months</option>
-                        <option value="custom">Custom Date Range</option>
-                    </select>
-                </div>
-
-                <!-- Single Date Input (Hidden unless single_day selected) -->
-                <div id="single_date_container" class="d-none align-items-center gap-1">
-                    <input type="date" id="export_single_date" class="form-control form-control-sm" value="<?= date('Y-m-d') ?>" style="width: 130px; border-radius: 8px; font-size: 0.82rem;">
-                </div>
-
-                <!-- Custom Range Inputs (Hidden unless custom selected) -->
-                <div id="custom_date_container" class="d-none align-items-center gap-1">
-                    <input type="date" id="export_from_date" class="form-control form-control-sm" value="<?= date('Y-m-01') ?>" style="width: 125px; border-radius: 8px; font-size: 0.82rem;">
-                    <span class="text-muted small">to</span>
-                    <input type="date" id="export_to_date" class="form-control form-control-sm" value="<?= date('Y-m-d') ?>" style="width: 125px; border-radius: 8px; font-size: 0.82rem;">
-                </div>
-
-                <!-- Data Scope Selector -->
-                <div class="d-flex align-items-center gap-1">
-                    <label class="small text-muted mb-0 fw-semibold" style="font-size: 0.76rem;">Scope:</label>
-                    <select id="export_data_scope" class="form-select form-select-sm" style="width: 140px; border-radius: 8px; font-size: 0.84rem;">
-                        <option value="current" selected>Current filters</option>
-                        <option value="all">All customers</option>
-                        <option value="orders_only">With orders only</option>
-                    </select>
-                </div>
-
-                <!-- Dynamic Export Action Button -->
-                <button type="button" id="btn_export_download" class="btn text-white btn-sm px-3 fw-bold d-flex align-items-center gap-2 shadow-sm" style="background: #16a34a; border-radius: 8px; height: 34px; font-size: 0.85rem; border: none; transition: all 0.2s;">
-                    <i class="bi bi-file-earmark-excel" id="btn_export_icon"></i> <span id="btn_export_label">Export Excel</span>
-                </button>
-            </div>
-        </div>
-    </div>
+    <!-- Export Intelligence Toolbar -->
+    <?php
+    $exportTitle = 'Export Customer Profiles & Directory (Excel & PDF)';
+    $exportSubtitle = 'Download registered client contacts, lifetime sales volume, loyalty profiles & purchase histories';
+    $exportUrl = \App\Core\Controller::url('/m/customers/export');
+    $prefix = 'cust_exp';
+    include __DIR__ . '/../partials/export_card.php';
+    ?>
 
     <!-- Section Title & Subheader (Image 1) -->
     <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
@@ -292,6 +233,13 @@
                                                 style="font-size: 0.78rem;">
                                             <i class="bi bi-pencil-square"></i> Edit
                                         </button>
+                                        <form action="<?= \App\Core\Controller::url('/m/customers/delete') ?>" method="POST" class="d-inline" onsubmit="return confirm('Delete customer <?= htmlspecialchars(addslashes($c['name'])) ?>?');">
+                                            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(\App\Core\Csrf::generateToken()) ?>">
+                                            <input type="hidden" name="id" value="<?= $c['id'] ?>">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger rounded-3 px-2 py-1" title="Delete Customer" style="font-size: 0.78rem;">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </form>
                                     </div>
                                 </td>
                             </tr>
