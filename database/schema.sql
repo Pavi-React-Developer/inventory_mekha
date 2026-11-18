@@ -88,6 +88,9 @@ CREATE TABLE IF NOT EXISTS `categories` (
     `id` INT AUTO_INCREMENT PRIMARY KEY,
     `concern_id` INT NOT NULL,
     `name` VARCHAR(100) NOT NULL,
+    `code` VARCHAR(20) NULL,
+    `default_hsn` VARCHAR(50) NULL,
+    `default_gst_rate` DECIMAL(5,2) NOT NULL DEFAULT 5.00,
     `status` ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX `idx_cat_concern` (`concern_id`),
@@ -99,11 +102,26 @@ CREATE TABLE IF NOT EXISTS `subcategories` (
     `concern_id` INT NOT NULL,
     `category_id` INT NOT NULL,
     `name` VARCHAR(100) NOT NULL,
+    `code` VARCHAR(20) NULL,
     `status` ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX `idx_subcat_concern` (`concern_id`),
     CONSTRAINT `fk_subcat_concern` FOREIGN KEY (`concern_id`) REFERENCES `concerns`(`id`) ON DELETE CASCADE,
     CONSTRAINT `fk_subcat_category` FOREIGN KEY (`category_id`) REFERENCES `categories`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `sub_subcategories` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `concern_id` INT NOT NULL,
+    `subcategory_id` INT NOT NULL,
+    `name` VARCHAR(100) NOT NULL,
+    `code` VARCHAR(20) NULL,
+    `status` ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX `idx_subsubcat_concern` (`concern_id`),
+    INDEX `idx_subsubcat_subcat` (`subcategory_id`),
+    CONSTRAINT `fk_subsubcat_concern` FOREIGN KEY (`concern_id`) REFERENCES `concerns`(`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_subsubcat_subcat` FOREIGN KEY (`subcategory_id`) REFERENCES `subcategories`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS `brands` (
@@ -120,10 +138,11 @@ CREATE TABLE IF NOT EXISTS `brands` (
 CREATE TABLE IF NOT EXISTS `variants` (
     `id` INT AUTO_INCREMENT PRIMARY KEY,
     `concern_id` INT NOT NULL,
+    `catalog_id` INT NULL,
     `sku_code` VARCHAR(50) NOT NULL,
     `name` VARCHAR(150) NOT NULL,
     `category_id` INT NOT NULL,
-    `subcategory_id` INT NOT NULL,
+    `subcategory_id` INT NULL,
     `brand_id` INT NULL,
     `size` VARCHAR(50) NULL,
     `weight` DECIMAL(10,3) NOT NULL DEFAULT 0.000,
@@ -137,9 +156,10 @@ CREATE TABLE IF NOT EXISTS `variants` (
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY `uk_concern_sku` (`concern_id`, `sku_code`),
     INDEX `idx_var_concern` (`concern_id`),
+    INDEX `idx_var_catalog` (`catalog_id`),
     CONSTRAINT `fk_var_concern` FOREIGN KEY (`concern_id`) REFERENCES `concerns`(`id`) ON DELETE CASCADE,
     CONSTRAINT `fk_var_cat` FOREIGN KEY (`category_id`) REFERENCES `categories`(`id`),
-    CONSTRAINT `fk_var_subcat` FOREIGN KEY (`subcategory_id`) REFERENCES `subcategories`(`id`),
+    CONSTRAINT `fk_var_subcat` FOREIGN KEY (`subcategory_id`) REFERENCES `subcategories`(`id`) ON DELETE SET NULL,
     CONSTRAINT `fk_var_brand` FOREIGN KEY (`brand_id`) REFERENCES `brands`(`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -421,9 +441,23 @@ CREATE TABLE IF NOT EXISTS `catalogs` (
     `id` INT AUTO_INCREMENT PRIMARY KEY,
     `concern_id` INT NOT NULL,
     `code` VARCHAR(50) NULL,
+    `style_code` VARCHAR(50) NULL,
+    `short_code` VARCHAR(50) NULL,
+    `category_id` INT NULL,
+    `subcategory_id` INT NULL,
+    `sub_sub_category_id` INT NULL,
+    `main_category_code` VARCHAR(20) NULL,
+    `sub_category_code` VARCHAR(20) NULL,
+    `sub_sub_category_code` VARCHAR(20) NULL,
+    `hierarchy_path` VARCHAR(255) NULL,
+    `hsn_code` VARCHAR(50) NULL,
+    `gst_rate` DECIMAL(5,2) NOT NULL DEFAULT 5.00,
+    `sizes` TEXT NULL,
+    `status` ENUM('active', 'inactive', 'in_house') NOT NULL DEFAULT 'in_house',
     `name` VARCHAR(150) NOT NULL,
     `description` TEXT NULL,
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX `idx_catlg_concern` (`concern_id`),
     CONSTRAINT `fk_catlg_concern` FOREIGN KEY (`concern_id`) REFERENCES `concerns`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -432,9 +466,11 @@ CREATE TABLE IF NOT EXISTS `production_programs` (
     `id` INT AUTO_INCREMENT PRIMARY KEY,
     `concern_id` INT NOT NULL,
     `program_no` VARCHAR(50) NOT NULL,
+    `program_name` VARCHAR(255) NULL,
+    `planner_name` VARCHAR(150) NULL,
     `catalog_id` INT NULL,
-    `target_variant_id` INT NOT NULL,
-    `planned_qty` DECIMAL(12,2) NOT NULL,
+    `target_variant_id` INT NULL,
+    `planned_qty` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
     `start_date` DATE NULL,
     `target_date` DATE NULL,
     `status` ENUM('planned', 'in_progress', 'completed', 'cancelled') NOT NULL DEFAULT 'planned',
@@ -442,7 +478,68 @@ CREATE TABLE IF NOT EXISTS `production_programs` (
     INDEX `idx_prog_concern` (`concern_id`),
     CONSTRAINT `fk_prog_concern` FOREIGN KEY (`concern_id`) REFERENCES `concerns`(`id`) ON DELETE CASCADE,
     CONSTRAINT `fk_prog_cat` FOREIGN KEY (`catalog_id`) REFERENCES `catalogs`(`id`) ON DELETE SET NULL,
-    CONSTRAINT `fk_prog_var` FOREIGN KEY (`target_variant_id`) REFERENCES `variants`(`id`)
+    CONSTRAINT `fk_prog_var` FOREIGN KEY (`target_variant_id`) REFERENCES `variants`(`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `program_rolls` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `concern_id` INT NOT NULL,
+    `program_id` INT NOT NULL,
+    `purchase_bill_item_id` INT NULL,
+    `roll_piece_tag` VARCHAR(100) NULL,
+    `fabric_name` VARCHAR(255) NULL,
+    `color` VARCHAR(100) NULL,
+    `unit` VARCHAR(50) NOT NULL DEFAULT 'kg',
+    `total_roll_qty` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    `allocated_qty` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    `target_pieces` INT NOT NULL DEFAULT 0,
+    `category_id` INT NULL,
+    `subcategory_id` INT NULL,
+    `sub_sub_category_id` INT NULL,
+    `catalog_id` INT NULL,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX `idx_prgroll_concern` (`concern_id`),
+    INDEX `idx_prgroll_program` (`program_id`),
+    INDEX `idx_prgroll_rollitem` (`purchase_bill_item_id`),
+    CONSTRAINT `fk_prgroll_concern` FOREIGN KEY (`concern_id`) REFERENCES `concerns`(`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_prgroll_program` FOREIGN KEY (`program_id`) REFERENCES `production_programs`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 20B. CATALOG MAPPINGS (PURCHASE FINISHED GOODS TO CATALOG)
+CREATE TABLE IF NOT EXISTS `catalog_mappings` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `concern_id` INT NOT NULL,
+    `purchase_bill_item_id` INT NOT NULL,
+    `catalog_id` INT NOT NULL,
+    `variant_id` INT NULL,
+    `category_id` INT NULL,
+    `subcategory_id` INT NULL,
+    `sub_sub_category_id` INT NULL,
+    `selected_sizes` TEXT NULL,
+    `selected_color` VARCHAR(100) NULL,
+    `status` ENUM('mapped', 'unmapped') NOT NULL DEFAULT 'mapped',
+    `notes` TEXT NULL,
+    `created_by` INT NULL,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+    INDEX `idx_cmap_concern` (`concern_id`),
+    INDEX `idx_cmap_pbi` (`purchase_bill_item_id`),
+    INDEX `idx_cmap_catalog` (`catalog_id`),
+    CONSTRAINT `fk_cmap_concern` FOREIGN KEY (`concern_id`) REFERENCES `concerns`(`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_cmap_pbi` FOREIGN KEY (`purchase_bill_item_id`) REFERENCES `purchase_bill_items`(`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_cmap_cat` FOREIGN KEY (`catalog_id`) REFERENCES `catalogs`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 20C. PRODUCT ATTRIBUTES (SIZES, COLORS, ATTRIBUTES)
+CREATE TABLE IF NOT EXISTS `product_attributes` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `concern_id` INT NOT NULL,
+    `attribute_type` VARCHAR(50) NOT NULL DEFAULT 'size',
+    `attribute_name` VARCHAR(100) NOT NULL,
+    `attribute_value` VARCHAR(100) NOT NULL,
+    `sort_order` INT NOT NULL DEFAULT 0,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX `idx_pattr_concern` (`concern_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 21. CUTTING & WASTAGE

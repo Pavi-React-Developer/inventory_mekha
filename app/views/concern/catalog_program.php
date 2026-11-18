@@ -241,42 +241,71 @@ $isProgramsTab = (isset($activeTab) && $activeTab === 'programs') || (isset($_GE
             <div class="card border-0 shadow-sm rounded-3">
                 <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
                     <h6 class="mb-0 fw-bold text-dark"><i class="bi bi-calendar-range text-primary me-2"></i> Scheduled Production Orders</h6>
-                    <button class="btn btn-sm btn-primary shadow-sm" data-bs-toggle="modal" data-bs-target="#modalAddProgram">
+                    <a href="<?= \App\Core\Controller::url('/production/programs/create') ?>" class="btn btn-sm btn-primary shadow-sm">
                         <i class="bi bi-calendar-plus me-1"></i> New Production Program
-                    </button>
+                    </a>
                 </div>
                 <div class="table-responsive">
                     <table class="table table-hover align-middle mb-0 table-custom">
                         <thead>
                             <tr>
-                                <th>Program No</th>
+                                <th>Program Code & Name</th>
+                                <th>Planner</th>
+                                <th>Rolls Assigned</th>
                                 <th>Catalog Style</th>
-                                <th>Target Garment Variant</th>
                                 <th>Planned Qty</th>
                                 <th>Start Date</th>
-                                <th>Target Completion</th>
+                                <th>Target Date</th>
                                 <th>Status</th>
+                                <th class="text-center" style="width: 130px;">ACTIONS</th>
                             </tr>
                         </thead>
                         <tbody>
                             <?php if (empty($programs)): ?>
-                                <tr><td colspan="7" class="text-center py-4 text-muted">No scheduled production programs.</td></tr>
+                                <tr><td colspan="9" class="text-center py-4 text-muted">No scheduled production programs.</td></tr>
                             <?php else: ?>
                                 <?php foreach ($programs as $p): ?>
                                     <tr>
-                                        <td><span class="badge bg-dark font-monospace"><?= htmlspecialchars($p['program_no']) ?></span></td>
-                                        <td><span class="badge bg-light text-dark border"><?= htmlspecialchars($p['catalog_name'] ?? 'General') ?></span></td>
                                         <td>
-                                            <div class="fw-bold text-dark"><?= htmlspecialchars($p['target_variant_name']) ?></div>
-                                            <small class="badge bg-light text-dark border"><?= htmlspecialchars($p['sku_code']) ?></small>
+                                            <div class="d-flex flex-column">
+                                                <span class="badge bg-dark font-monospace mb-1 align-self-start"><?= htmlspecialchars($p['program_no']) ?></span>
+                                                <span class="fw-semibold text-dark small"><?= htmlspecialchars($p['program_name'] ?? 'Production Run') ?></span>
+                                            </div>
                                         </td>
-                                        <td><span class="fw-bold text-primary"><?= number_format($p['planned_qty'], 2) ?> Units</span></td>
+                                        <td>
+                                            <div class="small text-muted"><i class="bi bi-person me-1"></i><?= htmlspecialchars($p['planner_name'] ?? 'Planner') ?></div>
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1">
+                                                <i class="bi bi-diagram-3 me-1"></i><?= (int)($p['rolls_count'] ?? 0) ?> Roll(s)
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-light text-dark border"><?= htmlspecialchars($p['catalog_name'] ?? 'General / Per-Roll') ?></span>
+                                            <?php if (!empty($p['target_variant_name'])): ?>
+                                                <div class="small text-muted mt-0.5"><?= htmlspecialchars($p['target_variant_name']) ?></div>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td><span class="fw-bold text-primary"><?= number_format((float)($p['planned_qty'] ?? 0), 2) ?></span> <span class="small text-muted">Units</span></td>
                                         <td><?= date('d M Y', strtotime($p['start_date'])) ?></td>
                                         <td><?= date('d M Y', strtotime($p['target_date'])) ?></td>
                                         <td>
-                                            <span class="badge <?= $p['status'] === 'completed' ? 'bg-success' : 'bg-primary' ?>">
+                                            <span class="badge <?= $p['status'] === 'completed' ? 'bg-success' : ($p['status'] === 'cancelled' ? 'bg-secondary' : 'bg-primary') ?>">
                                                 <?= ucfirst(str_replace('_', ' ', $p['status'])) ?>
                                             </span>
+                                        </td>
+                                        <td class="text-center">
+                                            <div class="d-inline-flex align-items-center gap-1">
+                                                <button type="button" class="btn btn-sm btn-outline-info rounded-3 p-1.5" title="Quick View Program" onclick="showProgramDetails(<?= $p['id'] ?>)">
+                                                    <i class="bi bi-eye"></i>
+                                                </button>
+                                                <a href="<?= \App\Core\Controller::url('/production/programs/edit?id=' . $p['id']) ?>" class="btn btn-sm btn-outline-primary rounded-3 p-1.5" title="Edit Program">
+                                                    <i class="bi bi-pencil"></i>
+                                                </a>
+                                                <button type="button" class="btn btn-sm btn-outline-danger rounded-3 p-1.5" title="Delete Program" onclick="confirmDeleteProgram(<?= $p['id'] ?>, '<?= htmlspecialchars(addslashes($p['program_no'])) ?>', '<?= htmlspecialchars(addslashes($p['program_name'] ?? '')) ?>')">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>
@@ -331,6 +360,55 @@ $isProgramsTab = (isset($activeTab) && $activeTab === 'programs') || (isset($_GE
             <div class="modal-footer bg-light">
                 <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
                 <button type="submit" class="btn btn-danger btn-sm px-3"><i class="bi bi-trash me-1"></i> Delete Style</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- QUICK VIEW PROGRAM MODAL -->
+<div class="modal fade" id="modalViewProgram" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-light">
+                <h6 class="modal-title fw-bold text-dark d-flex align-items-center gap-2">
+                    <i class="bi bi-calendar-range-fill text-primary"></i> Production Program Details
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4" id="viewProgramContent">
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status"></div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light py-2 justify-content-between">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+                <div id="viewProgramActions"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- CONFIRM DELETE PROGRAM MODAL -->
+<div class="modal fade" id="modalDeleteProgram" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <form action="<?= \App\Core\Controller::url('/production/programs/delete') ?>" method="POST" class="modal-content border-0 shadow">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken ?? '') ?>">
+            <input type="hidden" name="id" id="deleteProgramId" value="">
+            <div class="modal-header bg-danger text-white">
+                <h6 class="modal-title fw-bold"><i class="bi bi-exclamation-triangle-fill me-2"></i> Delete Production Program</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4 text-center">
+                <i class="bi bi-trash3 text-danger fs-1 mb-3 d-block"></i>
+                <h5 class="fw-bold text-dark mb-2" id="deleteProgramTitle">Are you sure?</h5>
+                <div class="badge bg-dark font-monospace fs-6 mb-2" id="deleteProgramCode"></div>
+                <p class="text-secondary small mb-0">
+                    This will delete this production program and <strong>release its allocated raw material fabric rolls back into available stock</strong>. If active cutting logs exist, the program will be archived as Cancelled to protect ledger consistency.
+                </p>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-danger btn-sm px-3"><i class="bi bi-trash me-1"></i> Confirm Delete</button>
             </div>
         </form>
     </div>
@@ -461,5 +539,137 @@ function confirmDeleteStyle(id, name, code) {
     document.getElementById('deleteStyleName').textContent = name;
     document.getElementById('deleteStyleCode').textContent = code;
     new bootstrap.Modal(document.getElementById('modalDeleteStyle')).show();
+}
+
+function showProgramDetails(id) {
+    const modal = new bootstrap.Modal(document.getElementById('modalViewProgram'));
+    const container = document.getElementById('viewProgramContent');
+    const actionsContainer = document.getElementById('viewProgramActions');
+    container.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div></div>';
+    actionsContainer.innerHTML = '';
+    modal.show();
+
+    fetch('<?= \App\Core\Controller::url('/api/programs/details?id=') ?>' + id)
+        .then(r => r.json())
+        .then(res => {
+            if (!res.success) {
+                container.innerHTML = `<div class="alert alert-danger">${res.message || 'Error loading program details'}</div>`;
+                return;
+            }
+            const p = res.program;
+            const rolls = res.rolls || [];
+            const cutting = res.cutting || {};
+
+            let statusBadge = '';
+            if (p.status === 'completed') {
+                statusBadge = '<span class="badge bg-success-subtle text-success border border-success-subtle fs-6">Completed</span>';
+            } else if (p.status === 'in_progress') {
+                statusBadge = '<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle fs-6">In Progress</span>';
+            } else if (p.status === 'cancelled') {
+                statusBadge = '<span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle fs-6">Cancelled</span>';
+            } else {
+                statusBadge = '<span class="badge bg-primary-subtle text-primary border border-primary-subtle fs-6">Planned</span>';
+            }
+
+            let rollRows = rolls.map((r, idx) => {
+                const hier = [r.category_name, r.subcategory_name, r.subsub_name].filter(Boolean).join(' > ') || '-';
+                const styleLabel = r.catalog_style_name ? `<span class="badge bg-light text-dark border">${r.catalog_style_code ? '[' + r.catalog_style_code + '] ' : ''}${r.catalog_style_name}</span>` : '<span class="text-muted small">General</span>';
+                return `
+                    <tr>
+                        <td class="text-center font-monospace">${idx + 1}</td>
+                        <td>
+                            <div class="fw-bold font-monospace text-dark">${r.roll_piece_tag || '-'}</div>
+                            <div class="small text-muted">${r.fabric_name || 'Fabric Roll'}</div>
+                            ${r.color ? `<span class="badge bg-light text-secondary border mt-1" style="font-size: 0.72rem;">${r.color}</span>` : ''}
+                        </td>
+                        <td>
+                            <span class="fw-bold text-primary">${parseFloat(r.allocated_qty || 0).toFixed(2)} ${r.unit || 'kg'}</span>
+                            <div class="small text-muted" style="font-size: 0.75rem;">out of ${parseFloat(r.total_roll_qty || 0).toFixed(2)} ${r.unit || 'kg'} total</div>
+                        </td>
+                        <td>
+                            <span class="fw-bold text-success">${parseInt(r.target_pieces || 0)}</span> <span class="small text-muted">pcs</span>
+                        </td>
+                        <td>
+                            <div class="small text-secondary mb-1">${hier}</div>
+                            ${styleLabel}
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            container.innerHTML = `
+                <div class="row g-3 mb-4">
+                    <div class="col-md-8">
+                        <div class="d-flex align-items-center gap-2 mb-1">
+                            <span class="badge bg-dark font-monospace fs-6">${p.program_no}</span>
+                            ${statusBadge}
+                        </div>
+                        <h5 class="fw-bold text-dark mb-1">${p.program_name || 'Production Program'}</h5>
+                        <div class="small text-muted"><i class="bi bi-person me-1"></i>Planner: <strong>${p.planner_name || 'Planner'}</strong></div>
+                    </div>
+                    <div class="col-md-4 text-md-end">
+                        <div class="small text-muted mb-1">Manufacturing Schedule</div>
+                        <div class="fw-semibold text-dark"><i class="bi bi-calendar-event me-1 text-primary"></i>${p.start_date || '-'} &rarr; ${p.target_date || '-'}</div>
+                    </div>
+                </div>
+
+                <div class="row g-3 mb-4">
+                    <div class="col-md-4">
+                        <div class="p-3 rounded-3 bg-light border text-center">
+                            <div class="text-secondary small fw-semibold">Allocated Fabric Weight</div>
+                            <div class="fs-4 fw-bold text-primary font-monospace">${parseFloat(p.planned_qty || 0).toFixed(2)} Units</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="p-3 rounded-3 bg-light border text-center">
+                            <div class="text-secondary small fw-semibold">Assigned Fabric Rolls</div>
+                            <div class="fs-4 fw-bold text-dark font-monospace">${rolls.length} Roll(s)</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="p-3 rounded-3 bg-light border text-center">
+                            <div class="text-secondary small fw-semibold">Cutting History</div>
+                            <div class="fs-4 fw-bold text-success font-monospace">${cutting.total_lots || 0} Lot(s)</div>
+                        </div>
+                    </div>
+                </div>
+
+                <h6 class="fw-bold text-dark mb-2 d-flex align-items-center gap-1.5">
+                    <i class="bi bi-layers-fill text-primary"></i> Assigned Fabric Rolls & 3-Tier Categorization
+                </h6>
+                <div class="table-responsive border rounded-3 mb-3">
+                    <table class="table table-hover align-middle mb-0 small">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="text-center" style="width: 40px;">#</th>
+                                <th>Roll Tag & Material</th>
+                                <th>Allocated (Out of Total)</th>
+                                <th>Target Pieces</th>
+                                <th>3-Tier Category & Style</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rollRows || '<tr><td colspan="5" class="text-center py-3 text-muted">No rolls assigned.</td></tr>'}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+
+            actionsContainer.innerHTML = `
+                <a href="<?= \App\Core\Controller::url('/production/programs/edit?id=') ?>${p.id}" class="btn btn-primary btn-sm px-3 shadow-sm">
+                    <i class="bi bi-pencil me-1"></i> Edit Program
+                </a>
+            `;
+        })
+        .catch(err => {
+            container.innerHTML = `<div class="alert alert-danger">Network error loading program details.</div>`;
+        });
+}
+
+function confirmDeleteProgram(id, no, name) {
+    document.getElementById('deleteProgramId').value = id;
+    document.getElementById('deleteProgramCode').textContent = no;
+    document.getElementById('deleteProgramTitle').textContent = name ? `Delete "${name}"?` : 'Delete Program?';
+    new bootstrap.Modal(document.getElementById('modalDeleteProgram')).show();
 }
 </script>
