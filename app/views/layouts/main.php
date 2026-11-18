@@ -272,10 +272,14 @@
                     if ($m['code'] === 'catalog_program') $href = \App\Core\Controller::url('/production/catalog');
                     if ($m['code'] === 'catalog_mapping') $href = \App\Core\Controller::url('/production/catalog-mapping');
                     if ($m['code'] === 'cutting_wastage') $href = \App\Core\Controller::url('/production/cutting');
+                    if ($m['code'] === 'stitching_wastage') $href = \App\Core\Controller::url('/production/stitching');
 
                     if ($m['code'] === 'cash_flow') {
                         $isActive = (isset($currentModule) && in_array($currentModule, ['cash_flow', 'cash'])) || 
                                     (str_contains($activeRoute, 'cash'));
+                    } elseif ($m['code'] === 'stitching_wastage') {
+                        $isActive = (isset($currentModule) && in_array($currentModule, ['stitching_wastage', 'stitching'])) || 
+                                    (str_contains($activeRoute, 'stitching'));
                     } else {
                         $isActive = (isset($currentModule) && $currentModule === $m['code']) || 
                                     (str_contains($activeRoute, $m['code']));

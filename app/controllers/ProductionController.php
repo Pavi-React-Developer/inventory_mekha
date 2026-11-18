@@ -2068,7 +2068,8 @@ class ProductionController extends Controller {
         $existingCols = array_column(DB::fetchAll("DESCRIBE cutting_logs"), 'Field');
         $colsToAdd = [
             'batch_no'              => "VARCHAR(50) NULL AFTER log_no",
-            'cutting_name'          => "VARCHAR(255) NULL AFTER batch_no",
+            'lot_no'                => "VARCHAR(50) NULL AFTER batch_no",
+            'cutting_name'          => "VARCHAR(255) NULL AFTER lot_no",
             'status'                => "ENUM('in_progress', 'planned', 'completed') DEFAULT 'in_progress' AFTER cutting_name",
             'cutting_master_id'     => "INT NULL AFTER status",
             'cutting_master_name'   => "VARCHAR(150) NULL AFTER cutting_master_id",
@@ -2940,127 +2941,1106 @@ class ProductionController extends Controller {
     }
 
     // ========================================================
-    // 4. STITCHING & WASTAGE
+    // 4. STITCHING & WASTAGE FLOW (Matching UI Images 1, 2, 3)
     // ========================================================
-    public function stitching(): void {
-        $cid = Auth::concernId();
 
-        $sql = "SELECT sl.*, pp.program_no, cl.lot_no,
-                       con.name AS concern_name, con.code AS concern_code
+    /**
+     * Ensure all stitching tables and columns are up to date
+     */
+    public function ensureStitchingSchema(): void {
+        try {
+            DB::query("
+            CREATE TABLE IF NOT EXISTS stitching_masters (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                concern_id INT NOT NULL,
+                name VARCHAR(150) NOT NULL,
+                phone VARCHAR(30) NULL,
+                employee_code VARCHAR(50) NULL,
+                status ENUM('active', 'inactive') DEFAULT 'active',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                KEY idx_sm_concern (concern_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+            ");
+
+            $existingCols = array_column(DB::fetchAll("DESCRIBE stitching_logs"), 'Field');
+            $colsToAdd = [
+                'batch_no'         => "VARCHAR(50) NULL AFTER log_no",
+                'stitching_name'   => "VARCHAR(255) NULL AFTER batch_no",
+                'status'           => "ENUM('in_progress', 'planned', 'completed') DEFAULT 'in_progress' AFTER stitching_name",
+                'cutting_id'       => "INT NULL AFTER status",
+                'tailor_id'        => "INT NULL AFTER cutting_id",
+                'tailor_name'      => "VARCHAR(150) NULL AFTER tailor_id",
+                'cut_pieces'       => "INT NOT NULL DEFAULT 0 AFTER input_pieces",
+                'cut_weight'       => "DECIMAL(12,2) DEFAULT 0.00 AFTER stitched_pieces",
+                'stitch_weight'    => "DECIMAL(12,2) DEFAULT 0.00 AFTER cut_weight",
+                'wastage_weight'   => "DECIMAL(12,2) DEFAULT 0.00 AFTER wastage_pieces",
+                'sold_wastage_qty' => "DECIMAL(12,2) DEFAULT 0.00 AFTER wastage_weight",
+                'updated_at'       => "TIMESTAMP NULL ON UPDATE CURRENT_TIMESTAMP AFTER created_at",
+            ];
+            foreach ($colsToAdd as $col => $def) {
+                if (!in_array($col, $existingCols)) {
+                    DB::query("ALTER TABLE stitching_logs ADD COLUMN $col $def");
+                }
+            }
+            DB::query("ALTER TABLE stitching_logs MODIFY COLUMN produced_variant_id INT NULL");
+
+            DB::query("
+            CREATE TABLE IF NOT EXISTS stitching_items (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                stitching_id INT NOT NULL,
+                cutting_item_id INT NULL,
+                catalog_id INT NULL,
+                variant_id INT NULL,
+                size VARCHAR(50) NULL,
+                color VARCHAR(100) NULL,
+                sku_code VARCHAR(100) NULL,
+                variant_name VARCHAR(255) NULL,
+                cut_qty INT NOT NULL DEFAULT 0,
+                stitching_qty INT NOT NULL DEFAULT 0,
+                per_pc_weight DECIMAL(8,3) DEFAULT 0.000,
+                total_weight DECIMAL(12,2) DEFAULT 0.00,
+                base_price DECIMAL(12,2) DEFAULT 0.00,
+                discount_price DECIMAL(12,2) DEFAULT 0.00,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                KEY idx_si_stitching (stitching_id),
+                KEY idx_si_variant (variant_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+            ");
+
+            DB::query("
+            CREATE TABLE IF NOT EXISTS stitching_wastage_sales (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                concern_id INT NOT NULL,
+                sale_no VARCHAR(50) NOT NULL,
+                stitching_id INT NOT NULL,
+                buyer_name VARCHAR(150) NOT NULL,
+                buyer_phone VARCHAR(20) NOT NULL,
+                buyer_company VARCHAR(200) NULL,
+                wastage_category VARCHAR(100) NOT NULL,
+                unit_type VARCHAR(20) DEFAULT 'KG',
+                quantity DECIMAL(12,2) NOT NULL,
+                selling_rate DECIMAL(12,2) NOT NULL,
+                total_price DECIMAL(12,2) NOT NULL,
+                amount_received DECIMAL(12,2) DEFAULT 0.00,
+                sale_date DATE NOT NULL,
+                payment_status ENUM('paid', 'partial', 'pending') DEFAULT 'paid',
+                notes TEXT NULL,
+                created_by INT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                KEY idx_sws_concern (concern_id),
+                KEY idx_sws_stitching (stitching_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+            ");
+        } catch (Exception $e) {
+            // Silently handled
+        }
+    }
+
+    /**
+     * Generate Stitching Batch Number: STCH-YYYYMMDD-XXXX
+     */
+    public function generateStitchingBatchNo(?int $cid): string {
+        $prefix = 'STCH-' . date('Ymd') . '-';
+        $row = DB::fetch(
+            "SELECT batch_no FROM stitching_logs 
+             WHERE batch_no LIKE ? ORDER BY id DESC LIMIT 1",
+            [$prefix . '%']
+        );
+        $nextNum = 1;
+        if ($row && !empty($row['batch_no'])) {
+            $parts = explode('-', $row['batch_no']);
+            $lastSeq = (int)end($parts);
+            $nextNum = $lastSeq + 1;
+        }
+        return $prefix . str_pad((string)$nextNum, 4, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * Generate Stitching Scrap Sale Number: SWST-YYYYMMDD-XXXX
+     */
+    public function generateStitchingSaleNo(?int $cid): string {
+        $prefix = 'SWST-' . date('Ymd') . '-';
+        $row = DB::fetch(
+            "SELECT sale_no FROM stitching_wastage_sales 
+             WHERE sale_no LIKE ? ORDER BY id DESC LIMIT 1",
+            [$prefix . '%']
+        );
+        $nextNum = 1;
+        if ($row && !empty($row['sale_no'])) {
+            $parts = explode('-', $row['sale_no']);
+            $lastSeq = (int)end($parts);
+            $nextNum = $lastSeq + 1;
+        }
+        return $prefix . str_pad((string)$nextNum, 4, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * Stitching Module Index (List of Stitching Batches + Wastage Selling Register)
+     */
+    public function stitchingIndex(): void {
+        $this->ensureStitchingSchema();
+        $cid = Auth::concernId();
+        $tab = $_GET['tab'] ?? 'batches';
+
+        // 1. Fetch Stitching Batches
+        $sql = "SELECT sl.*, 
+                       COALESCE(sl.batch_no, sl.log_no) AS display_batch_no,
+                       cl.batch_no AS cutting_batch_no, cl.cutting_name,
+                       pp.program_no, pp.program_name,
+                       COALESCE(sl.tailor_name, sm.name) AS tailor_display_name,
+                       con.name AS concern_name,
+                       (SELECT COUNT(*) FROM stitching_items WHERE stitching_id = sl.id) AS variant_count,
+                       (SELECT COALESCE(SUM(stitching_qty), 0) FROM stitching_items WHERE stitching_id = sl.id) AS items_stitched_qty_sum,
+                       (SELECT COALESCE(SUM(quantity), 0) FROM stitching_wastage_sales WHERE stitching_id = sl.id) AS wastage_sold_sum
                 FROM stitching_logs sl
+                LEFT JOIN cutting_logs cl ON sl.cutting_id = cl.id
                 LEFT JOIN production_programs pp ON sl.program_id = pp.id
-                LEFT JOIN cutting_logs cl ON sl.cutting_lot_id = cl.id
+                LEFT JOIN stitching_masters sm ON sl.tailor_id = sm.id
                 LEFT JOIN concerns con ON sl.concern_id = con.id";
         $params = [];
         if ($cid) {
-            $sql .= " WHERE cl.concern_id = ?";
+            $sql .= " WHERE sl.concern_id = ?";
             $params[] = $cid;
         }
         $sql .= " ORDER BY sl.id DESC";
-        $logs = DB::fetchAll($sql, $params);
+        $batches = DB::fetchAll($sql, $params);
 
+        // 2. Fetch Wastage Scrap Sales
+        $saleSql = "SELECT sws.*, 
+                           COALESCE(sl.batch_no, sl.log_no) AS stitching_batch_no,
+                           sl.stitching_name,
+                           cl.batch_no AS cutting_batch_no,
+                           pp.program_no,
+                           con.name AS concern_name
+                    FROM stitching_wastage_sales sws
+                    JOIN stitching_logs sl ON sws.stitching_id = sl.id
+                    LEFT JOIN cutting_logs cl ON sl.cutting_id = cl.id
+                    LEFT JOIN production_programs pp ON sl.program_id = pp.id
+                    LEFT JOIN concerns con ON sws.concern_id = con.id";
+        $saleParams = [];
         if ($cid) {
-            $programs = DB::fetchAll("SELECT id, program_no FROM production_programs WHERE concern_id = ? AND status != 'cancelled'", [$cid]);
-            $cuttingLots = DB::fetchAll("SELECT id, lot_no, cut_pieces FROM cutting_logs WHERE concern_id = ?", [$cid]);
-        } else {
-            $programs = DB::fetchAll("SELECT id, program_no FROM production_programs WHERE status != 'cancelled'");
-            $cuttingLots = DB::fetchAll("SELECT id, lot_no, cut_pieces FROM cutting_logs");
+            $saleSql .= " WHERE sws.concern_id = ?";
+            $saleParams[] = $cid;
         }
+        $saleSql .= " ORDER BY sws.id DESC";
+        $wastageSales = DB::fetchAll($saleSql, $saleParams);
 
-        $this->render('concern/stitching_wastage', [
-            'pageTitle'     => 'Garment Stitching & Assembly Tracking',
-            'currentModule' => 'stitching_wastage',
-            'logs'          => $logs,
-            'programs'      => $programs,
-            'cuttingLots'   => $cuttingLots,
-            'selectedCid'   => $cid,
+        // Batches available for Scrap Sale modal
+        $saleEligibleBatches = $batches;
+
+        // Statistics
+        $totalBatches = count($batches);
+        $totalCutPcs = array_sum(array_column($batches, 'cut_pieces'));
+        $totalStitchedPcs = array_sum(array_column($batches, 'stitched_pieces'));
+        $totalStitchWeight = array_sum(array_column($batches, 'stitch_weight'));
+        $totalScrapSold = array_sum(array_column($wastageSales, 'quantity'));
+        $totalScrapRevenue = array_sum(array_column($wastageSales, 'total_price'));
+
+        $this->render('concern/stitching_list', [
+            'pageTitle'           => 'Garment Stitching & Wastage Tracking',
+            'currentModule'       => 'stitching_wastage',
+            'tab'                 => $tab,
+            'batches'             => $batches,
+            'wastageSales'        => $wastageSales,
+            'saleEligibleBatches' => $saleEligibleBatches,
+            'totalBatches'        => $totalBatches,
+            'totalCutPcs'         => $totalCutPcs,
+            'totalStitchedPcs'    => $totalStitchedPcs,
+            'totalStitchWeight'   => $totalStitchWeight,
+            'totalScrapSold'      => $totalScrapSold,
+            'totalScrapRevenue'   => $totalScrapRevenue,
+            'selectedCid'         => $cid,
+            'csrfToken'           => Auth::csrfToken(),
         ]);
     }
 
-    public function storeStitching(): void {
-        $this->validateCsrf();
-        $cid = Auth::concernId() ?: (int)($_POST['concern_id'] ?? 0);
+    /**
+     * Legacy / Shortcut to Stitching Index
+     */
+    public function stitching(): void {
+        $this->stitchingIndex();
+    }
 
-        if (!$cid) {
-            $this->flash('error', 'Please choose a concern.');
-            $this->redirect('/m/stitching_wastage');
+    public function stitchingWastageIndex(): void {
+        $_GET['tab'] = 'wastage';
+        $this->stitchingIndex();
+    }
+
+    /**
+     * Create Stitching Batch Form (Matching UI Image 1)
+     */
+    public function createStitching(): void {
+        $this->ensureStitchingSchema();
+        $cid = Auth::concernId();
+
+        $batchNo = $this->generateStitchingBatchNo($cid);
+
+        // Fetch cutting batches ready for stitching
+        $cutSql = "SELECT cl.id, cl.concern_id, cl.batch_no, cl.cutting_name, cl.log_no,
+                          cl.cut_pieces, cl.used_weight, cl.total_roll_weight, cl.wastage_qty,
+                          cl.status,
+                          pp.id AS program_id, pp.program_no, pp.program_name,
+                          (SELECT COUNT(*) FROM stitching_logs WHERE cutting_id = cl.id) AS assigned_stitching_count
+                   FROM cutting_logs cl
+                   LEFT JOIN production_programs pp ON cl.program_id = pp.id
+                   WHERE (cl.status IS NULL OR cl.status != 'cancelled')" .
+                   ($cid ? " AND cl.concern_id = ?" : "") . "
+                   ORDER BY cl.id DESC";
+        $cuttingBatches = DB::fetchAll($cutSql, $cid ? [$cid] : []);
+
+        // Fetch tailors
+        $tailors = DB::fetchAll(
+            "SELECT id, name, phone, employee_code FROM stitching_masters WHERE status = 'active'" . 
+            ($cid ? " AND concern_id = ?" : "") . " ORDER BY name ASC",
+            $cid ? [$cid] : []
+        );
+
+        $selectedCuttingId = (int)($_GET['cutting_id'] ?? 0);
+
+        $this->render('concern/stitching_create', [
+            'pageTitle'         => 'New Stitching Batch',
+            'currentModule'     => 'stitching_wastage',
+            'batchNo'           => $batchNo,
+            'cuttingBatches'    => $cuttingBatches,
+            'tailors'           => $tailors,
+            'selectedCuttingId' => $selectedCuttingId,
+            'csrfToken'         => Auth::csrfToken(),
+        ]);
+    }
+
+    /**
+     * AJAX endpoint to fetch cutting batch details, multi-catalog identities, and cut items
+     */
+    public function apiCuttingDetailsForStitching(): void {
+        header('Content-Type: application/json');
+        $this->ensureStitchingSchema();
+        $cid = Auth::concernId();
+        $cuttingId = (int)($_GET['id'] ?? ($_GET['cutting_id'] ?? 0));
+
+        if (!$cuttingId) {
+            echo json_encode(['success' => false, 'message' => 'Invalid Cutting ID.']);
+            exit;
         }
 
-        $cutLotId      = !empty($_POST['cutting_lot_id']) ? (int)$_POST['cutting_lot_id'] : null;
-        $progId        = !empty($_POST['program_id']) ? (int)$_POST['program_id'] : null;
-        $operator      = trim($_POST['operator_name'] ?? '');
-        $receivedPieces= (int)($_POST['received_pieces'] ?? 0);
-        $stitchedPieces= (int)($_POST['stitched_pieces'] ?? 0);
-        $damagedPieces = (int)($_POST['damaged_pieces'] ?? 0);
+        $cutting = DB::fetch(
+            "SELECT cl.*, pp.id AS program_id, pp.program_no, pp.program_name, pp.catalog_id AS prog_catalog_id
+             FROM cutting_logs cl
+             LEFT JOIN production_programs pp ON cl.program_id = pp.id
+             WHERE cl.id = ?" . ($cid ? " AND cl.concern_id = ?" : ""),
+            $cid ? [$cuttingId, $cid] : [$cuttingId]
+        );
 
-        if ($receivedPieces <= 0 || $stitchedPieces <= 0) {
-            $this->flash('error', 'Received Pieces and Stitched Pieces are required.');
-            $this->redirect('/m/stitching_wastage');
+        if (!$cutting) {
+            echo json_encode(['success' => false, 'message' => 'Cutting batch not found or access denied.']);
+            exit;
+        }
+
+        // Fetch cut items for this cutting batch
+        $rawItems = DB::fetchAll(
+            "SELECT ci.*, 
+                    pr.catalog_id AS roll_catalog_id,
+                    c.id AS cat_id, c.name AS cat_name, c.style_code AS cat_code, c.mrp AS cat_mrp, c.selling_price AS cat_sp,
+                    v.id AS var_id, v.name AS var_name, v.sku_code AS var_sku, v.size AS var_size, v.color AS var_color,
+                    v.catalog_id AS var_cat_id, v.mrp AS var_mrp, v.selling_price AS var_sp,
+                    pbi.color AS roll_color
+             FROM cutting_items ci
+             LEFT JOIN program_rolls pr ON ci.program_roll_id = pr.id
+             LEFT JOIN purchase_bill_items pbi ON pr.purchase_bill_item_id = pbi.id
+             LEFT JOIN catalogs c ON COALESCE(pr.catalog_id, " . ($cutting['prog_catalog_id'] ? (int)$cutting['prog_catalog_id'] : "NULL") . ") = c.id
+             LEFT JOIN variants v ON ci.variant_id = v.id
+             WHERE ci.cutting_id = ?
+             ORDER BY ci.id ASC",
+            [$cuttingId]
+        );
+
+        $usableWeight = (float)$cutting['used_weight'] > 0 
+            ? (float)$cutting['used_weight'] 
+            : max(0.00, (float)($cutting['total_roll_weight'] ?? 0) - (float)($cutting['wastage_qty'] ?? 0));
+
+        $totalCutPieces = 0;
+        foreach ($rawItems as $it) {
+            $totalCutPieces += (int)$it['cut_pieces'];
+        }
+
+        $defaultPerPcWeight = $totalCutPieces > 0 ? round($usableWeight / $totalCutPieces, 3) : 0.000;
+
+        $items = [];
+        $catalogsMap = [];
+
+        foreach ($rawItems as $it) {
+            $catId = $it['cat_id'] ?: ($it['var_cat_id'] ?: ($cutting['prog_catalog_id'] ?: 0));
+            $catName = $it['cat_name'] ?: 'Catalog Item';
+            $catCode = $it['cat_code'] ?: 'CAT';
+            $basePrice = (float)($it['var_mrp'] ?: ($it['cat_mrp'] ?: 0.00));
+            $discPrice = (float)($it['var_sp'] ?: ($it['cat_sp'] ?: 0.00));
+
+            if ($catId && !isset($catalogsMap[$catId])) {
+                $catalogsMap[$catId] = [
+                    'id'             => $catId,
+                    'name'           => $catName,
+                    'style_code'     => $catCode,
+                    'base_price'     => $basePrice,
+                    'discount_price' => $discPrice,
+                ];
+            }
+
+            $cutQty = (int)$it['cut_pieces'];
+            $stitchingQty = $cutQty;
+            $perPcWeight = $defaultPerPcWeight;
+            $rowTotalWeight = round($cutQty * $perPcWeight, 2);
+
+            $items[] = [
+                'cutting_item_id' => (int)$it['id'],
+                'variant_id'      => $it['variant_id'] ? (int)$it['variant_id'] : null,
+                'catalog_id'      => $catId,
+                'catalog_name'    => $catName,
+                'catalog_code'    => $catCode,
+                'size'            => $it['size'] ?: ($it['var_size'] ?: 'Free Size'),
+                'color'           => $it['var_color'] ?: ($it['roll_color'] ?: 'Standard'),
+                'sku_code'        => $it['sku_code'] ?: ($it['var_sku'] ?: 'SKU'),
+                'variant_name'    => $it['variant_name'] ?: ($it['var_name'] ?: 'Variant'),
+                'cut_qty'         => $cutQty,
+                'stitching_qty'   => $stitchingQty,
+                'per_pc_weight'   => $perPcWeight,
+                'total_weight'    => $rowTotalWeight,
+                'base_price'      => $basePrice,
+                'discount_price'  => $discPrice,
+            ];
+        }
+
+        echo json_encode([
+            'success'              => true,
+            'cutting'              => [
+                'id'                  => (int)$cutting['id'],
+                'batch_no'            => $cutting['batch_no'] ?: $cutting['log_no'],
+                'cutting_name'        => $cutting['cutting_name'],
+                'program_no'          => $cutting['program_no'],
+                'program_name'        => $cutting['program_name'],
+                'usable_weight'       => round($usableWeight, 2),
+                'total_cut_pieces'    => $totalCutPieces,
+                'total_fabric_weight' => (float)($cutting['total_roll_weight'] ?? 0),
+                'wastage_qty'         => (float)($cutting['wastage_qty'] ?? 0),
+            ],
+            'catalogs'             => array_values($catalogsMap),
+            'items'                => $items,
+            'default_per_pc_weight'=> $defaultPerPcWeight,
+        ]);
+        exit;
+    }
+
+    /**
+     * AJAX endpoint to quickly add a tailor / stitching master
+     */
+    public function apiQuickAddTailor(): void {
+        header('Content-Type: application/json');
+        $this->ensureStitchingSchema();
+        $cid = Auth::concernId() ?: 1;
+
+        $name = trim($_POST['name'] ?? '');
+        $phone = trim($_POST['phone'] ?? '');
+        $code = trim($_POST['employee_code'] ?? '');
+
+        if (empty($name)) {
+            echo json_encode(['success' => false, 'message' => 'Tailor / Master Name is required.']);
+            exit;
+        }
+
+        try {
+            DB::query(
+                "INSERT INTO stitching_masters (concern_id, name, phone, employee_code, status, created_at)
+                 VALUES (?, ?, ?, ?, 'active', NOW())",
+                [$cid, $name, $phone, $code]
+            );
+            $id = (int)DB::lastInsertId();
+
+            echo json_encode([
+                'success' => true,
+                'id'      => $id,
+                'name'    => $name,
+                'phone'   => $phone,
+            ]);
+        } catch (Exception $e) {
+            echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Store Stitching Batch (Matching UI Image 1)
+     */
+    public function storeStitchingBatch(): void {
+        $this->ensureStitchingSchema();
+        $this->validateCsrf();
+        $cid = Auth::concernId();
+
+        $stitchingName = trim($_POST['stitching_name'] ?? '');
+        $batchNo       = trim($_POST['batch_no'] ?? '');
+        $cuttingId     = (int)($_POST['cutting_id'] ?? 0);
+        $tailorId      = !empty($_POST['tailor_id']) ? (int)$_POST['tailor_id'] : null;
+        $status        = in_array($_POST['status'] ?? '', ['in_progress', 'planned', 'completed']) ? $_POST['status'] : 'in_progress';
+        $notes         = trim($_POST['notes'] ?? '');
+
+        if (empty($stitchingName)) {
+            $this->flash('error', 'Stitching Name is required.');
+            $this->redirect('/production/stitching/create');
+        }
+
+        if (!$cuttingId) {
+            $this->flash('error', 'Please choose a valid Source Cutting Batch.');
+            $this->redirect('/production/stitching/create');
+        }
+
+        $cutting = DB::fetch(
+            "SELECT cl.*, pp.id AS program_id FROM cutting_logs cl 
+             LEFT JOIN production_programs pp ON cl.program_id = pp.id
+             WHERE cl.id = ?" . ($cid ? " AND cl.concern_id = ?" : ""),
+            $cid ? [$cuttingId, $cid] : [$cuttingId]
+        );
+
+        if (!$cutting) {
+            $this->flash('error', 'Selected Cutting Batch not found or access denied.');
+            $this->redirect('/production/stitching/create');
+        }
+
+        $batchConcernId = $cid ?: (int)$cutting['concern_id'];
+        if (empty($batchNo)) {
+            $batchNo = $this->generateStitchingBatchNo($batchConcernId);
+        }
+
+        $tailorName = null;
+        if ($tailorId) {
+            $tm = DB::fetch("SELECT name FROM stitching_masters WHERE id = ?", [$tailorId]);
+            $tailorName = $tm['name'] ?? null;
+        }
+
+        $usableCutWeight = (float)$cutting['used_weight'] > 0 
+            ? (float)$cutting['used_weight'] 
+            : max(0.00, (float)($cutting['total_roll_weight'] ?? 0) - (float)($cutting['wastage_qty'] ?? 0));
+
+        // Process submitted items breakdown
+        $submittedItems = $_POST['items'] ?? [];
+        $validatedItems = [];
+        $totalCutQty = 0;
+        $totalStitchedQty = 0;
+        $totalStitchWeight = 0.00;
+
+        if (is_array($submittedItems)) {
+            foreach ($submittedItems as $it) {
+                $cutQ = (int)($it['cut_qty'] ?? 0);
+                $stitchQ = (int)($it['stitching_qty'] ?? 0);
+                $perPcWt = (float)($it['per_pc_weight'] ?? 0.000);
+                $totalRowWt = (float)($it['total_weight'] ?? round($stitchQ * $perPcWt, 2));
+                $basePrice = (float)($it['base_price'] ?? 0.00);
+                $discPrice = (float)($it['discount_price'] ?? 0.00);
+
+                if ($stitchQ > 0 || $cutQ > 0) {
+                    $totalCutQty += $cutQ;
+                    $totalStitchedQty += $stitchQ;
+                    $totalStitchWeight += $totalRowWt;
+
+                    $validatedItems[] = [
+                        'cutting_item_id' => !empty($it['cutting_item_id']) ? (int)$it['cutting_item_id'] : null,
+                        'catalog_id'      => !empty($it['catalog_id']) ? (int)$it['catalog_id'] : null,
+                        'variant_id'      => !empty($it['variant_id']) ? (int)$it['variant_id'] : null,
+                        'size'            => trim($it['size'] ?? ''),
+                        'color'           => trim($it['color'] ?? ''),
+                        'sku_code'        => trim($it['sku_code'] ?? ''),
+                        'variant_name'    => trim($it['variant_name'] ?? ''),
+                        'cut_qty'         => $cutQ,
+                        'stitching_qty'   => $stitchQ,
+                        'per_pc_weight'   => $perPcWt,
+                        'total_weight'    => $totalRowWt,
+                        'base_price'      => $basePrice,
+                        'discount_price'  => $discPrice,
+                    ];
+                }
+            }
+        }
+
+        if ($totalStitchedQty <= 0) {
+            $this->flash('error', 'Please enter stitching quantity for at least one variant.');
+            $this->redirect('/production/stitching/create');
+        }
+
+        $wastageWeight = max(0.00, $usableCutWeight - $totalStitchWeight);
+        $wastagePieces = max(0, $totalCutQty - $totalStitchedQty);
+
+        DB::beginTransaction();
+        try {
+            DB::query(
+                "INSERT INTO stitching_logs (
+                    concern_id, log_no, batch_no, stitching_name, status,
+                    cutting_id, program_id, tailor_id, tailor_name,
+                    input_pieces, cut_pieces, stitched_pieces, wastage_pieces,
+                    cut_weight, stitch_weight, wastage_weight, notes,
+                    created_by, created_at
+                ) VALUES (
+                    ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?,
+                    ?, ?, ?, ?,
+                    ?, ?, ?, ?,
+                    ?, NOW()
+                )",
+                [
+                    $batchConcernId,
+                    $batchNo,
+                    $batchNo,
+                    $stitchingName,
+                    $status,
+                    $cuttingId,
+                    $cutting['program_id'],
+                    $tailorId,
+                    $tailorName,
+                    $totalCutQty,
+                    $totalCutQty,
+                    $totalStitchedQty,
+                    $wastagePieces,
+                    $usableCutWeight,
+                    $totalStitchWeight,
+                    $wastageWeight,
+                    $notes,
+                    Auth::id()
+                ]
+            );
+            $stitchingId = (int)DB::lastInsertId();
+
+            // Insert stitching items & update finished stock / prices
+            foreach ($validatedItems as $item) {
+                DB::query(
+                    "INSERT INTO stitching_items (
+                        stitching_id, cutting_item_id, catalog_id, variant_id,
+                        size, color, sku_code, variant_name,
+                        cut_qty, stitching_qty, per_pc_weight, total_weight,
+                        base_price, discount_price, created_at
+                    ) VALUES (
+                        ?, ?, ?, ?,
+                        ?, ?, ?, ?,
+                        ?, ?, ?, ?,
+                        ?, ?, NOW()
+                    )",
+                    [
+                        $stitchingId,
+                        $item['cutting_item_id'],
+                        $item['catalog_id'],
+                        $item['variant_id'],
+                        $item['size'],
+                        $item['color'],
+                        $item['sku_code'],
+                        $item['variant_name'],
+                        $item['cut_qty'],
+                        $item['stitching_qty'],
+                        $item['per_pc_weight'],
+                        $item['total_weight'],
+                        $item['base_price'],
+                        $item['discount_price']
+                    ]
+                );
+
+                // Update prices in variants table if variant exists and prices provided
+                if ($item['variant_id']) {
+                    if ($item['base_price'] > 0 || $item['discount_price'] > 0) {
+                        DB::query(
+                            "UPDATE variants 
+                             SET mrp = CASE WHEN ? > 0 THEN ? ELSE mrp END,
+                                 selling_price = CASE WHEN ? > 0 THEN ? ELSE selling_price END
+                             WHERE id = ?",
+                            [
+                                $item['base_price'], $item['base_price'],
+                                $item['discount_price'], $item['discount_price'],
+                                $item['variant_id']
+                            ]
+                        );
+                    }
+
+                    // Inward finished goods to stock
+                    if ($item['stitching_qty'] > 0) {
+                        StockService::move(
+                            $batchConcernId,
+                            $item['variant_id'],
+                            'Main Store',
+                            $item['stitching_qty'],
+                            0.00,
+                            'Stitching',
+                            $stitchingId,
+                            "Stitching Batch [{$batchNo}]: Stitched {$item['stitching_qty']} units ({$item['size']}, {$item['color']})",
+                            Auth::id()
+                        );
+                    }
+                }
+            }
+
+            // Mark cutting batch as completed
+            DB::query("UPDATE cutting_logs SET status = 'completed' WHERE id = ?", [$cuttingId]);
+
+            AuditLog::log('CREATE', 'stitching_logs', $stitchingId, null, [
+                'batch_no'       => $batchNo,
+                'stitching_name' => $stitchingName,
+                'cutting_id'     => $cuttingId,
+                'stitched_pieces'=> $totalStitchedQty,
+                'stitch_weight'  => $totalStitchWeight,
+            ]);
+
+            DB::commit();
+            $this->flash('success', "Stitching Batch '{$batchNo}' ({$stitchingName}) created successfully! {$totalStitchedQty} finished units recorded.");
+        } catch (Exception $e) {
+            DB::rollBack();
+            $this->flash('error', 'Failed to save Stitching Batch: ' . $e->getMessage());
+        }
+
+        $this->redirect('/production/stitching');
+    }
+
+    /**
+     * Legacy storeStitching wrapper
+     */
+    public function storeStitching(): void {
+        $this->storeStitchingBatch();
+    }
+
+    /**
+     * Edit Stitching Batch Form (Matching UI Image 3)
+     */
+    public function editStitchingBatch(): void {
+        $this->ensureStitchingSchema();
+        $cid = Auth::concernId();
+        $id = (int)($_GET['id'] ?? 0);
+
+        $batch = DB::fetch(
+            "SELECT sl.*, 
+                    COALESCE(sl.batch_no, sl.log_no) AS display_batch_no,
+                    cl.batch_no AS cutting_batch_no, cl.cutting_name, cl.used_weight AS cutting_usable_weight,
+                    cl.total_roll_weight, cl.wastage_qty AS cutting_wastage,
+                    pp.id AS program_id, pp.program_no, pp.program_name
+             FROM stitching_logs sl
+             LEFT JOIN cutting_logs cl ON sl.cutting_id = cl.id
+             LEFT JOIN production_programs pp ON sl.program_id = pp.id
+             WHERE sl.id = ?" . ($cid ? " AND sl.concern_id = ?" : ""),
+            $cid ? [$id, $cid] : [$id]
+        );
+
+        if (!$batch) {
+            $this->flash('error', 'Stitching Batch not found or access denied.');
+            $this->redirect('/production/stitching');
+        }
+
+        $items = DB::fetchAll(
+            "SELECT si.*, 
+                    c.name AS catalog_name, c.style_code AS catalog_code
+             FROM stitching_items si
+             LEFT JOIN catalogs c ON si.catalog_id = c.id
+             WHERE si.stitching_id = ?
+             ORDER BY si.id ASC",
+            [$id]
+        );
+
+        // Fetch tailors
+        $tailors = DB::fetchAll(
+            "SELECT id, name, phone, employee_code FROM stitching_masters WHERE status = 'active'" . 
+            ($cid ? " AND concern_id = ?" : "") . " ORDER BY name ASC",
+            $cid ? [$cid] : []
+        );
+
+        // Distinct catalogs for bulk pricing toolbar
+        $catalogsMap = [];
+        foreach ($items as $it) {
+            if ($it['catalog_id'] && !isset($catalogsMap[$it['catalog_id']])) {
+                $catalogsMap[$it['catalog_id']] = [
+                    'id'   => $it['catalog_id'],
+                    'name' => $it['catalog_name'] ?: 'Catalog Item',
+                    'code' => $it['catalog_code'] ?: 'CAT',
+                ];
+            }
+        }
+
+        $this->render('concern/stitching_edit', [
+            'pageTitle'     => 'Edit Stitching Batch: ' . ($batch['display_batch_no']),
+            'currentModule' => 'stitching_wastage',
+            'batch'         => $batch,
+            'items'         => $items,
+            'catalogs'      => array_values($catalogsMap),
+            'tailors'       => $tailors,
+            'csrfToken'     => Auth::csrfToken(),
+        ]);
+    }
+
+    /**
+     * Update Stitching Batch (Matching UI Image 3)
+     */
+    public function updateStitchingBatch(): void {
+        $this->ensureStitchingSchema();
+        $this->validateCsrf();
+        $cid = Auth::concernId();
+        $id = (int)($_POST['id'] ?? 0);
+
+        $batch = DB::fetch(
+            "SELECT * FROM stitching_logs WHERE id = ?" . ($cid ? " AND concern_id = ?" : ""),
+            $cid ? [$id, $cid] : [$id]
+        );
+
+        if (!$batch) {
+            $this->flash('error', 'Stitching Batch not found or access denied.');
+            $this->redirect('/production/stitching');
+        }
+
+        $stitchingName = trim($_POST['stitching_name'] ?? $batch['stitching_name']);
+        $tailorId      = !empty($_POST['tailor_id']) ? (int)$_POST['tailor_id'] : null;
+        $status        = in_array($_POST['status'] ?? '', ['in_progress', 'planned', 'completed']) ? $_POST['status'] : $batch['status'];
+        $notes         = trim($_POST['notes'] ?? '');
+
+        $tailorName = null;
+        if ($tailorId) {
+            $tm = DB::fetch("SELECT name FROM stitching_masters WHERE id = ?", [$tailorId]);
+            $tailorName = $tm['name'] ?? null;
+        }
+
+        $submittedItems = $_POST['items'] ?? [];
+        $totalStitchedQty = 0;
+        $totalStitchWeight = 0.00;
+        $totalCutQty = 0;
+
+        DB::beginTransaction();
+        try {
+            if (is_array($submittedItems)) {
+                foreach ($submittedItems as $itemId => $it) {
+                    $stitchQ    = (int)($it['stitching_qty'] ?? 0);
+                    $cutQ       = (int)($it['cut_qty'] ?? 0);
+                    $perPcWt    = (float)($it['per_pc_weight'] ?? 0.000);
+                    $totalRowWt = (float)($it['total_weight'] ?? round($stitchQ * $perPcWt, 2));
+                    $basePrice  = (float)($it['base_price'] ?? 0.00);
+                    $discPrice  = (float)($it['discount_price'] ?? 0.00);
+
+                    $totalCutQty += $cutQ;
+                    $totalStitchedQty += $stitchQ;
+                    $totalStitchWeight += $totalRowWt;
+
+                    DB::query(
+                        "UPDATE stitching_items 
+                         SET stitching_qty = ?, per_pc_weight = ?, total_weight = ?,
+                             base_price = ?, discount_price = ?
+                         WHERE id = ? AND stitching_id = ?",
+                        [$stitchQ, $perPcWt, $totalRowWt, $basePrice, $discPrice, $itemId, $id]
+                    );
+
+                    // Update variant prices if variant_id present
+                    $existingItem = DB::fetch("SELECT variant_id FROM stitching_items WHERE id = ?", [$itemId]);
+                    if ($existingItem && $existingItem['variant_id']) {
+                        if ($basePrice > 0 || $discPrice > 0) {
+                            DB::query(
+                                "UPDATE variants 
+                                 SET mrp = CASE WHEN ? > 0 THEN ? ELSE mrp END,
+                                     selling_price = CASE WHEN ? > 0 THEN ? ELSE selling_price END
+                                 WHERE id = ?",
+                                [$basePrice, $basePrice, $discPrice, $discPrice, $existingItem['variant_id']]
+                            );
+                        }
+                    }
+                }
+            }
+
+            $cutWeight = (float)$batch['cut_weight'];
+            $wastageWeight = max(0.00, $cutWeight - $totalStitchWeight);
+            $wastagePieces = max(0, $totalCutQty - $totalStitchedQty);
+
+            DB::query(
+                "UPDATE stitching_logs 
+                 SET stitching_name = ?, tailor_id = ?, tailor_name = ?, status = ?,
+                     stitched_pieces = ?, stitch_weight = ?, wastage_pieces = ?,
+                     wastage_weight = ?, notes = ?, updated_at = NOW()
+                 WHERE id = ?",
+                [
+                    $stitchingName, $tailorId, $tailorName, $status,
+                    $totalStitchedQty, $totalStitchWeight, $wastagePieces,
+                    $wastageWeight, $notes, $id
+                ]
+            );
+
+            DB::commit();
+            $this->flash('success', "Stitching Batch '{$batch['batch_no']}' updated successfully.");
+        } catch (Exception $e) {
+            DB::rollBack();
+            $this->flash('error', 'Failed to update Stitching Batch: ' . $e->getMessage());
+        }
+
+        $this->redirect('/production/stitching');
+    }
+
+    /**
+     * Legacy updateStitching wrapper
+     */
+    public function updateStitching(): void {
+        $this->updateStitchingBatch();
+    }
+
+    /**
+     * View Stitching Batch Details
+     */
+    public function viewStitchingBatch(): void {
+        $this->ensureStitchingSchema();
+        $cid = Auth::concernId();
+        $id = (int)($_GET['id'] ?? 0);
+
+        $batch = DB::fetch(
+            "SELECT sl.*, 
+                    COALESCE(sl.batch_no, sl.log_no) AS display_batch_no,
+                    cl.batch_no AS cutting_batch_no, cl.cutting_name, cl.used_weight AS cutting_usable_weight,
+                    cl.total_roll_weight, cl.wastage_qty AS cutting_wastage,
+                    pp.id AS program_id, pp.program_no, pp.program_name,
+                    COALESCE(sl.tailor_name, sm.name) AS tailor_display_name,
+                    con.name AS concern_name,
+                    u.name AS created_by_name
+             FROM stitching_logs sl
+             LEFT JOIN cutting_logs cl ON sl.cutting_id = cl.id
+             LEFT JOIN production_programs pp ON sl.program_id = pp.id
+             LEFT JOIN stitching_masters sm ON sl.tailor_id = sm.id
+             LEFT JOIN concerns con ON sl.concern_id = con.id
+             LEFT JOIN users u ON sl.created_by = u.id
+             WHERE sl.id = ?" . ($cid ? " AND sl.concern_id = ?" : ""),
+            $cid ? [$id, $cid] : [$id]
+        );
+
+        if (!$batch) {
+            $this->flash('error', 'Stitching Batch not found or access denied.');
+            $this->redirect('/production/stitching');
+        }
+
+        $items = DB::fetchAll(
+            "SELECT si.*, 
+                    c.name AS catalog_name, c.style_code AS catalog_code
+             FROM stitching_items si
+             LEFT JOIN catalogs c ON si.catalog_id = c.id
+             WHERE si.stitching_id = ?
+             ORDER BY si.id ASC",
+            [$id]
+        );
+
+        $wastageSales = DB::fetchAll(
+            "SELECT sws.*, u.name AS recorded_by_name
+             FROM stitching_wastage_sales sws
+             LEFT JOIN users u ON sws.created_by = u.id
+             WHERE sws.stitching_id = ?
+             ORDER BY sws.id DESC",
+            [$id]
+        );
+
+        $this->render('concern/stitching_view', [
+            'pageTitle'     => 'Stitching Batch: ' . ($batch['display_batch_no']),
+            'currentModule' => 'stitching_wastage',
+            'batch'         => $batch,
+            'items'         => $items,
+            'wastageSales'  => $wastageSales,
+        ]);
+    }
+
+    /**
+     * Delete Stitching Batch
+     */
+    public function deleteStitchingBatch(): void {
+        $this->ensureStitchingSchema();
+        $this->validateCsrf();
+        $cid = Auth::concernId();
+        $id = (int)($_POST['id'] ?? 0);
+
+        $batch = DB::fetch(
+            "SELECT * FROM stitching_logs WHERE id = ?" . ($cid ? " AND concern_id = ?" : ""),
+            $cid ? [$id, $cid] : [$id]
+        );
+
+        if (!$batch) {
+            $this->flash('error', 'Stitching Batch not found.');
+            $this->redirect('/production/stitching');
         }
 
         DB::beginTransaction();
         try {
-            $batchNo = 'STITCH-' . date('Ymd') . '-' . rand(100, 999);
+            // Revert stock inward transactions for this batch
+            $items = DB::fetchAll("SELECT * FROM stitching_items WHERE stitching_id = ?", [$id]);
+            foreach ($items as $it) {
+                if ($it['variant_id'] && $it['stitching_qty'] > 0) {
+                    StockService::move(
+                        $batch['concern_id'],
+                        $it['variant_id'],
+                        'Main Store',
+                        -$it['stitching_qty'],
+                        0.00,
+                        'Stitching Reversal',
+                        $id,
+                        "Reversal of deleted Stitching Batch [{$batch['batch_no']}]",
+                        Auth::id()
+                    );
+                }
+            }
 
-            DB::query(
-                "INSERT INTO stitching_logs (concern_id, batch_no, cutting_lot_id, program_id, operator_name, received_pieces, stitched_pieces, damaged_pieces, created_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())",
-                [$cid, $batchNo, $cutLotId, $progId, $operator, $receivedPieces, $stitchedPieces, $damagedPieces]
-            );
+            // Delete associated items, wastage sales, and logs
+            DB::query("DELETE FROM stitching_items WHERE stitching_id = ?", [$id]);
+            DB::query("DELETE FROM stitching_wastage_sales WHERE stitching_id = ?", [$id]);
+            DB::query("DELETE FROM stitching_logs WHERE id = ?", [$id]);
 
             DB::commit();
-            $this->flash('success', "Stitching Batch '{$batchNo}' recorded! {$stitchedPieces} garments assembled.");
+            $this->flash('success', "Stitching Batch '{$batch['batch_no']}' deleted and warehouse stocks adjusted.");
         } catch (Exception $e) {
             DB::rollBack();
-            $this->flash('error', 'Stitching entry error: ' . $e->getMessage());
+            $this->flash('error', 'Failed to delete Stitching Batch: ' . $e->getMessage());
         }
 
-        $this->redirect('/m/stitching_wastage');
+        $this->redirect('/production/stitching');
     }
 
-    public function updateStitching(): void {
+    /**
+     * Legacy deleteStitching wrapper
+     */
+    public function deleteStitching(): void {
+        $this->deleteStitchingBatch();
+    }
+
+    /**
+     * Store Stitching Wastage Scrap Sale (Matching UI Image 2)
+     */
+    public function storeStitchingWastageSale(): void {
+        $this->ensureStitchingSchema();
         $this->validateCsrf();
-        $id = (int)($_POST['id'] ?? 0);
-        $stt = DB::fetch("SELECT * FROM stitching_logs WHERE id = ?", [$id]);
-        if (!$stt) {
-            $this->flash('error', 'Stitching log not found.');
-            $this->redirect('/m/stitching_wastage');
+        $cid = Auth::concernId();
+
+        $stitchingId     = (int)($_POST['stitching_id'] ?? 0);
+        $buyerName       = trim($_POST['buyer_name'] ?? '');
+        $buyerPhone      = trim($_POST['buyer_phone'] ?? '');
+        $buyerCompany    = trim($_POST['buyer_company'] ?? '');
+        $wastageCategory = trim($_POST['wastage_category'] ?? 'Thread & Yarn Waste');
+        $unitType        = in_array($_POST['unit_type'] ?? '', ['KG', 'Pcs']) ? $_POST['unit_type'] : 'KG';
+        $quantity        = (float)($_POST['quantity'] ?? 0);
+        $sellingRate     = (float)($_POST['selling_rate'] ?? 0);
+        $totalPrice      = (float)($_POST['total_price'] ?? 0);
+        $amountReceived  = (float)($_POST['amount_received'] ?? 0);
+        $saleDate        = !empty($_POST['sale_date']) ? $_POST['sale_date'] : date('Y-m-d');
+        $notes           = trim($_POST['notes'] ?? '');
+
+        if (!$stitchingId) {
+            $this->flash('error', 'Please select a valid Stitching Batch.');
+            $this->redirect('/production/stitching?tab=wastage');
         }
 
-        $stitchedPcs = (int)($_POST['stitched_pieces'] ?? $stt['stitched_pieces']);
-        $wastagePcs  = (int)($_POST['wastage_pieces'] ?? $stt['wastage_pieces']);
-        $notes       = trim($_POST['notes'] ?? $stt['notes']);
+        $batch = DB::fetch(
+            "SELECT * FROM stitching_logs WHERE id = ?" . ($cid ? " AND concern_id = ?" : ""),
+            $cid ? [$stitchingId, $cid] : [$stitchingId]
+        );
 
+        if (!$batch) {
+            $this->flash('error', 'Stitching Batch not found or access denied.');
+            $this->redirect('/production/stitching?tab=wastage');
+        }
+
+        if (empty($buyerName)) {
+            $this->flash('error', 'Buyer Name is required.');
+            $this->redirect('/production/stitching?tab=wastage');
+        }
+
+        // Validate 10-digit phone strictly
+        $cleanPhone = preg_replace('/[^0-9]/', '', $buyerPhone);
+        if (strlen($cleanPhone) !== 10) {
+            $this->flash('error', 'Buyer Phone must be exactly 10 digits (e.g. 9876543210).');
+            $this->redirect('/production/stitching?tab=wastage');
+        }
+
+        if ($quantity <= 0 || $sellingRate <= 0) {
+            $this->flash('error', 'Scrap Quantity and Selling Rate must be greater than zero.');
+            $this->redirect('/production/stitching?tab=wastage');
+        }
+
+        if ($totalPrice <= 0) {
+            $totalPrice = round($quantity * $sellingRate, 2);
+        }
+
+        $batchConcernId = $cid ?: (int)$batch['concern_id'];
+        $saleNo = $this->generateStitchingSaleNo($batchConcernId);
+        $paymentStatus = $amountReceived >= $totalPrice ? 'paid' : ($amountReceived > 0 ? 'partial' : 'pending');
+
+        DB::beginTransaction();
         try {
             DB::query(
-                "UPDATE stitching_logs SET stitched_pieces = ?, wastage_pieces = ?, notes = ? WHERE id = ?",
-                [$stitchedPcs, $wastagePcs, $notes, $id]
+                "INSERT INTO stitching_wastage_sales (
+                    concern_id, sale_no, stitching_id, buyer_name, buyer_phone,
+                    buyer_company, wastage_category, unit_type, quantity,
+                    selling_rate, total_price, amount_received, sale_date,
+                    payment_status, notes, created_by, created_at
+                ) VALUES (
+                    ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?,
+                    ?, ?, ?, ?,
+                    ?, ?, ?, NOW()
+                )",
+                [
+                    $batchConcernId,
+                    $saleNo,
+                    $stitchingId,
+                    $buyerName,
+                    $cleanPhone,
+                    $buyerCompany,
+                    $wastageCategory,
+                    $unitType,
+                    $quantity,
+                    $sellingRate,
+                    $totalPrice,
+                    $amountReceived,
+                    $saleDate,
+                    $paymentStatus,
+                    $notes,
+                    Auth::id()
+                ]
             );
-            $this->flash('success', "Stitching log '{$stt['log_no']}' updated successfully.");
+            $saleId = (int)DB::lastInsertId();
+
+            // Update sold wastage quantity on stitching_logs
+            DB::query(
+                "UPDATE stitching_logs SET sold_wastage_qty = sold_wastage_qty + ? WHERE id = ?",
+                [$quantity, $stitchingId]
+            );
+
+            // Inward cash transaction if cash account exists
+            if ($amountReceived > 0) {
+                $cashAccount = DB::fetch(
+                    "SELECT id FROM financial_accounts WHERE concern_id = ? AND account_type = 'cash' LIMIT 1",
+                    [$batchConcernId]
+                );
+                if ($cashAccount) {
+                    DB::query(
+                        "INSERT INTO cash_transactions (
+                            concern_id, account_id, transaction_type, transaction_date,
+                            amount, reference_type, reference_id, description,
+                            created_by, created_at
+                        ) VALUES (
+                            ?, ?, 'inflow', ?,
+                            ?, 'Stitching Wastage Sale', ?, ?,
+                            ?, NOW()
+                        )",
+                        [
+                            $batchConcernId,
+                            $cashAccount['id'],
+                            $saleDate,
+                            $amountReceived,
+                            $saleId,
+                            "Stitching Scrap Sale [{$saleNo}] from Buyer {$buyerName}",
+                            Auth::id()
+                        ]
+                    );
+                }
+            }
+
+            AuditLog::log('CREATE', 'stitching_wastage_sales', $saleId, null, [
+                'sale_no'      => $saleNo,
+                'stitching_id' => $stitchingId,
+                'buyer_name'   => $buyerName,
+                'quantity'     => $quantity,
+                'unit_type'    => $unitType,
+                'total_price'  => $totalPrice,
+            ]);
+
+            DB::commit();
+            $this->flash('success', "Scrap Sale '{$saleNo}' recorded successfully! Sold {$quantity} {$unitType} for ₹" . number_format($totalPrice, 2) . ".");
         } catch (Exception $e) {
-            $this->flash('error', 'Failed to update stitching log: ' . $e->getMessage());
+            DB::rollBack();
+            $this->flash('error', 'Failed to record scrap sale: ' . $e->getMessage());
         }
 
-        $this->redirect('/m/stitching_wastage');
-    }
-
-    public function deleteStitching(): void {
-        $this->validateCsrf();
-        $id = (int)($_POST['id'] ?? 0);
-        $stt = DB::fetch("SELECT * FROM stitching_logs WHERE id = ?", [$id]);
-        if (!$stt) {
-            $this->flash('error', 'Stitching log not found.');
-            $this->redirect('/m/stitching_wastage');
-        }
-
-        try {
-            DB::query("DELETE FROM stitching_logs WHERE id = ?", [$id]);
-            $this->flash('success', "Stitching log '{$stt['log_no']}' deleted successfully.");
-        } catch (Exception $e) {
-            $this->flash('error', 'Failed to delete stitching log: ' . $e->getMessage());
-        }
-
-        $this->redirect('/m/stitching_wastage');
+        $this->redirect('/production/stitching?tab=wastage');
     }
 
     // ========================================================
