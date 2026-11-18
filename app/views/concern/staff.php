@@ -229,112 +229,89 @@
 </div>
 
 <!-- ========================================== -->
-<!-- 2. ADD STAFF MODAL -->
+<!-- 2. ADD STAFF MODAL (REGISTER FORM) -->
 <!-- ========================================== -->
 <div class="modal fade" id="modalAddStaff" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <form action="<?= \App\Core\Controller::url('/m/staff/store') ?>" method="POST" class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
-            <?php if ($activeConcern): ?>
-                <input type="hidden" name="concern_id" value="<?= $activeConcern['id'] ?>">
-            <?php endif; ?>
 
             <div class="modal-header border-bottom px-4 py-3 bg-primary text-white">
                 <div class="d-flex align-items-center gap-2">
                     <i class="bi bi-person-plus-fill fs-5"></i>
                     <div>
-                        <h5 class="modal-title fw-bold text-white mb-0">Add New Staff Member</h5>
-                        <small class="text-white-50">
-                            Assign to Concern: <?= $activeConcern ? htmlspecialchars($activeConcern['name']) . ' (' . htmlspecialchars($activeConcern['code']) . ')' : 'Select Below' ?>
-                        </small>
+                        <h5 class="modal-title fw-bold text-white mb-0">Register New Staff Member</h5>
+                        <small class="text-white-50">Create staff profile & system login access</small>
                     </div>
                 </div>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body p-4">
-                <?php if (!$activeConcern): ?>
-                    <div class="mb-3">
-                        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">Business Concern *</label>
-                        <select name="concern_id" class="form-select" required>
-                            <option value="">-- Choose Concern --</option>
-                            <?php foreach ($allConcerns as $c): ?>
-                                <option value="<?= $c['id'] ?>"><?= htmlspecialchars($c['name']) ?> (<?= htmlspecialchars($c['code']) ?>)</option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                <?php endif; ?>
-
-                <div class="row g-3 mb-3">
-                    <div class="col-md-8">
-                        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">Full Name *</label>
-                        <input type="text" name="name" class="form-control" required placeholder="e.g. Ramesh Kumar">
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">Staff Code (Optional)</label>
-                        <input type="text" name="staff_code" class="form-control font-monospace" placeholder="Auto-generated if blank">
-                    </div>
+                <!-- 1. WHICH CONCERN -->
+                <div class="mb-3">
+                    <label class="form-label small fw-bold text-secondary text-uppercase mb-1">
+                        <i class="bi bi-building me-1 text-primary"></i> Which Concern *
+                    </label>
+                    <select name="concern_id" id="add_staff_concern_id" class="form-select" required>
+                        <option value="">-- Choose Concern --</option>
+                        <?php foreach ($allConcerns as $c): ?>
+                            <option value="<?= $c['id'] ?>" <?= ($selectedCid == $c['id']) ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($c['name']) ?> (<?= htmlspecialchars($c['code']) ?>)
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
                 </div>
 
+                <!-- 2. FULL NAME & DESIGNATION -->
                 <div class="row g-3 mb-3">
                     <div class="col-md-6">
-                        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">Department *</label>
-                        <select name="department" class="form-select" required>
-                            <option value="Cutting">Cutting</option>
-                            <option value="Stitching">Stitching</option>
-                            <option value="Quality Check">Quality Check (QC)</option>
-                            <option value="Store & Inventory">Store & Inventory</option>
-                            <option value="Sales & Dispatch">Sales & Dispatch</option>
-                            <option value="Accounts & Finance">Accounts & Finance</option>
-                            <option value="Administration">Administration / HR</option>
-                            <option value="Management">Management</option>
-                            <option value="General" selected>General</option>
-                        </select>
+                        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">
+                            <i class="bi bi-person me-1 text-primary"></i> Full Name *
+                        </label>
+                        <input type="text" name="name" class="form-control" required placeholder="e.g. Ramesh Kumar">
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">Designation / Role *</label>
+                        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">
+                            <i class="bi bi-briefcase me-1 text-primary"></i> Designation *
+                        </label>
                         <input type="text" name="designation" class="form-control" required placeholder="e.g. Cutting Master / Tailor / Supervisor">
                     </div>
                 </div>
 
+                <!-- 3. EMAIL & PASSWORD -->
                 <div class="row g-3 mb-3">
                     <div class="col-md-6">
-                        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">Phone / Mobile *</label>
+                        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">
+                            <i class="bi bi-envelope me-1 text-primary"></i> Email Address *
+                        </label>
+                        <input type="email" name="email" class="form-control" required placeholder="e.g. ramesh@example.com">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">
+                            <i class="bi bi-lock me-1 text-primary"></i> Password *
+                        </label>
+                        <div class="input-group">
+                            <input type="password" name="password" id="add_staff_password" class="form-control border-end-0" required placeholder="Enter login password">
+                            <button class="btn btn-outline-secondary border-start-0" type="button" onclick="togglePasswordVisibility('add_staff_password', this)">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 4. PHONE NUMBER & ACTIVE / INACTIVE STATUS -->
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">
+                            <i class="bi bi-telephone me-1 text-primary"></i> Phone Number *
+                        </label>
                         <input type="text" name="phone" class="form-control font-monospace" required placeholder="e.g. 9842100000">
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">Email (Optional)</label>
-                        <input type="email" name="email" class="form-control" placeholder="staff@example.com">
-                    </div>
-                </div>
-
-                <div class="row g-3 mb-3">
-                    <div class="col-md-4">
-                        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">Salary Type</label>
-                        <select name="salary_type" class="form-select">
-                            <option value="monthly" selected>Monthly Fixed</option>
-                            <option value="daily">Daily Wage</option>
-                            <option value="piece_rate">Piece Rate</option>
-                            <option value="hourly">Hourly Rate</option>
-                        </select>
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">Base Salary / Rate (₹)</label>
-                        <input type="number" step="0.01" name="base_salary" class="form-control font-monospace" placeholder="0.00">
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">Joining Date</label>
-                        <input type="date" name="joining_date" class="form-control" value="<?= date('Y-m-d') ?>">
-                    </div>
-                </div>
-
-                <div class="row g-3 mb-3">
-                    <div class="col-md-8">
-                        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">Address / Residence</label>
-                        <input type="text" name="address" class="form-control" placeholder="Street, city, pin code">
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">Status</label>
-                        <select name="status" class="form-select">
+                        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">
+                            <i class="bi bi-toggle-on me-1 text-primary"></i> Active / Inactive Status *
+                        </label>
+                        <select name="status" class="form-select" required>
                             <option value="active" selected>Active</option>
                             <option value="inactive">Inactive</option>
                         </select>
@@ -371,75 +348,74 @@
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body p-4">
-                <div class="row g-3 mb-3">
-                    <div class="col-md-8">
-                        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">Full Name *</label>
-                        <input type="text" name="name" id="edit_staff_name" class="form-control" required>
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">Status</label>
-                        <select name="status" id="edit_staff_status" class="form-select">
-                            <option value="active">Active</option>
-                            <option value="inactive">Inactive</option>
-                        </select>
-                    </div>
+                <!-- 1. WHICH CONCERN -->
+                <div class="mb-3">
+                    <label class="form-label small fw-bold text-secondary text-uppercase mb-1">
+                        <i class="bi bi-building me-1 text-primary"></i> Which Concern *
+                    </label>
+                    <select name="concern_id" id="edit_staff_concern_id" class="form-select" required>
+                        <?php foreach ($allConcerns as $c): ?>
+                            <option value="<?= $c['id'] ?>">
+                                <?= htmlspecialchars($c['name']) ?> (<?= htmlspecialchars($c['code']) ?>)
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
                 </div>
 
+                <!-- 2. FULL NAME & DESIGNATION -->
                 <div class="row g-3 mb-3">
                     <div class="col-md-6">
-                        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">Department *</label>
-                        <select name="department" id="edit_staff_department" class="form-select" required>
-                            <option value="Cutting">Cutting</option>
-                            <option value="Stitching">Stitching</option>
-                            <option value="Quality Check">Quality Check (QC)</option>
-                            <option value="Store & Inventory">Store & Inventory</option>
-                            <option value="Sales & Dispatch">Sales & Dispatch</option>
-                            <option value="Accounts & Finance">Accounts & Finance</option>
-                            <option value="Administration">Administration / HR</option>
-                            <option value="Management">Management</option>
-                            <option value="General">General</option>
-                        </select>
+                        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">
+                            <i class="bi bi-person me-1 text-primary"></i> Full Name *
+                        </label>
+                        <input type="text" name="name" id="edit_staff_name" class="form-control" required>
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">Designation / Role *</label>
+                        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">
+                            <i class="bi bi-briefcase me-1 text-primary"></i> Designation *
+                        </label>
                         <input type="text" name="designation" id="edit_staff_designation" class="form-control" required>
                     </div>
                 </div>
 
+                <!-- 3. EMAIL & PASSWORD -->
                 <div class="row g-3 mb-3">
                     <div class="col-md-6">
-                        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">Phone / Mobile *</label>
+                        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">
+                            <i class="bi bi-envelope me-1 text-primary"></i> Email Address *
+                        </label>
+                        <input type="email" name="email" id="edit_staff_email" class="form-control" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">
+                            <i class="bi bi-lock me-1 text-primary"></i> Password (Optional)
+                        </label>
+                        <div class="input-group">
+                            <input type="password" name="password" id="edit_staff_password" class="form-control border-end-0" placeholder="Leave blank to keep unchanged">
+                            <button class="btn btn-outline-secondary border-start-0" type="button" onclick="togglePasswordVisibility('edit_staff_password', this)">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 4. PHONE NUMBER & ACTIVE / INACTIVE STATUS -->
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">
+                            <i class="bi bi-telephone me-1 text-primary"></i> Phone Number *
+                        </label>
                         <input type="text" name="phone" id="edit_staff_phone" class="form-control font-monospace" required>
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">Email</label>
-                        <input type="email" name="email" id="edit_staff_email" class="form-control">
-                    </div>
-                </div>
-
-                <div class="row g-3 mb-3">
-                    <div class="col-md-4">
-                        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">Salary Type</label>
-                        <select name="salary_type" id="edit_staff_salary_type" class="form-select">
-                            <option value="monthly">Monthly Fixed</option>
-                            <option value="daily">Daily Wage</option>
-                            <option value="piece_rate">Piece Rate</option>
-                            <option value="hourly">Hourly Rate</option>
+                        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">
+                            <i class="bi bi-toggle-on me-1 text-primary"></i> Active / Inactive Status *
+                        </label>
+                        <select name="status" id="edit_staff_status" class="form-select" required>
+                            <option value="active">Active</option>
+                            <option value="inactive">Inactive</option>
                         </select>
                     </div>
-                    <div class="col-md-4">
-                        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">Base Salary (₹)</label>
-                        <input type="number" step="0.01" name="base_salary" id="edit_staff_base_salary" class="form-control font-monospace">
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">Joining Date</label>
-                        <input type="date" name="joining_date" id="edit_staff_joining_date" class="form-control">
-                    </div>
-                </div>
-
-                <div class="mb-3">
-                    <label class="form-label small fw-bold text-secondary text-uppercase mb-1">Address / Residence</label>
-                    <input type="text" name="address" id="edit_staff_address" class="form-control">
                 </div>
             </div>
             <div class="modal-footer border-top px-4 py-3 bg-light d-flex justify-content-between">
@@ -535,19 +511,34 @@ document.addEventListener('DOMContentLoaded', function() {
     <?php endif; ?>
 });
 
+function togglePasswordVisibility(inputId, btn) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    const icon = btn.querySelector('i');
+    if (input.type === 'password') {
+        input.type = 'text';
+        if (icon) {
+            icon.classList.remove('bi-eye');
+            icon.classList.add('bi-eye-slash');
+        }
+    } else {
+        input.type = 'password';
+        if (icon) {
+            icon.classList.remove('bi-eye-slash');
+            icon.classList.add('bi-eye');
+        }
+    }
+}
+
 function openViewStaffModal(stf) {
     if (!stf) return;
     const setTxt = (id, val) => { const el = document.getElementById(id); if (el) el.innerText = val; };
     setTxt('view_staff_name', stf.name || '');
     setTxt('view_staff_code', stf.staff_code || '');
     setTxt('view_staff_concern', (stf.concern_name || 'Concern') + (stf.concern_code ? ' (' + stf.concern_code + ')' : ''));
-    setTxt('view_staff_department', stf.department || 'General');
     setTxt('view_staff_designation', stf.designation || '-');
     setTxt('view_staff_phone', stf.phone || '-');
     setTxt('view_staff_email', stf.email || 'None');
-    setTxt('view_staff_joining', stf.joining_date ? stf.joining_date.substring(0, 10) : '-');
-    setTxt('view_staff_salary', '₹' + parseFloat(stf.base_salary || 0).toLocaleString('en-IN', {minimumFractionDigits: 2}) + ' (' + (stf.salary_type || 'monthly') + ')');
-    setTxt('view_staff_address', stf.address || 'None specified');
 
     const badge = document.getElementById('view_staff_status_badge');
     if (badge) {
@@ -574,15 +565,12 @@ function openEditStaffModal(stf) {
 
     setVal('edit_staff_id', stf.id || '');
     setTxt('edit_staff_code_display', stf.staff_code || '');
+    setVal('edit_staff_concern_id', stf.concern_id || '');
     setVal('edit_staff_name', stf.name || '');
-    setVal('edit_staff_department', stf.department || 'General');
-    setVal('edit_staff_designation', stf.designation || '');
-    setVal('edit_staff_phone', stf.phone || '');
     setVal('edit_staff_email', stf.email || '');
-    setVal('edit_staff_salary_type', stf.salary_type || 'monthly');
-    setVal('edit_staff_base_salary', parseFloat(stf.base_salary || 0).toFixed(2));
-    setVal('edit_staff_joining_date', stf.joining_date ? stf.joining_date.substring(0, 10) : '');
-    setVal('edit_staff_address', stf.address || '');
+    setVal('edit_staff_password', '');
+    setVal('edit_staff_phone', stf.phone || '');
+    setVal('edit_staff_designation', stf.designation || '');
     setVal('edit_staff_status', stf.status === 'inactive' ? 'inactive' : 'active');
 
     const modalEl = document.getElementById('modalEditStaff');

@@ -82,15 +82,12 @@ class StaffController extends Controller {
         }
 
         $name        = trim($_POST['name'] ?? '');
-        $designation = trim($_POST['designation'] ?? '');
-        $department  = trim($_POST['department'] ?? 'General');
-        $phone       = trim($_POST['phone'] ?? '');
         $email       = trim($_POST['email'] ?? '');
-        $address     = trim($_POST['address'] ?? '');
-        $salaryType  = trim($_POST['salary_type'] ?? 'monthly');
-        $baseSalary  = (float)($_POST['base_salary'] ?? 0);
-        $joiningDate = !empty($_POST['joining_date']) ? $_POST['joining_date'] : date('Y-m-d');
+        $password    = trim($_POST['password'] ?? '');
+        $phone       = trim($_POST['phone'] ?? '');
+        $designation = trim($_POST['designation'] ?? '');
         $status      = ($_POST['status'] ?? 'active') === 'inactive' ? 'inactive' : 'active';
+        $department  = trim($_POST['department'] ?? 'General');
 
         if (!$name) {
             $this->flash('error', 'Staff member name is required.');
@@ -98,20 +95,45 @@ class StaffController extends Controller {
         }
 
         try {
+            $passwordHash = $password ? password_hash($password, PASSWORD_BCRYPT) : null;
             $staffCode = trim($_POST['staff_code'] ?? '');
             if (!$staffCode) {
                 $staffCode = NumberSeries::getNext($cid, 'STAFF');
             }
 
+            $userId = null;
+            // If email and password provided, also create/sync login user account
+            if ($email && $password) {
+                $existingUser = DB::fetch("SELECT id FROM users WHERE email = ?", [$email]);
+                if ($existingUser) {
+                    $userId = (int)$existingUser['id'];
+                    DB::query(
+                        "UPDATE users SET name = ?, concern_id = ?, password_hash = ?, phone = ?, status = ? WHERE id = ?",
+                        [$name, $cid, $passwordHash, $phone, $status, $userId]
+                    );
+                } else {
+                    $roleId = (int)DB::fetchValue("SELECT id FROM roles WHERE concern_id = ? LIMIT 1", [$cid]);
+                    if (!$roleId) {
+                        $roleId = (int)DB::fetchValue("SELECT id FROM roles WHERE id != 1 LIMIT 1") ?: 3;
+                    }
+                    DB::query(
+                        "INSERT INTO users (concern_id, role_id, name, email, password_hash, phone, status, created_at)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, NOW())",
+                        [$cid, $roleId, $name, $email, $passwordHash, $phone, $status]
+                    );
+                    $userId = (int)DB::lastInsertId();
+                }
+            }
+
             DB::query(
-                "INSERT INTO staff (concern_id, staff_code, name, phone, email, designation, department, salary_type, base_salary, address, status, joining_date, created_by, created_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())",
-                [$cid, $staffCode, $name, $phone, $email, $designation, $department, $salaryType, $baseSalary, $address, $status, $joiningDate, Auth::id()]
+                "INSERT INTO staff (concern_id, user_id, staff_code, name, email, password_hash, phone, designation, department, status, created_by, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())",
+                [$cid, $userId, $staffCode, $name, $email, $passwordHash, $phone, $designation, $department, $status, Auth::id()]
             );
 
-            $this->flash('success', "Staff member '{$name}' [{$staffCode}] added successfully.");
+            $this->flash('success', "Staff member '{$name}' [{$staffCode}] registered successfully.");
         } catch (Exception $e) {
-            $this->flash('error', 'Failed to add staff: ' . $e->getMessage());
+            $this->flash('error', 'Failed to register staff: ' . $e->getMessage());
         }
 
         $this->redirect('/m/staff?concern_id=' . $cid);
@@ -126,23 +148,46 @@ class StaffController extends Controller {
             $this->redirect('/m/staff');
         }
 
-        $cid = (int)$staff['concern_id'];
+        $cid         = (int)($_POST['concern_id'] ?? $staff['concern_id']);
         $name        = trim($_POST['name'] ?? $staff['name']);
-        $designation = trim($_POST['designation'] ?? $staff['designation']);
-        $department  = trim($_POST['department'] ?? $staff['department']);
-        $phone       = trim($_POST['phone'] ?? $staff['phone']);
         $email       = trim($_POST['email'] ?? $staff['email']);
-        $address     = trim($_POST['address'] ?? $staff['address']);
-        $salaryType  = trim($_POST['salary_type'] ?? $staff['salary_type']);
-        $baseSalary  = isset($_POST['base_salary']) ? (float)$_POST['base_salary'] : (float)$staff['base_salary'];
-        $joiningDate = !empty($_POST['joining_date']) ? $_POST['joining_date'] : $staff['joining_date'];
+        $password    = trim($_POST['password'] ?? '');
+        $phone       = trim($_POST['phone'] ?? $staff['phone']);
+        $designation = trim($_POST['designation'] ?? $staff['designation']);
         $status      = ($_POST['status'] ?? $staff['status']) === 'inactive' ? 'inactive' : 'active';
+        $department  = trim($_POST['department'] ?? $staff['department']);
 
         try {
+            $passwordHash = $password ? password_hash($password, PASSWORD_BCRYPT) : $staff['password_hash'];
+
+            // Sync with users login table if applicable
+            if (!empty($staff['user_id'])) {
+                if ($password) {
+                    DB::query(
+                        "UPDATE users SET name = ?, email = ?, concern_id = ?, password_hash = ?, phone = ?, status = ? WHERE id = ?",
+                        [$name, $email, $cid, $passwordHash, $phone, $status, $staff['user_id']]
+                    );
+                } else {
+                    DB::query(
+                        "UPDATE users SET name = ?, email = ?, concern_id = ?, phone = ?, status = ? WHERE id = ?",
+                        [$name, $email, $cid, $phone, $status, $staff['user_id']]
+                    );
+                }
+            } elseif ($email && $password) {
+                $roleId = (int)DB::fetchValue("SELECT id FROM roles WHERE concern_id = ? LIMIT 1", [$cid]) ?: 3;
+                DB::query(
+                    "INSERT INTO users (concern_id, role_id, name, email, password_hash, phone, status, created_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, NOW())",
+                    [$cid, $roleId, $name, $email, $passwordHash, $phone, $status]
+                );
+                $userId = (int)DB::lastInsertId();
+                DB::query("UPDATE staff SET user_id = ? WHERE id = ?", [$userId, $id]);
+            }
+
             DB::query(
-                "UPDATE staff SET name = ?, phone = ?, email = ?, designation = ?, department = ?, salary_type = ?, base_salary = ?, address = ?, status = ?, joining_date = ?
+                "UPDATE staff SET concern_id = ?, name = ?, email = ?, password_hash = ?, phone = ?, designation = ?, department = ?, status = ?
                  WHERE id = ?",
-                [$name, $phone, $email, $designation, $department, $salaryType, $baseSalary, $address, $status, $joiningDate, $id]
+                [$cid, $name, $email, $passwordHash, $phone, $designation, $department, $status, $id]
             );
 
             $this->flash('success', "Staff member '{$name}' updated successfully.");
