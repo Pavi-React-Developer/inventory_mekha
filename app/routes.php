@@ -140,7 +140,31 @@ $router->post('/m/return_exchange/store', [SalesController::class, 'storeReturn'
 
 // Production Line
 $router->get('/m/catalog_program', [ProductionController::class, 'catalogProgram'], 'catalog_program', 'view');
+$router->get('/production/catalog', [ProductionController::class, 'catalogProgram'], 'catalog_program', 'view');
+$router->get('/m/catalog', [ProductionController::class, 'catalogProgram'], 'catalog_program', 'view');
+$router->get('/production/catalog/create', [ProductionController::class, 'createStyle'], 'catalog_program', 'add');
+$router->get('/m/catalog/create', [ProductionController::class, 'createStyle'], 'catalog_program', 'add');
+$router->post('/production/catalog/store', [ProductionController::class, 'storeStyle'], 'catalog_program', 'add');
+$router->post('/m/catalog/store', [ProductionController::class, 'storeStyle'], 'catalog_program', 'add');
+$router->get('/production/catalog/edit', [ProductionController::class, 'editStyle'], 'catalog_program', 'edit');
+$router->get('/m/catalog/edit', [ProductionController::class, 'editStyle'], 'catalog_program', 'edit');
+$router->post('/production/catalog/update', [ProductionController::class, 'updateStyle'], 'catalog_program', 'edit');
+$router->post('/m/catalog/update', [ProductionController::class, 'updateStyle'], 'catalog_program', 'edit');
+$router->post('/production/catalog/delete', [ProductionController::class, 'deleteStyle'], 'catalog_program', 'delete');
+$router->post('/m/catalog/delete', [ProductionController::class, 'deleteStyle'], 'catalog_program', 'delete');
 $router->post('/m/catalog_program/store', [ProductionController::class, 'storeProgram'], 'catalog_program', 'add');
+$router->get('/production/programs', [ProductionController::class, 'programsList'], 'catalog_program', 'view');
+$router->get('/m/programs', [ProductionController::class, 'programsList'], 'catalog_program', 'view');
+
+// APIs for 3-Tier Hierarchy & HSN Lookups
+$router->get('/api/categories/subcategories', [ProductionController::class, 'getSubcategoriesAjax'], 'catalog_program', 'view');
+$router->get('/api/categories/subsubcategories', [ProductionController::class, 'getSubSubcategoriesAjax'], 'catalog_program', 'view');
+$router->post('/api/categories/quick-add', [ProductionController::class, 'quickAddCategoryAjax'], 'catalog_program', 'add');
+$router->post('/api/subcategories/quick-add', [ProductionController::class, 'quickAddSubcategoryAjax'], 'catalog_program', 'add');
+$router->post('/api/subsubcategories/quick-add', [ProductionController::class, 'quickAddSubSubcategoryAjax'], 'catalog_program', 'add');
+$router->get('/api/hsn/search', [ProductionController::class, 'searchHsnAjax'], 'catalog_program', 'view');
+$router->post('/api/hsn/quick-add', [ProductionController::class, 'quickAddHsnAjax'], 'catalog_program', 'add');
+$router->get('/api/catalog/style-details', [ProductionController::class, 'styleDetailsAjax'], 'catalog_program', 'view');
 $router->get('/m/cutting_wastage', [ProductionController::class, 'cutting'], 'cutting_wastage', 'view');
 $router->post('/m/cutting_wastage/store', [ProductionController::class, 'storeCutting'], 'cutting_wastage', 'add');
 $router->get('/m/stitching_wastage', [ProductionController::class, 'stitching'], 'stitching_wastage', 'view');
