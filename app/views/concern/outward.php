@@ -28,7 +28,7 @@
                 <thead>
                     <tr>
                         <th>Outward No</th>
-                        <th>Customer</th>
+                        <th>Recipient / Destination</th>
                         <th>Invoice Ref</th>
                         <th>Outward Date</th>
                         <th>Location</th>
@@ -44,7 +44,20 @@
                         <?php foreach ($outwards as $o): ?>
                             <tr>
                                 <td><span class="badge bg-dark font-monospace"><?= htmlspecialchars($o['outward_no']) ?></span></td>
-                                <td class="fw-bold text-dark"><?= htmlspecialchars($o['customer_name']) ?></td>
+                                <td>
+                                    <?php if (($o['transfer_type'] ?? '') === 'concern' || !empty($o['destination_concern_id'])): ?>
+                                        <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 mb-1 d-inline-block">
+                                            <i class="bi bi-building me-1"></i> Unit Transfer
+                                        </span>
+                                        <div class="fw-bold text-dark"><?= htmlspecialchars($o['dest_concern_name'] ?? 'Sister Concern') ?></div>
+                                        <small class="text-muted font-monospace"><?= htmlspecialchars($o['dest_concern_code'] ?? '') ?></small>
+                                    <?php else: ?>
+                                        <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 mb-1 d-inline-block">
+                                            <i class="bi bi-person me-1"></i> Customer
+                                        </span>
+                                        <div class="fw-bold text-dark"><?= htmlspecialchars($o['customer_name'] ?? 'General Customer') ?></div>
+                                    <?php endif; ?>
+                                </td>
                                 <td><?= htmlspecialchars($o['invoice_no'] ?: '-') ?></td>
                                 <td><?= date('d M Y', strtotime($o['outward_date'])) ?></td>
                                 <td><?= htmlspecialchars($o['location']) ?></td>
@@ -54,9 +67,15 @@
                                     </span>
                                 </td>
                                 <td>
-                                    <span class="badge <?= $o['status'] === 'dispatched' ? 'bg-success' : 'bg-warning text-dark' ?>">
-                                        <?= ucfirst($o['status']) ?>
-                                    </span>
+                                    <?php if (($o['status'] ?? '') === 'received'): ?>
+                                        <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25">
+                                            <i class="bi bi-check-all me-1"></i> Inwarded / Received
+                                        </span>
+                                    <?php elseif (($o['status'] ?? '') === 'dispatched'): ?>
+                                        <span class="badge bg-success">Dispatched</span>
+                                    <?php else: ?>
+                                        <span class="badge bg-warning text-dark"><?= ucfirst($o['status'] ?? 'prepared') ?></span>
+                                    <?php endif; ?>
                                 </td>
                                 <td class="text-end">
                                     <div class="d-inline-flex align-items-center gap-1">
@@ -98,19 +117,63 @@
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
+                <?php if ($isSuperAdmin && empty($selectedCid)): ?>
+                    <div class="mb-3 p-2 bg-light border rounded">
+                        <label class="form-label small fw-bold text-danger text-uppercase mb-1">
+                            <i class="bi bi-box-arrow-up-right me-1"></i> From Concern (Source Unit) *
+                        </label>
+                        <select name="concern_id" class="form-select form-select-sm" required>
+                            <option value="">-- Select Source Concern --</option>
+                            <?php foreach ($allConcerns as $ac): ?>
+                                <option value="<?= $ac['id'] ?>"><?= htmlspecialchars($ac['name']) ?> (<?= htmlspecialchars($ac['code']) ?>)</option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                <?php endif; ?>
+
+                <!-- Destination Type Selector -->
                 <div class="mb-3">
+                    <label class="form-label small fw-bold text-secondary text-uppercase mb-1">Outward Destination Type *</label>
+                    <div class="btn-group w-100" role="group">
+                        <input type="radio" class="btn-check" name="transfer_type" id="tt_customer" value="customer" checked onchange="toggleOutwardDestType()">
+                        <label class="btn btn-outline-danger btn-sm" for="tt_customer"><i class="bi bi-person me-1"></i> Customer Dispatch</label>
+
+                        <input type="radio" class="btn-check" name="transfer_type" id="tt_concern" value="concern" onchange="toggleOutwardDestType()">
+                        <label class="btn btn-outline-danger btn-sm" for="tt_concern"><i class="bi bi-building me-1"></i> Inter-Unit / Concern Transfer</label>
+                    </div>
+                </div>
+
+                <!-- Customer Selection -->
+                <div class="mb-3" id="div_customer_select">
                     <label class="form-label small fw-semibold">Customer *</label>
-                    <select name="customer_id" class="form-select" required>
+                    <select name="customer_id" id="outward_customer_id" class="form-select" required>
                         <option value="">Select Customer</option>
                         <?php foreach ($customers as $c): ?>
                             <option value="<?= $c['id'] ?>"><?= htmlspecialchars($c['name']) ?></option>
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <div class="mb-3">
+
+                <!-- Destination Concern Selection -->
+                <div class="mb-3 d-none" id="div_concern_select">
+                    <label class="form-label small fw-semibold text-primary"><i class="bi bi-building me-1"></i> Destination Concern / Receiving Unit *</label>
+                    <select name="destination_concern_id" id="outward_dest_concern_id" class="form-select">
+                        <option value="">-- Choose Destination Concern --</option>
+                        <?php foreach ($allConcerns as $c): ?>
+                            <?php if (empty($selectedCid) || $c['id'] != $selectedCid): ?>
+                                <option value="<?= $c['id'] ?>"><?= htmlspecialchars($c['name']) ?> (<?= htmlspecialchars($c['code']) ?>)</option>
+                            <?php endif; ?>
+                        <?php endforeach; ?>
+                    </select>
+                    <small class="text-muted d-block mt-1">
+                        <i class="bi bi-shield-check text-success me-1"></i> Dispatched products will only reflect and be inwarded in this chosen concern.
+                    </small>
+                </div>
+
+                <div class="mb-3" id="div_invoice_select">
                     <label class="form-label small fw-semibold">Sales Invoice Ref</label>
                     <select name="sales_invoice_id" class="form-select">
-                        <option value="">None (Sample / Non-billed delivery)</option>
+                        <option value="">None (Sample / Transfer / Non-billed delivery)</option>
                         <?php foreach ($invoices as $inv): ?>
                             <option value="<?= $inv['id'] ?>"><?= htmlspecialchars($inv['invoice_no']) ?></option>
                         <?php endforeach; ?>
@@ -251,37 +314,73 @@
 </div>
 
 <script>
+function toggleOutwardDestType() {
+    const isConcern = document.getElementById('tt_concern').checked;
+    const custDiv = document.getElementById('div_customer_select');
+    const custInput = document.getElementById('outward_customer_id');
+    const conDiv = document.getElementById('div_concern_select');
+    const conInput = document.getElementById('outward_dest_concern_id');
+
+    if (isConcern) {
+        custDiv.classList.add('d-none');
+        custInput.removeAttribute('required');
+        conDiv.classList.remove('d-none');
+        conInput.setAttribute('required', 'required');
+    } else {
+        conDiv.classList.add('d-none');
+        conInput.removeAttribute('required');
+        custDiv.classList.remove('d-none');
+        custInput.setAttribute('required', 'required');
+    }
+}
+
 function openViewOutwardModal(o) {
     if (!o) return;
-    document.getElementById('view_outward_no').innerText = o.outward_no || '';
-    document.getElementById('view_outward_customer').innerText = o.customer_name || '-';
-    document.getElementById('view_outward_inv').innerText = o.invoice_no || 'None';
-    document.getElementById('view_outward_loc').innerText = o.location || 'Main Store';
-    document.getElementById('view_outward_date').innerText = o.outward_date ? o.outward_date.substring(0, 10) : '-';
-    document.getElementById('view_outward_qty').innerText = '-' + parseFloat(o.total_qty || 0).toLocaleString('en-IN', {minimumFractionDigits: 2});
-    document.getElementById('view_outward_notes').innerText = o.notes || 'None';
+    const setTxt = (id, val) => { const el = document.getElementById(id); if (el) el.innerText = val; };
+    setTxt('view_outward_no', o.outward_no || '');
+    const destName = (o.transfer_type === 'concern' || o.destination_concern_id) 
+        ? 'Unit Transfer: ' + (o.dest_concern_name || 'Sister Concern') + (o.dest_concern_code ? ' (' + o.dest_concern_code + ')' : '')
+        : (o.customer_name || 'General Customer');
+    setTxt('view_outward_customer', destName);
+    setTxt('view_outward_inv', o.invoice_no || 'None');
+    setTxt('view_outward_loc', o.location || 'Main Store');
+    setTxt('view_outward_date', o.outward_date ? o.outward_date.substring(0, 10) : '-');
+    setTxt('view_outward_qty', '-' + parseFloat(o.total_qty || 0).toLocaleString('en-IN', {minimumFractionDigits: 2}));
+    setTxt('view_outward_notes', o.notes || 'None');
 
     const statusBadge = document.getElementById('view_outward_status_badge');
-    if (o.status === 'dispatched') {
-        statusBadge.className = 'badge bg-success';
-        statusBadge.innerText = 'Dispatched';
-    } else {
-        statusBadge.className = 'badge bg-warning text-dark';
-        statusBadge.innerText = 'Prepared';
+    if (statusBadge) {
+        if (o.status === 'received') {
+            statusBadge.className = 'badge bg-info';
+            statusBadge.innerText = 'Received / Inwarded';
+        } else if (o.status === 'dispatched') {
+            statusBadge.className = 'badge bg-success';
+            statusBadge.innerText = 'Dispatched';
+        } else {
+            statusBadge.className = 'badge bg-warning text-dark';
+            statusBadge.innerText = 'Prepared';
+        }
     }
 
-    const modal = new bootstrap.Modal(document.getElementById('modalViewOutward'));
-    modal.show();
+    const modalEl = document.getElementById('modalViewOutward');
+    if (modalEl) {
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        modal.show();
+    }
 }
 function openEditOutwardModal(o) {
     if (!o) return;
-    document.getElementById('edit_outward_id').value = o.id || '';
-    document.getElementById('edit_outward_no').value = o.outward_no || '';
-    document.getElementById('edit_outward_date').value = o.outward_date ? o.outward_date.substring(0, 10) : '';
-    document.getElementById('edit_outward_status').value = o.status || 'prepared';
-    document.getElementById('edit_outward_notes').value = o.notes || '';
+    const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+    setVal('edit_outward_id', o.id || '');
+    setVal('edit_outward_no', o.outward_no || '');
+    setVal('edit_outward_date', o.outward_date ? o.outward_date.substring(0, 10) : '');
+    setVal('edit_outward_status', o.status || 'prepared');
+    setVal('edit_outward_notes', o.notes || '');
 
-    const modal = new bootstrap.Modal(document.getElementById('modalEditOutward'));
-    modal.show();
+    const modalEl = document.getElementById('modalEditOutward');
+    if (modalEl) {
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        modal.show();
+    }
 }
 </script>

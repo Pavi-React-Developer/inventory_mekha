@@ -18,6 +18,66 @@
     include __DIR__ . '/../partials/export_card.php';
     ?>
 
+    <!-- Incoming Inter-Unit Transfers Alert & Action Card -->
+    <?php if (!empty($pendingTransfers)): ?>
+        <div class="card border-0 shadow-sm rounded-3 mb-4" style="background: #f0f7ff; border-left: 5px solid #2563eb !important;">
+            <div class="card-body p-3">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h6 class="fw-bold text-primary mb-0">
+                        <i class="bi bi-box-arrow-in-down-right me-2 fs-5"></i> Incoming Transfers from Other Concerns / Production Units
+                    </h6>
+                    <span class="badge bg-primary px-2.5 py-1.5 fs-7"><?= count($pendingTransfers) ?> Consignment(s) Ready to Inward</span>
+                </div>
+                <p class="small text-secondary mb-3">
+                    Outward products sent specifically to this concern from sister production units. Inwarding creates/maintains the product under this concern only, and credits live stock with strict tenant isolation.
+                </p>
+                <div class="table-responsive bg-white rounded-3 border">
+                    <table class="table table-sm table-hover align-middle mb-0">
+                        <thead class="table-light small text-uppercase">
+                            <tr>
+                                <th class="ps-3">Gate Pass No</th>
+                                <th>Sent From Unit</th>
+                                <th>Product Variant</th>
+                                <th>Quantity Sent</th>
+                                <th>Dispatch Date</th>
+                                <th class="text-end pe-3">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($pendingTransfers as $pt): ?>
+                                <tr>
+                                    <td class="ps-3"><span class="badge bg-dark font-monospace"><?= htmlspecialchars($pt['outward_no']) ?></span></td>
+                                    <td>
+                                        <div class="fw-bold text-dark"><?= htmlspecialchars($pt['from_concern_name']) ?></div>
+                                        <small class="text-muted font-monospace"><?= htmlspecialchars($pt['from_concern_code']) ?></small>
+                                    </td>
+                                    <td>
+                                        <div class="fw-semibold text-dark"><?= htmlspecialchars($pt['variant_name']) ?></div>
+                                        <span class="badge bg-light text-muted border"><?= htmlspecialchars($pt['sku_code']) ?></span>
+                                        <?php if (!empty($pt['size'])): ?>
+                                            <span class="badge bg-light text-dark border"><?= htmlspecialchars($pt['size']) ?></span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 fs-6 px-2 py-1">
+                                            +<?= number_format($pt['transfer_qty'], 2) ?> <?= htmlspecialchars($pt['weight_unit'] ?: 'units') ?>
+                                        </span>
+                                    </td>
+                                    <td class="small text-muted font-monospace"><?= date('d M Y', strtotime($pt['outward_date'])) ?></td>
+                                    <td class="text-end pe-3">
+                                        <button type="button" class="btn btn-sm btn-primary px-3 shadow-sm" onclick='receiveTransferModal(<?= json_encode($pt, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>)'>
+                                            <i class="bi bi-box-arrow-in-down me-1"></i> Receive Inward
+                                        </button>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    <?php endif; ?>
+
     <div class="card border-0 shadow-sm rounded-3">
         <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
             <h6 class="mb-0 fw-bold text-dark"><i class="bi bi-box-arrow-in-down me-2 text-primary"></i> Inward Consignments Log</h6>
@@ -31,7 +91,7 @@
                         <?php if ($isSuperAdmin && empty($selectedCid)): ?>
                             <th>Concern</th>
                         <?php endif; ?>
-                        <th>Supplier</th>
+                        <th>Source / Supplier</th>
                         <th>Inward Date</th>
                         <th>Warehouse Bay</th>
                         <th>Items Received</th>
@@ -55,8 +115,19 @@
                                     </td>
                                 <?php endif; ?>
                                 <td>
-                                    <div class="fw-bold text-dark"><?= htmlspecialchars($inw['supplier_name'] ?? 'Direct Receipt') ?></div>
-                                    <small class="text-muted"><?= htmlspecialchars($inw['remarks'] ?: '-') ?></small>
+                                    <?php if (($inw['inward_type'] ?? '') === 'transfer' || !empty($inw['from_concern_id'])): ?>
+                                        <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 mb-1 d-inline-block">
+                                            <i class="bi bi-building me-1"></i> Unit Transfer
+                                        </span>
+                                        <div class="fw-bold text-dark"><?= htmlspecialchars($inw['from_concern_name'] ?? 'Sister Unit') ?></div>
+                                        <small class="text-muted font-monospace">Pass #<?= htmlspecialchars($inw['outward_no'] ?? '') ?></small>
+                                    <?php else: ?>
+                                        <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 mb-1 d-inline-block">
+                                            <i class="bi bi-cart me-1"></i> Supplier
+                                        </span>
+                                        <div class="fw-bold text-dark"><?= htmlspecialchars($inw['supplier_name'] ?? 'Direct Receipt') ?></div>
+                                        <small class="text-muted"><?= htmlspecialchars($inw['remarks'] ?: '-') ?></small>
+                                    <?php endif; ?>
                                 </td>
                                 <td><?= date('d M Y', strtotime($inw['inward_date'])) ?></td>
                                 <td><span class="badge bg-light text-dark border"><?= htmlspecialchars($inw['location']) ?></span></td>
@@ -106,9 +177,9 @@
             <div class="modal-body">
                 <?php if ($isSuperAdmin && empty($selectedCid)): ?>
                     <div class="mb-3 p-2 bg-light border rounded">
-                        <label class="form-label small fw-bold text-primary">Inward To Concern *</label>
-                        <select name="concern_id" class="form-select" required>
-                            <option value="">-- Choose Concern --</option>
+                        <label class="form-label small fw-bold text-primary text-uppercase mb-1">Inward To Concern *</label>
+                        <select name="concern_id" id="inward_concern_id" class="form-select form-select-sm" required>
+                            <option value="">-- Choose Receiving Concern --</option>
                             <?php foreach ($allConcerns as $c): ?>
                                 <option value="<?= $c['id'] ?>"><?= htmlspecialchars($c['name']) ?> (<?= htmlspecialchars($c['code']) ?>)</option>
                             <?php endforeach; ?>
@@ -116,47 +187,107 @@
                     </div>
                 <?php endif; ?>
 
+                <!-- Inward Source Selector -->
                 <div class="mb-3">
-                    <label class="form-label small fw-semibold">Supplier</label>
-                    <select name="supplier_id" class="form-select">
-                        <option value="">Direct Internal Consignment (No Supplier)</option>
-                        <?php foreach ($suppliers as $sup): ?>
-                            <option value="<?= $sup['id'] ?>"><?= htmlspecialchars($sup['name']) ?></option>
+                    <label class="form-label small fw-bold text-secondary text-uppercase mb-1">Inward Source *</label>
+                    <div class="btn-group w-100" role="group">
+                        <input type="radio" class="btn-check" name="inward_type" id="it_purchase" value="purchase" checked onchange="toggleInwardSourceType()">
+                        <label class="btn btn-outline-primary btn-sm" for="it_purchase"><i class="bi bi-cart me-1"></i> Supplier / Direct</label>
+
+                        <input type="radio" class="btn-check" name="inward_type" id="it_transfer" value="transfer" onchange="toggleInwardSourceType()">
+                        <label class="btn btn-outline-primary btn-sm" for="it_transfer">
+                            <i class="bi bi-building me-1"></i> Inter-Unit Transfer 
+                            <?php if (!empty($pendingTransfers)): ?>
+                                <span class="badge bg-danger ms-1"><?= count($pendingTransfers) ?></span>
+                            <?php endif; ?>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Inter-Unit Transfer Selector (shown when transfer selected) -->
+                <div class="mb-3 d-none" id="div_transfer_source">
+                    <label class="form-label small fw-semibold text-primary"><i class="bi bi-box-arrow-in-down-right me-1"></i> Select Incoming Outward Consignment *</label>
+                    <select name="outward_id" id="inward_outward_id" class="form-select" onchange="onSelectTransferOutward(this)">
+                        <option value="">-- Choose Outward Consignment --</option>
+                        <?php foreach ($pendingTransfers as $pt): ?>
+                            <option value="<?= $pt['id'] ?>"
+                                    data-from="<?= htmlspecialchars($pt['from_concern_name']) ?> (<?= htmlspecialchars($pt['from_concern_code']) ?>)"
+                                    data-varid="<?= $pt['variant_id'] ?>"
+                                    data-varname="<?= htmlspecialchars($pt['variant_name']) ?>"
+                                    data-varsku="<?= htmlspecialchars($pt['sku_code']) ?>"
+                                    data-varsize="<?= htmlspecialchars($pt['size'] ?: 'Standard') ?>"
+                                    data-qty="<?= $pt['transfer_qty'] ?>"
+                                    data-outno="<?= htmlspecialchars($pt['outward_no']) ?>"
+                                    data-date="<?= $pt['outward_date'] ?>">
+                                <?= htmlspecialchars($pt['outward_no']) ?> &bull; From <?= htmlspecialchars($pt['from_concern_name']) ?> &bull; <?= htmlspecialchars($pt['variant_name']) ?> (<?= number_format($pt['transfer_qty'], 2) ?> units)
+                            </option>
                         <?php endforeach; ?>
                     </select>
+
+                    <div id="transfer_details_card" class="p-2.5 mt-2 rounded bg-light border d-none small">
+                        <div class="d-flex justify-content-between mb-1">
+                            <span class="text-muted">Source Unit:</span>
+                            <strong class="text-dark" id="td_from">-</strong>
+                        </div>
+                        <div class="d-flex justify-content-between mb-1">
+                            <span class="text-muted">Product / Variant:</span>
+                            <strong class="text-primary" id="td_product">-</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span class="text-muted">Transfer Quantity:</span>
+                            <strong class="text-success fs-6 font-monospace" id="td_qty">-</strong>
+                        </div>
+                        <small class="text-muted d-block mt-2 border-top pt-1">
+                            <i class="bi bi-shield-check text-success me-1"></i> This product will be maintained strictly under this concern and live stock credited.
+                        </small>
+                    </div>
                 </div>
-                <div class="mb-3">
-                    <label class="form-label small fw-semibold">Product Variant *</label>
-                    <select name="variant_id" class="form-select" required>
-                        <option value="">-- Choose Variant to Inward --</option>
-                        <?php foreach ($variants as $v): ?>
-                            <option value="<?= $v['id'] ?>"><?= htmlspecialchars($v['sku_code']) ?> &bull; <?= htmlspecialchars($v['name']) ?> (<?= htmlspecialchars($v['size'] ?: 'Standard') ?>)</option>
-                        <?php endforeach; ?>
-                    </select>
+
+                <!-- Supplier and Variant Selection (shown for standard purchase) -->
+                <div id="div_supplier_source">
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Supplier</label>
+                        <select name="supplier_id" id="inward_supplier_id" class="form-select">
+                            <option value="">Direct Internal Consignment (No Supplier)</option>
+                            <?php foreach ($suppliers as $sup): ?>
+                                <option value="<?= $sup['id'] ?>"><?= htmlspecialchars($sup['name']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Product Variant *</label>
+                        <select name="variant_id" id="inward_variant_id" class="form-select" required>
+                            <option value="">-- Choose Variant to Inward --</option>
+                            <?php foreach ($variants as $v): ?>
+                                <option value="<?= $v['id'] ?>"><?= htmlspecialchars($v['sku_code']) ?> &bull; <?= htmlspecialchars($v['name']) ?> (<?= htmlspecialchars($v['size'] ?: 'Standard') ?>)</option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
                 </div>
+
                 <div class="row g-2 mb-3">
                     <div class="col-md-6">
                         <label class="form-label small fw-semibold">Received Quantity *</label>
-                        <input type="number" step="0.01" name="qty" class="form-control" placeholder="0.00" required>
+                        <input type="number" step="0.01" name="qty" id="inward_qty" class="form-control" placeholder="0.00" required>
                     </div>
                     <div class="col-md-6">
                         <label class="form-label small fw-semibold">Unit Cost Rate (₹)</label>
-                        <input type="number" step="0.01" name="unit_cost" class="form-control" placeholder="0.00">
+                        <input type="number" step="0.01" name="unit_cost" id="inward_unit_cost" class="form-control" placeholder="0.00">
                     </div>
                 </div>
                 <div class="row g-2 mb-3">
                     <div class="col-md-6">
                         <label class="form-label small fw-semibold">Inward Date</label>
-                        <input type="date" name="inward_date" class="form-control" value="<?= date('Y-m-d') ?>">
+                        <input type="date" name="inward_date" id="inward_date" class="form-control" value="<?= date('Y-m-d') ?>">
                     </div>
                     <div class="col-md-6">
                         <label class="form-label small fw-semibold">Location / Godown</label>
-                        <input type="text" name="location" class="form-control" value="Main Store">
+                        <input type="text" name="location" id="inward_location" class="form-control" value="Main Store">
                     </div>
                 </div>
                 <div class="mb-3">
                     <label class="form-label small fw-semibold">Remarks / Gate Entry Ref</label>
-                    <textarea name="remarks" class="form-control" rows="2" placeholder="Delivery challan or truck ref"></textarea>
+                    <textarea name="remarks" id="inward_remarks" class="form-control" rows="2" placeholder="Delivery challan or truck ref"></textarea>
                 </div>
             </div>
             <div class="modal-footer">
@@ -259,28 +390,107 @@
 </div>
 
 <script>
+function toggleInwardSourceType() {
+    const isTransfer = document.getElementById('it_transfer').checked;
+    const transferDiv = document.getElementById('div_transfer_source');
+    const transferSelect = document.getElementById('inward_outward_id');
+    const supplierDiv = document.getElementById('div_supplier_source');
+    const variantSelect = document.getElementById('inward_variant_id');
+
+    if (isTransfer) {
+        supplierDiv.classList.add('d-none');
+        variantSelect.removeAttribute('required');
+        transferDiv.classList.remove('d-none');
+        transferSelect.setAttribute('required', 'required');
+    } else {
+        transferDiv.classList.add('d-none');
+        transferSelect.removeAttribute('required');
+        supplierDiv.classList.remove('d-none');
+        variantSelect.setAttribute('required', 'required');
+        document.getElementById('transfer_details_card').classList.add('d-none');
+    }
+}
+
+function onSelectTransferOutward(selectEl) {
+    const opt = selectEl.options[selectEl.selectedIndex];
+    const detailsCard = document.getElementById('transfer_details_card');
+    if (!opt || !opt.value) {
+        detailsCard.classList.add('d-none');
+        return;
+    }
+
+    const from = opt.getAttribute('data-from');
+    const varName = opt.getAttribute('data-varname');
+    const varSku = opt.getAttribute('data-varsku');
+    const varSize = opt.getAttribute('data-varsize');
+    const qty = opt.getAttribute('data-qty');
+    const outNo = opt.getAttribute('data-outno');
+    const date = opt.getAttribute('data-date');
+
+    document.getElementById('td_from').innerText = from || '-';
+    document.getElementById('td_product').innerText = varName + ' [' + varSku + '] (' + varSize + ')';
+    document.getElementById('td_qty').innerText = parseFloat(qty || 0).toFixed(2) + ' units';
+    detailsCard.classList.remove('d-none');
+
+    document.getElementById('inward_qty').value = parseFloat(qty || 0).toFixed(2);
+    document.getElementById('inward_remarks').value = 'Inter-unit transfer from ' + from + ' (Pass #' + outNo + ')';
+}
+
+function receiveTransferModal(pt) {
+    if (!pt) return;
+    const itTransfer = document.getElementById('it_transfer');
+    if (itTransfer) {
+        itTransfer.checked = true;
+        toggleInwardSourceType();
+    }
+
+    const outSelect = document.getElementById('inward_outward_id');
+    if (outSelect) {
+        outSelect.value = pt.id;
+        onSelectTransferOutward(outSelect);
+    }
+
+    const modalEl = document.getElementById('modalAddInward');
+    if (modalEl) {
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        modal.show();
+    }
+}
+
 function openViewInwardModal(inw) {
     if (!inw) return;
-    document.getElementById('view_inward_no').innerText = inw.inward_no || '';
-    document.getElementById('view_inward_supplier').innerText = inw.supplier_name || 'Direct Receipt';
-    document.getElementById('view_inward_loc').innerText = inw.location || 'Main Store';
-    document.getElementById('view_inward_date').innerText = inw.inward_date ? inw.inward_date.substring(0, 10) : '-';
-    document.getElementById('view_inward_user').innerText = inw.user_name || 'Staff';
-    document.getElementById('view_inward_qty').innerText = '+' + parseFloat(inw.total_qty || 0).toLocaleString('en-IN', {minimumFractionDigits: 2});
-    document.getElementById('view_inward_items_count').innerText = (inw.items_count || 1) + ' Items';
-    document.getElementById('view_inward_remarks').innerText = inw.remarks || 'None specified';
+    const setTxt = (id, val) => { const el = document.getElementById(id); if (el) el.innerText = val; };
+    setTxt('view_inward_no', inw.inward_no || '');
+    const supplierText = (inw.inward_type === 'transfer' || inw.from_concern_id)
+        ? 'Unit Transfer: ' + (inw.from_concern_name || 'Sister Unit') + (inw.outward_no ? ' (Pass #' + inw.outward_no + ')' : '')
+        : (inw.supplier_name || 'Direct Receipt');
+    setTxt('view_inward_supplier', supplierText);
+    setTxt('view_inward_loc', inw.location || 'Main Store');
+    setTxt('view_inward_date', inw.inward_date ? inw.inward_date.substring(0, 10) : '-');
+    setTxt('view_inward_user', inw.user_name || 'Staff');
+    setTxt('view_inward_qty', '+' + parseFloat(inw.total_qty || 0).toLocaleString('en-IN', {minimumFractionDigits: 2}));
+    setTxt('view_inward_items_count', (inw.items_count || 1) + ' Items');
+    setTxt('view_inward_remarks', inw.remarks || 'None specified');
 
-    const modal = new bootstrap.Modal(document.getElementById('modalViewInward'));
-    modal.show();
+    const modalEl = document.getElementById('modalViewInward');
+    if (modalEl) {
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        modal.show();
+    }
 }
+
 function openEditInwardModal(inw) {
     if (!inw) return;
-    document.getElementById('edit_inward_id').value = inw.id || '';
-    document.getElementById('edit_inward_no').value = inw.inward_no || '';
-    document.getElementById('edit_inward_date').value = inw.inward_date ? inw.inward_date.substring(0, 10) : '';
-    document.getElementById('edit_inward_remarks').value = inw.remarks || '';
+    const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+    setVal('edit_inward_id', inw.id || '');
+    setVal('edit_inward_no', inw.inward_no || '');
+    setVal('edit_inward_date', inw.inward_date ? inw.inward_date.substring(0, 10) : '');
+    setVal('edit_inward_remarks', inw.remarks || '');
 
-    const modal = new bootstrap.Modal(document.getElementById('modalEditInward'));
-    modal.show();
+    const modalEl = document.getElementById('modalEditInward');
+    if (modalEl) {
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        modal.show();
+    }
 }
 </script>

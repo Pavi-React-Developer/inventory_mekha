@@ -934,10 +934,12 @@ class SalesController extends Controller {
         $cid = Auth::concernId();
 
         $sql = "SELECT o.*, c.name AS customer_name, si.invoice_no, con.name AS concern_name, con.code AS concern_code,
+                       dest_con.name AS dest_concern_name, dest_con.code AS dest_concern_code,
                        (SELECT COUNT(*) FROM outward_items oi WHERE oi.outward_id = o.id) AS items_count,
                        (SELECT COALESCE(SUM(qty), 0) FROM outward_items oi WHERE oi.outward_id = o.id) AS total_qty
                 FROM outwards o
-                JOIN customers c ON o.customer_id = c.id
+                LEFT JOIN customers c ON o.customer_id = c.id
+                LEFT JOIN concerns dest_con ON o.destination_concern_id = dest_con.id
                 LEFT JOIN sales_invoices si ON o.sales_invoice_id = si.id
                 LEFT JOIN concerns con ON o.concern_id = con.id";
         $params = [];
@@ -947,6 +949,8 @@ class SalesController extends Controller {
         }
         $sql .= " ORDER BY o.id DESC";
         $outwards = DB::fetchAll($sql, $params);
+
+        $allConcerns = DB::fetchAll("SELECT id, name, code FROM concerns WHERE status = 'active' ORDER BY name ASC");
 
         if ($cid) {
             $customers = DB::fetchAll("SELECT id, name FROM customers WHERE concern_id = ? AND status = 'active'", [$cid]);
@@ -976,6 +980,7 @@ class SalesController extends Controller {
             'customers'     => $customers,
             'invoices'      => $invoices,
             'variants'      => $variants,
+            'allConcerns'   => $allConcerns,
             'selectedCid'   => $cid,
         ]);
     }
@@ -985,30 +990,51 @@ class SalesController extends Controller {
         $cid = Auth::concernId() ?: (int)($_POST['concern_id'] ?? 0);
 
         if (!$cid) {
-            $this->flash('error', 'Please choose a concern.');
+            $this->flash('error', 'Please choose a source concern.');
             $this->redirect('/m/outward');
         }
 
-        $customerId = (int)($_POST['customer_id'] ?? 0);
+        $transferType   = trim($_POST['transfer_type'] ?? 'customer');
+        $destConcernId  = !empty($_POST['destination_concern_id']) ? (int)$_POST['destination_concern_id'] : null;
+        $customerId     = !empty($_POST['customer_id']) ? (int)$_POST['customer_id'] : null;
+
+        if ($transferType === 'concern') {
+            if (!$destConcernId) {
+                $this->flash('error', 'Please select a destination concern / unit for inter-concern transfer.');
+                $this->redirect('/m/outward');
+            }
+            if ($destConcernId === $cid) {
+                $this->flash('error', 'Destination concern cannot be the same as the source concern.');
+                $this->redirect('/m/outward');
+            }
+        } else {
+            $transferType = 'customer';
+            if (!$customerId) {
+                $this->flash('error', 'Customer, Variant and valid Quantity are required.');
+                $this->redirect('/m/outward');
+            }
+        }
+
         $invoiceId  = !empty($_POST['sales_invoice_id']) ? (int)$_POST['sales_invoice_id'] : null;
         $outwDate   = $_POST['outward_date'] ?: date('Y-m-d');
         $location   = trim($_POST['location'] ?? 'Main Store');
         $variantId  = (int)($_POST['variant_id'] ?? 0);
         $qty        = (float)($_POST['qty'] ?? 0);
 
-        if (!$customerId || !$variantId || $qty <= 0) {
-            $this->flash('error', 'Customer, Variant and valid Quantity are required.');
+        if (!$variantId || $qty <= 0) {
+            $this->flash('error', 'Variant and valid Quantity greater than zero are required.');
             $this->redirect('/m/outward');
         }
 
         DB::beginTransaction();
         try {
             $outwardNo = NumberSeries::getNext($cid, 'OUTWARD');
+            $status = ($transferType === 'concern') ? 'dispatched' : 'prepared';
 
             DB::query(
-                "INSERT INTO outwards (concern_id, outward_no, sales_invoice_id, customer_id, outward_date, location, status, created_by, created_at)
-                 VALUES (?, ?, ?, ?, ?, ?, 'prepared', ?, NOW())",
-                [$cid, $outwardNo, $invoiceId, $customerId, $outwDate, $location, Auth::id()]
+                "INSERT INTO outwards (concern_id, outward_no, sales_invoice_id, customer_id, transfer_type, destination_concern_id, outward_date, location, status, created_by, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())",
+                [$cid, $outwardNo, $invoiceId, $customerId, $transferType, $destConcernId, $outwDate, $location, $status, Auth::id()]
             );
             $outwardId = (int)DB::lastInsertId();
 
@@ -1018,6 +1044,10 @@ class SalesController extends Controller {
             );
 
             // Single stock gateway: Outward deducts stock!
+            $logMsg = ($transferType === 'concern') 
+                ? "Inter-unit outward transfer [{$outwardNo}] to destination concern #{$destConcernId}"
+                : "Outward dispatch gate-pass {$outwardNo}";
+
             StockService::move(
                 $cid,
                 $variantId,
@@ -1026,13 +1056,16 @@ class SalesController extends Controller {
                 $qty,
                 'Outward',
                 $outwardId,
-                "Outward dispatch gate-pass {$outwardNo}",
+                $logMsg,
                 Auth::id()
             );
 
             DB::commit();
 
-            $this->flash('success', "Outward consignment '{$outwardNo}' created and {$qty} units deducted from live stock.");
+            $successMsg = ($transferType === 'concern')
+                ? "Inter-unit transfer '{$outwardNo}' issued. {$qty} units deducted and sent to destination concern for inwarding."
+                : "Outward consignment '{$outwardNo}' created and {$qty} units deducted from live stock.";
+            $this->flash('success', $successMsg);
         } catch (Exception $e) {
             DB::rollBack();
             $this->flash('error', 'Failed to generate outward: ' . $e->getMessage());
@@ -1073,6 +1106,11 @@ class SalesController extends Controller {
         $out = DB::fetch("SELECT * FROM outwards WHERE id = ?", [$id]);
         if (!$out) {
             $this->flash('error', 'Outward record not found.');
+            $this->redirect('/m/outward');
+        }
+
+        if ($out['status'] === 'received') {
+            $this->flash('error', "Cannot delete outward consignment '{$out['outward_no']}' because it has already been received and inwarded by the destination unit.");
             $this->redirect('/m/outward');
         }
 
@@ -1739,10 +1777,12 @@ class SalesController extends Controller {
         $dateScope = \App\Services\ExportService::resolveDateRange($period, $singleDate, $fromDate, $toDate);
 
         $sql = "SELECT o.*, c.name AS customer_name, si.invoice_no, con.name AS concern_name, con.code AS concern_code,
+                       dest_con.name AS dest_concern_name, dest_con.code AS dest_concern_code,
                        (SELECT COUNT(*) FROM outward_items oi WHERE oi.outward_id = o.id) AS items_count,
                        (SELECT COALESCE(SUM(qty), 0) FROM outward_items oi WHERE oi.outward_id = o.id) AS total_qty
                 FROM outwards o
-                JOIN customers c ON o.customer_id = c.id
+                LEFT JOIN customers c ON o.customer_id = c.id
+                LEFT JOIN concerns dest_con ON o.destination_concern_id = dest_con.id
                 LEFT JOIN sales_invoices si ON o.sales_invoice_id = si.id
                 LEFT JOIN concerns con ON o.concern_id = con.id";
         $params = [];
@@ -1777,7 +1817,7 @@ class SalesController extends Controller {
             $rows[] = [
                 $o['outward_no'],
                 date('d M Y', strtotime($o['outward_date'])),
-                $o['customer_name'],
+                $o['customer_name'] ?: ($o['dest_concern_name'] ? "Unit Transfer: {$o['dest_concern_name']} ({$o['dest_concern_code']})" : 'Inter-Unit Transfer'),
                 $o['invoice_no'] ?: '-',
                 $itms,
                 $qty,
