@@ -194,16 +194,15 @@ $concern = \App\Core\Auth::concern();
 $concernName = $labelData['concern_name'] ?? ($concern['name'] ?? 'INVENTO ERP');
 $refNo       = $labelData['ref_no'] ?? ($labelData['cost_or_ref'] ?? 'REF-001');
 $headerTitle = $labelData['header_title'] ?? ($labelData['item_title'] ?? 'Garment Item');
-$label1Name  = $labelData['label_1_name'] ?? 'Fabric';
+$label1Name  = $labelData['label_1_name'] ?? 'Item';
 $label1Val   = $labelData['label_1_val'] ?? ($labelData['item_title'] ?? '-');
 $label2Name  = $labelData['label_2_name'] ?? 'Color';
 $label2Val   = $labelData['label_2_val'] ?? ($labelData['color_or_spec'] ?? 'STANDARD');
-$label3Name  = $labelData['label_3_name'] ?? 'Weight';
-$label3Val   = $labelData['label_3_val'] ?? ($labelData['size_or_unit'] ?? '-');
+$designVal   = $labelData['design'] ?? ($labelData['label_3_val'] ?? ($labelData['pattern'] ?? 'STANDARD'));
+$priceVal    = (float)($labelData['price'] ?? ($labelData['price_mrp'] ?? 0));
 $tagCode     = $labelData['tag_code'] ?? ($labelData['item_code'] ?? 'SKU');
 $qrText      = $qrCodeText ?? ($labelData['qr_payload'] ?? $tagCode);
 $badge       = $labelData['section_badge'] ?? 'STANDARD';
-$mrp         = (float)($labelData['price_mrp'] ?? 0);
 ?>
 
 <div class="print-toolbar">
@@ -282,18 +281,17 @@ $mrp         = (float)($labelData['price_mrp'] ?? 0);
                         <span class="detail-val text-uppercase"><?= htmlspecialchars($label2Val) ?></span>
                     </div>
                     <div class="label-detail-row">
-                        <span class="detail-label"><?= htmlspecialchars($label3Name) ?>:</span>
-                        <span class="detail-val"><?= htmlspecialchars($label3Val) ?></span>
+                        <span class="detail-label">Design:</span>
+                        <span class="detail-val text-uppercase"><?= htmlspecialchars($designVal) ?></span>
+                    </div>
+                    <div class="label-detail-row">
+                        <span class="detail-label">Price:</span>
+                        <span class="detail-val fw-bold text-success">₹<?= number_format($priceVal, 2) ?></span>
                     </div>
                     <div class="label-detail-row">
                         <span class="detail-label">Code:</span>
                         <span class="detail-val font-monospace text-primary fw-bold"><?= htmlspecialchars($tagCode) ?></span>
                     </div>
-                    <?php if ($mrp > 0): ?>
-                        <div class="label-detail-row text-danger fw-bold" style="font-size: 0.72rem; margin-top: 2px;">
-                            <span>MRP: ₹<?= number_format($mrp, 2) ?></span>
-                        </div>
-                    <?php endif; ?>
                 </div>
             </div>
         </div>

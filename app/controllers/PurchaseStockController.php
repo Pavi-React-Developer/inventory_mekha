@@ -5,6 +5,7 @@ use App\Core\Controller;
 use App\Core\Auth;
 use App\Core\DB;
 use App\Core\ModuleGuard;
+use App\Services\AuditLog;
 use App\Services\RollRegistryService;
 
 class PurchaseStockController extends Controller {
@@ -38,6 +39,10 @@ class PurchaseStockController extends Controller {
             $where = ["pbi.section_type = ?"];
             $params = [$secType];
 
+            if ($secType === 'rolls') {
+                $where[] = "COALESCE(NULLIF(pbi.inward_status, ''), pb.inward_status, 'pending') = 'completed'";
+            }
+
             if ($selectedCid) {
                 $where[] = "pbi.concern_id = ?";
                 $params[] = $selectedCid;
@@ -56,9 +61,9 @@ class PurchaseStockController extends Controller {
 
             if (!empty($statusFilter)) {
                 if ($statusFilter === 'in_stock') {
-                    $where[] = "pb.inward_status = 'completed'";
+                    $where[] = "COALESCE(NULLIF(pbi.inward_status, ''), pb.inward_status, 'pending') = 'completed'";
                 } elseif ($statusFilter === 'pending') {
-                    $where[] = "pb.inward_status = 'pending'";
+                    $where[] = "COALESCE(NULLIF(pbi.inward_status, ''), pb.inward_status, 'pending') = 'pending'";
                 }
             }
 
@@ -150,6 +155,7 @@ class PurchaseStockController extends Controller {
             'grand_value'      => 0.0,
         ];
 
+        $consolidatedRollMetrics = RollRegistryService::getConsolidatedStock($selectedCid);
         foreach ($allMetrics as $m) {
             $t = $m['section_type'];
             if ($t === 'rolls') {
@@ -169,6 +175,21 @@ class PurchaseStockController extends Controller {
             }
             $metrics['grand_value'] += (float)$m['total_val'];
         }
+        $sourceRollValue = $metrics['rolls_value'];
+        $metrics['rolls_qty'] = array_sum(array_map(
+            static fn(array $roll): float => (float)$roll['qty'],
+            $consolidatedRollMetrics
+        ));
+        $metrics['rolls_weight'] = array_sum(array_map(
+            static fn(array $roll): float => (float)$roll['net_weight'],
+            $consolidatedRollMetrics
+        ));
+        $metrics['rolls_value'] = array_sum(array_map(
+            static fn(array $roll): float => (float)$roll['total_value'],
+            $consolidatedRollMetrics
+        ));
+        $metrics['rolls_count'] = count($consolidatedRollMetrics);
+        $metrics['grand_value'] += $metrics['rolls_value'] - $sourceRollValue;
 
         // Supplier filter list
         $supSql = "SELECT id, name, company_name FROM suppliers";
@@ -181,6 +202,7 @@ class PurchaseStockController extends Controller {
         $suppliers = DB::fetchAll($supSql, $supParams);
 
         $allConcerns = $isSuperAdmin ? DB::fetchAll("SELECT id, name, code FROM concerns ORDER BY name ASC") : [];
+        $canEditRollStock = $isSuperAdmin || Auth::can('purchase_stocks', 'edit');
 
         $this->render('concern/purchase_stocks', [
             'pageTitle'         => 'Purchase Stocks & Inventory',
@@ -195,10 +217,108 @@ class PurchaseStockController extends Controller {
             'suppliers'         => $suppliers,
             'allConcerns'       => $allConcerns,
             'selectedCid'       => $selectedCid,
+            'canEditRollStock'  => $canEditRollStock,
             'search'            => $search,
             'supplierFilter'    => $supplierFilter,
             'statusFilter'      => $statusFilter,
         ]);
+    }
+
+    public function updateConsolidatedRoll(): void {
+        ModuleGuard::enforce('purchase_stocks', 'edit');
+        $this->validateCsrf();
+
+        if (Auth::isSuperAdmin()) {
+            $concernId = (int)($_POST['concern_id'] ?? 0);
+        } else {
+            $concernId = Auth::concernId();
+        }
+        if (!$concernId) {
+            $this->flash('error', 'Select a concern before editing consolidated fabric stock.');
+            $this->redirect('/m/purchase_stocks?tab=rolls&view=consolidated');
+            return;
+        }
+
+        $returnUrl = '/m/purchase_stocks?tab=rolls&view=consolidated';
+        if (Auth::isSuperAdmin()) {
+            $returnUrl .= '&concern_id=' . $concernId;
+        }
+
+        $sourceColor = strtoupper(trim((string)($_POST['source_color'] ?? '')));
+        $sourceDesignName = strtoupper(trim((string)($_POST['source_design_name'] ?? '')));
+        $color = strtoupper(trim((string)($_POST['color'] ?? '')));
+        $designName = strtoupper(trim((string)($_POST['design_name'] ?? '')));
+        $hsnCode = trim((string)($_POST['hsn_code'] ?? ''));
+        $unit = trim((string)($_POST['unit'] ?? 'Rolls'));
+
+        if (
+            $sourceColor === '' || strlen($sourceColor) > 100 ||
+            $sourceDesignName === '' || strlen($sourceDesignName) > 150 ||
+            $color === '' || strlen($color) > 100 ||
+            $designName === '' || strlen($designName) > 150 ||
+            strlen($hsnCode) > 50 ||
+            $unit === '' || strlen($unit) > 50
+        ) {
+            $this->flash('error', 'Enter valid fabric name, design, color, HSN, and unit values.');
+            $this->redirect($returnUrl);
+            return;
+        }
+
+        $numericFields = [
+            'qty' => 'Quantity',
+            'net_weight' => 'Weight',
+            'last_unit_price' => 'Unit rate',
+            'total_value' => 'Total valuation',
+        ];
+        $numbers = [];
+        foreach ($numericFields as $field => $label) {
+            $rawValue = $_POST[$field] ?? null;
+            if (!is_scalar($rawValue) || !is_numeric($rawValue)) {
+                $this->flash('error', "{$label} must be a valid number.");
+                $this->redirect($returnUrl);
+                return;
+            }
+            $number = (float)$rawValue;
+            if (!is_finite($number) || $number < 0 || $number > 9999999999.99) {
+                $this->flash('error', "{$label} must be between 0 and 9,999,999,999.99.");
+                $this->redirect($returnUrl);
+                return;
+            }
+            $numbers[$field] = $number;
+        }
+
+        RollRegistryService::syncSpecs($concernId);
+        $result = RollRegistryService::saveConsolidatedOverride(
+            $concernId,
+            $sourceColor,
+            $sourceDesignName,
+            [
+                'color' => $color,
+                'design_name' => $designName,
+                'hsn_code' => $hsnCode,
+                'qty' => $numbers['qty'],
+                'net_weight' => $numbers['net_weight'],
+                'unit' => $unit,
+                'last_unit_price' => $numbers['last_unit_price'],
+                'total_value' => $numbers['total_value'],
+            ]
+        );
+
+        if (!$result) {
+            $this->flash('error', 'This stock row could not be updated. It may have changed, or another row already uses that design and color.');
+            $this->redirect($returnUrl);
+            return;
+        }
+
+        AuditLog::log(
+            'UPDATE',
+            'fabric_roll_spec_overrides',
+            $result['id'],
+            $result['before'],
+            $result['after']
+        );
+        $this->flash('success', 'Consolidated fabric stock updated. Purchase bill history was not changed.');
+        $this->redirect($returnUrl);
     }
 
     public function export(): void {
@@ -286,7 +406,7 @@ class PurchaseStockController extends Controller {
                         $cr['bills_count'],
                         $cr['last_bill_no'] ?: '-',
                         $cr['last_supplier_name'] ?: '-',
-                        'IN STOCK'
+                        (float)$cr['qty'] > 0 ? 'IN STOCK' : 'OUT OF STOCK'
                     ]);
                 }
             }

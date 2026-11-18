@@ -736,13 +736,11 @@ class PurchaseController extends Controller {
         $paymentMethod    = trim($_POST['payment_method'] ?? 'credit');
         $paymentReference = trim($_POST['payment_reference'] ?? '');
         $paidAmount       = (float)($_POST['paid_amount'] ?? 0.0);
-        $inwardStatus     = trim($_POST['inward_status'] ?? 'pending');
+        // Stock inwarding must happen through the Label Generation Add to Stock action.
+        $inwardStatus     = 'pending';
 
         if (!in_array($paymentStatus, ['unpaid', 'partial', 'paid'], true)) {
             $paymentStatus = 'unpaid';
-        }
-        if (!in_array($inwardStatus, ['pending', 'completed'], true)) {
-            $inwardStatus = 'pending';
         }
 
         // Attachment handling (Cloudinary first, local disk fallback)
@@ -1148,6 +1146,16 @@ class PurchaseController extends Controller {
             return;
         }
 
+        $inwardedItemCount = (int)DB::fetchValue(
+            "SELECT COUNT(*) FROM purchase_bill_items WHERE purchase_bill_id = ? AND inward_status = 'completed'",
+            [$billId]
+        );
+        if (($bill['inward_status'] ?? 'pending') === 'completed' || $inwardedItemCount > 0) {
+            $this->flash('error', 'This bill has items already added to stock and can no longer be edited.');
+            $this->redirect('/m/purchase_billing');
+            return;
+        }
+
         $supplierId = (int)($_POST['supplier_id'] ?? $bill['supplier_id']);
         if (!$supplierId) {
             $this->flash('error', 'Please select a registered supplier.');
@@ -1163,15 +1171,11 @@ class PurchaseController extends Controller {
         $paymentMethod     = trim($_POST['payment_method'] ?? ($bill['payment_method'] ?? 'credit'));
         $paymentReference  = trim($_POST['payment_reference'] ?? ($bill['payment_reference'] ?? ''));
         $paidAmount        = isset($_POST['paid_amount']) ? (float)$_POST['paid_amount'] : (float)($bill['paid_amount'] ?? 0.0);
-        $inwardStatus      = trim($_POST['inward_status'] ?? ($bill['inward_status'] ?? 'pending'));
+        $inwardStatus      = 'pending';
 
         if (!in_array($paymentStatus, ['unpaid', 'partial', 'paid'], true)) {
             $paymentStatus = 'unpaid';
         }
-        if (!in_array($inwardStatus, ['pending', 'completed'], true)) {
-            $inwardStatus = 'pending';
-        }
-
         // Attachment handling (Cloudinary first, local disk fallback): keep existing if no new file uploaded
         $attachmentPath = $bill['attachment_path'];
         if (!empty($_FILES['attachment']['name']) && $_FILES['attachment']['error'] === UPLOAD_ERR_OK) {
@@ -1487,16 +1491,12 @@ class PurchaseController extends Controller {
         }
 
         $paymentStatus = trim($_POST['payment_status'] ?? 'unpaid');
-        $inwardStatus  = trim($_POST['inward_status'] ?? 'pending');
+        $inwardStatus  = $bill['inward_status'] ?? 'pending';
         $notes         = trim($_POST['notes'] ?? '');
 
         if (!in_array($paymentStatus, ['unpaid', 'partial', 'paid'], true)) {
             $paymentStatus = 'unpaid';
         }
-        if (!in_array($inwardStatus, ['pending', 'completed'], true)) {
-            $inwardStatus = 'pending';
-        }
-
         DB::query(
             "UPDATE purchase_bills SET payment_status = ?, inward_status = ?, notes = ? WHERE id = ?",
             [$paymentStatus, $inwardStatus, $notes, $id]

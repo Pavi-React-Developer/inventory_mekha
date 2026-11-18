@@ -105,11 +105,8 @@ if ($isEdit && !empty($existingItems)) {
                         <input type="text" name="payment_reference" id="billPaymentRef" class="form-control form-control-sm" placeholder="e.g. UTR-998812 / CHQ-0012" value="<?= htmlspecialchars($bill['payment_reference'] ?? '') ?>">
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label small fw-bold text-dark">Inward / Warehouse Status</label>
-                        <select name="inward_status" class="form-select form-select-sm">
-                            <option value="pending" <?= ($bill['inward_status'] ?? '') === 'pending' ? 'selected' : '' ?>>Pending (Goods not yet inwarded)</option>
-                            <option value="completed" <?= ($bill['inward_status'] ?? '') === 'completed' ? 'selected' : '' ?>>Completed (Goods received in stock)</option>
-                        </select>
+                        <label class="form-label small fw-bold text-dark">Stock Status</label>
+                        <div class="form-control form-control-sm bg-white text-muted">Pending - use Label Generation to add stock</div>
                     </div>
                 </div>
 
@@ -223,8 +220,6 @@ if ($isEdit && !empty($existingItems)) {
                                             <div class="input-group input-group-sm">
                                                 <select class="form-select form-select-sm roll-quick-select" id="rollQuickSelect_1" onchange="applySavedRollSpec(this, 1)">
                                                     <option value="">-- Choose from Saved Color & Design Registry --</option>
-                                                    <option value="__NEW__" class="fw-bold text-primary">➕ + Create New Color & Design...</option>
-                                                    <option value="__VIEW_ALL__" class="fw-semibold text-info">👁️ View All Saved Registry (<?= count($savedRollSpecs ?? []) ?>)...</option>
                                                     <?php if (!empty($savedRollSpecs)): ?>
                                                         <optgroup label="Saved Specifications">
                                                             <?php foreach ($savedRollSpecs as $spec): ?>
@@ -254,11 +249,11 @@ if ($isEdit && !empty($existingItems)) {
                                         </div>
                                     </div>
 
-                                    <!-- Row 1: Roll No, Color, Design Name, Qty, Weight, Price -->
+                                    <!-- Row 1: Fabric Name, Color, Design Name, Qty, Weight, Price -->
                                     <div class="row g-2 mb-2 align-items-end">
                                         <div class="col-md-2">
-                                            <label class="form-label small fw-semibold mb-1">Roll No. / Code <span class="text-danger">*</span></label>
-                                            <input type="text" name="rolls[1][roll_code]" class="form-control form-control-sm font-monospace text-uppercase roll-input-code" placeholder="ROLL #1" value="" required oninput="syncRollsTable()">
+                                            <label class="form-label small fw-semibold mb-1">Fabric Name <span class="text-danger">*</span></label>
+                                            <input type="text" name="rolls[1][roll_code]" class="form-control form-control-sm font-monospace text-uppercase roll-input-code" placeholder="E.G. COTTON" value="" required oninput="syncRollsTable()">
                                         </div>
                                         <div class="col-md-2">
                                             <label class="form-label small fw-semibold mb-1">Color / Shade <span class="text-danger">*</span></label>
@@ -738,20 +733,6 @@ if ($isEdit && !empty($existingItems)) {
                         <div class="col-md-6">
                             <label class="form-label small fw-semibold text-secondary mb-1">HSN Code</label>
                             <input type="text" id="newDesignHsn" class="form-control text-uppercase form-control-sm" placeholder="E.G. 6543, 5208">
-                        </div>
-                    </div>
-
-                    <div class="row g-3 mb-3">
-                        <div class="col-md-6">
-                            <label class="form-label small fw-semibold text-secondary mb-1">Initial Net Weight / Roll (kg)</label>
-                            <div class="input-group input-group-sm">
-                                <input type="number" step="0.01" min="0" id="newDesignWeight" class="form-control" placeholder="0.00">
-                                <span class="input-group-text">kg</span>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label small fw-semibold text-secondary mb-1">Supplier / Dye House (Optional)</label>
-                            <input type="text" id="newDesignSupplier" class="form-control form-control-sm" placeholder="Supplier name">
                         </div>
                     </div>
 
@@ -1392,10 +1373,6 @@ let targetRollRowIndex = 1;
 
 function getSavedRollSpecsOptionsHtml(selectedVal = '') {
     let html = '<option value="">-- Choose from Saved Color & Design Registry --</option>';
-    html += '<option value="__NEW__" class="fw-bold text-primary">➕ + Create New Color & Design...</option>';
-    const totalCount = Array.isArray(savedRollSpecsRegistry) ? savedRollSpecsRegistry.length : 0;
-    html += `<option value="__VIEW_ALL__" class="fw-semibold text-info">👁️ View All Saved Registry (${totalCount})...</option>`;
-
     if (Array.isArray(savedRollSpecsRegistry) && savedRollSpecsRegistry.length > 0) {
         html += '<optgroup label="Saved Specifications">';
         savedRollSpecsRegistry.forEach(spec => {
@@ -1471,18 +1448,6 @@ function applySavedRollSpec(selectEl, idx) {
     if (!selectEl) return;
     const val = selectEl.value;
 
-    if (val === '__NEW__') {
-        selectEl.value = '';
-        openCreateDesignModal(idx);
-        return;
-    }
-
-    if (val === '__VIEW_ALL__') {
-        selectEl.value = '';
-        openViewRollSpecsModal(idx);
-        return;
-    }
-
     const opt = selectEl.options[selectEl.selectedIndex];
     if (!opt || !opt.value) return;
     const card = document.getElementById('rollCard_' + idx);
@@ -1520,7 +1485,7 @@ function viewCurrentRollSpec(idx) {
     let selectedPattern = '';
     let selectedColor = '';
 
-    if (selectEl && selectEl.value && selectEl.value !== '__NEW__' && selectEl.value !== '__VIEW_ALL__') {
+    if (selectEl && selectEl.value) {
         const parts = selectEl.value.split('|');
         selectedPattern = parts[0] || '';
         selectedColor = parts[1] || '';
@@ -1550,8 +1515,6 @@ function openCreateDesignModal(idx) {
     document.getElementById('newDesignColor').value = '';
     document.getElementById('newDesignPrice').value = '';
     document.getElementById('newDesignHsn').value = '';
-    document.getElementById('newDesignWeight').value = '';
-    document.getElementById('newDesignSupplier').value = '';
 
     const card = document.getElementById('rollCard_' + targetRollRowIndex);
     if (card) {
@@ -1579,8 +1542,8 @@ function saveAndApplyRollDesign() {
     const color = document.getElementById('newDesignColor').value.trim().toUpperCase();
     const price = parseFloat(document.getElementById('newDesignPrice').value) || 0.0;
     const hsn = document.getElementById('newDesignHsn').value.trim().toUpperCase();
-    const weight = parseFloat(document.getElementById('newDesignWeight').value) || 0.0;
-    const supplier = document.getElementById('newDesignSupplier').value.trim();
+    const weight = 0.0;
+    const supplier = '';
 
     if (!pattern || !color) {
         alert('Please provide both Design Name / Pattern and Color / Shade.');
@@ -1919,8 +1882,8 @@ function addRollRow() {
             <!-- Row 1: Roll No, Color, Pattern, Qty, Weight, Price -->
             <div class="row g-2 mb-2 align-items-end">
                 <div class="col-md-2">
-                    <label class="form-label small fw-semibold mb-1">Roll No. / Code <span class="text-danger">*</span></label>
-                    <input type="text" name="rolls[${rollCounter}][roll_code]" class="form-control form-control-sm font-monospace text-uppercase roll-input-code" placeholder="ROLL #${rollCounter}" value="" required oninput="syncRollsTable()">
+                <label class="form-label small fw-semibold mb-1">Fabric Name <span class="text-danger">*</span></label>
+                <input type="text" name="rolls[${rollCounter}][roll_code]" class="form-control form-control-sm font-monospace text-uppercase roll-input-code" placeholder="E.G. COTTON" value="" required oninput="syncRollsTable()">
                 </div>
                 <div class="col-md-2">
                     <label class="form-label small fw-semibold mb-1">Color / Shade <span class="text-danger">*</span></label>
@@ -2720,8 +2683,8 @@ function loadInitialData() {
                     <!-- Row 1: Roll No, Color, Pattern, RQ, Weight, Price -->
                     <div class="row g-2 mb-3 align-items-end">
                         <div class="col-md-2">
-                            <label class="form-label small fw-semibold mb-1">Roll No. / Code <span class="text-danger">*</span></label>
-                            <input type="text" name="rolls[${rollCounter}][roll_code]" class="form-control form-control-sm font-monospace text-uppercase roll-input-code" placeholder="ROLL #${rollCounter}" value="${escapeHtml(r.item_code || ('ROLL #' + rollCounter))}" required oninput="syncRollsTable()">
+                            <label class="form-label small fw-semibold mb-1">Fabric Name <span class="text-danger">*</span></label>
+                            <input type="text" name="rolls[${rollCounter}][roll_code]" class="form-control form-control-sm font-monospace text-uppercase roll-input-code" placeholder="E.G. COTTON" value="${escapeHtml(r.item_code || ('ROLL #' + rollCounter))}" required oninput="syncRollsTable()">
                         </div>
                         <div class="col-md-2">
                             <label class="form-label small fw-semibold mb-1">Color / Shade <span class="text-danger">*</span></label>

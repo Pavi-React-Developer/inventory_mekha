@@ -274,9 +274,13 @@ class LabelController extends Controller {
             'label_1_val'    => 'Standard',
             'label_2_name'   => 'Color',
             'label_2_val'    => 'STANDARD',
-            'label_3_name'   => 'Weight',
-            'label_3_val'    => '1.00 kg',
-            'label_4_name'   => 'Code',
+            'label_3_name'   => 'Design',
+            'label_3_val'    => 'STANDARD',
+            'design'         => 'STANDARD',
+            'label_4_name'   => 'Price',
+            'label_4_val'    => '₹0.00',
+            'price'          => 0.00,
+            'price_mrp'      => 0.00,
             'tag_code'       => 'GAR-S-01',
             'section_title'  => 'PRODUCT LABEL',
             'section_badge'  => 'STANDARD',
@@ -284,9 +288,6 @@ class LabelController extends Controller {
             'item_code'      => 'GAR-S-01',
             'brand_name'     => $concernName,
             'category_name'  => 'General',
-            'size_or_unit'   => 'Standard',
-            'color_or_spec'  => '',
-            'price_mrp'      => 0.00,
             'cost_or_ref'    => '',
             'qr_payload'     => 'GAR-S-01',
             'extra_details'  => [],
@@ -313,32 +314,35 @@ class LabelController extends Controller {
 
             $cid = $cid ?: (int)$item['concern_id'];
             $isRoll = ($item['section_type'] === 'rolls');
+            $designVal = trim($item['pattern'] ?: ($item['specification'] ?: ($isRoll ? 'PLAIN' : 'STANDARD')));
+            $priceVal = (float)($item['unit_price'] ?: ($item['mrp'] ?: 0));
+
             $tagCode = QrService::generateTagCode(
                 $item['item_name'] ?: ($isRoll ? 'Fabric' : 'Trims'),
                 $item['color'] ?? '',
-                $item['pattern'] ?: ($item['specification'] ?? ''),
+                $designVal,
                 (string)$item['id']
             );
             $qrText = $tagCode;
 
             $headerTitle = $isRoll ? ('ROLL #' . ($item['item_code'] ?: $item['id'])) : $item['item_name'];
-            $weightOrQty = (!empty($item['net_weight']) && (float)$item['net_weight'] > 0)
-                ? (number_format((float)$item['net_weight'], 2) . ' kg')
-                : (number_format((float)$item['qty'], 2) . ' ' . ($item['unit'] ?: 'kg'));
 
             $labelData = [
                 'concern_name'   => $concernName,
                 'ref_no'         => $item['bill_no'] ?: ('PO-' . $item['purchase_bill_id']),
                 'header_title'   => $headerTitle,
                 'label_1_name'   => $isRoll ? 'Fabric' : 'Item',
-                'label_1_val'    => $item['item_name'] ?: 'Fabric Material',
+                'label_1_val'    => $item['item_name'] ?: ($isRoll ? 'Fabric Material' : 'Garment Supply'),
                 'label_2_name'   => 'Color',
                 'label_2_val'    => $item['color'] ?: 'STANDARD',
-                'label_3_name'   => $isRoll ? 'Weight' : 'Qty',
-                'label_3_val'    => $weightOrQty,
-                'label_4_name'   => 'Code',
+                'label_3_name'   => 'Design',
+                'label_3_val'    => $designVal,
+                'design'         => $designVal,
+                'label_4_name'   => 'Price',
+                'label_4_val'    => '₹' . number_format($priceVal, 2),
+                'price'          => $priceVal,
+                'price_mrp'      => $priceVal,
                 'tag_code'       => $tagCode,
-                'price_mrp'      => (float)($item['mrp'] ?: 0),
                 'qr_payload'     => $qrText,
                 'section_title'  => $isRoll ? 'FABRIC ROLL LABEL' : 'TRIMS & ACCESSORIES',
                 'section_badge'  => $isRoll ? 'RAW MATERIAL' : 'PURCHASE TRIM',
@@ -346,16 +350,14 @@ class LabelController extends Controller {
                 'item_code'      => $tagCode,
                 'brand_name'     => $concernName,
                 'category_name'  => $isRoll ? 'Fabric Rolls' : 'Garment Other Things',
-                'size_or_unit'   => $weightOrQty,
-                'color_or_spec'  => trim(($item['color'] ? $item['color'] . ' • ' : '') . ($item['specification'] ?? '')),
                 'cost_or_ref'    => 'Bill: ' . $item['bill_no'],
                 'bill_id'        => (int)$item['purchase_bill_id'],
                 'item_id'        => (int)$item['id'],
                 'stock_tab'      => $isRoll ? 'rolls' : 'garment_other',
                 'inward_status'  => $item['inward_status'] ?? 'pending',
                 'extra_details'  => [
-                    'Gross Wt' => !empty($item['gross_weight']) ? number_format((float)$item['gross_weight'], 2) . ' kg' : null,
-                    'Net Wt'   => !empty($item['net_weight']) ? number_format((float)$item['net_weight'], 2) . ' kg' : null,
+                    'Design'   => $designVal,
+                    'Price'    => '₹' . number_format($priceVal, 2),
                     'Bill No'  => $item['bill_no'],
                     'Date'     => $item['bill_date'] ? date('d-m-Y', strtotime($item['bill_date'])) : date('d-m-Y')
                 ]
@@ -418,7 +420,7 @@ class LabelController extends Controller {
             );
             $qrText = $tagCode;
             $mrp = (float)($item['variant_mrp'] ?: ($item['mrp'] ?: $item['unit_price']));
-            $sizeVal = ($item['variant_size'] ?: ($item['specification'] ?: 'Free Size')) . ' (' . number_format((float)$item['qty'], 0) . ' ' . ($item['unit'] ?: 'pcs') . ')';
+            $designVal = trim($item['pattern'] ?: ($item['specification'] ?: ($item['variant_size'] ?: 'STANDARD')));
 
             $labelData = [
                 'concern_name'   => $concernName,
@@ -428,11 +430,14 @@ class LabelController extends Controller {
                 'label_1_val'    => $item['category_name'] ?: 'Ready-Made Garment',
                 'label_2_name'   => 'Color',
                 'label_2_val'    => $item['color'] ?: 'STANDARD',
-                'label_3_name'   => 'Size / Qty',
-                'label_3_val'    => $sizeVal,
-                'label_4_name'   => 'Code',
-                'tag_code'       => $tagCode,
+                'label_3_name'   => 'Design',
+                'label_3_val'    => $designVal,
+                'design'         => $designVal,
+                'label_4_name'   => 'Price',
+                'label_4_val'    => '₹' . number_format($mrp, 2),
+                'price'          => $mrp,
                 'price_mrp'      => $mrp,
+                'tag_code'       => $tagCode,
                 'qr_payload'     => $qrText,
                 'section_title'  => 'PURCHASE FINISHED GOODS',
                 'section_badge'  => 'READY-MADE GARMENT',
@@ -440,14 +445,14 @@ class LabelController extends Controller {
                 'item_code'      => $tagCode,
                 'brand_name'     => $concernName,
                 'category_name'  => $item['category_name'] ?: 'Apparel',
-                'size_or_unit'   => $sizeVal,
-                'color_or_spec'  => $item['color'] ?: ($item['specification'] ?? ''),
                 'cost_or_ref'    => 'Vendor Bill: ' . $item['bill_no'],
                 'bill_id'        => (int)$item['purchase_bill_id'],
                 'item_id'        => (int)$item['id'],
                 'stock_tab'      => 'finished_goods',
                 'inward_status'  => $item['inward_status'] ?? 'pending',
                 'extra_details'  => [
+                    'Design'     => $designVal,
+                    'Price'      => '₹' . number_format($mrp, 2),
                     'Bill No'    => $item['bill_no'],
                     'Supplier'   => $item['supplier_name'],
                     'Catalog SKU'=> $item['sku_code'] ?: 'Not Mapped',
@@ -517,6 +522,9 @@ class LabelController extends Controller {
             );
             $qrText = $tagCode;
 
+            $designVal = trim(!empty($item['pattern']) ? $item['pattern'] : ($item['program_no'] ?: 'STANDARD'));
+            $priceVal = (float)($item['variant_mrp'] ?: ($item['variant_price'] ?? 0));
+
             $labelData = [
                 'concern_name'   => $concernName,
                 'ref_no'         => $item['program_no'] ?: ('STITCH-' . ($item['log_no'] ?? '1')),
@@ -525,11 +533,14 @@ class LabelController extends Controller {
                 'label_1_val'    => $item['program_no'] ?: 'In-House Production',
                 'label_2_name'   => 'Color',
                 'label_2_val'    => $item['color'] ?? 'STANDARD',
-                'label_3_name'   => 'Size',
-                'label_3_val'    => $item['variant_size'] ?: 'Standard',
-                'label_4_name'   => 'Code',
+                'label_3_name'   => 'Design',
+                'label_3_val'    => $designVal,
+                'design'         => $designVal,
+                'label_4_name'   => 'Price',
+                'label_4_val'    => '₹' . number_format($priceVal, 2),
+                'price'          => $priceVal,
+                'price_mrp'      => $priceVal,
                 'tag_code'       => $tagCode,
-                'price_mrp'      => (float)($item['variant_mrp'] ?? 0),
                 'qr_payload'     => $qrText,
                 'section_title'  => 'PRODUCTION LABEL',
                 'section_badge'  => 'IN-HOUSE STITCHED',
@@ -537,10 +548,10 @@ class LabelController extends Controller {
                 'item_code'      => $tagCode,
                 'brand_name'     => $concernName,
                 'category_name'  => $item['category_name'] ?: 'Garments',
-                'size_or_unit'   => $item['variant_size'] ?: 'Standard',
-                'color_or_spec'  => 'Stitched Batch #' . ($item['log_no'] ?? '1'),
                 'cost_or_ref'    => 'Log: ' . $item['log_no'],
                 'extra_details'  => [
+                    'Design'     => $designVal,
+                    'Price'      => '₹' . number_format($priceVal, 2),
                     'Batch Log'  => $item['log_no'],
                     'Program'    => $item['program_no'] ?: 'Standard Production',
                     'Assembled'  => date('d-m-Y')
@@ -618,6 +629,9 @@ class LabelController extends Controller {
             );
             $qrText = $tagCode;
 
+            $designVal = trim($item['pattern'] ?? 'RESTOCK');
+            $priceVal = (float)($mrp ?: 0);
+
             $labelData = [
                 'concern_name'   => $concernName,
                 'ref_no'         => $item['return_no'] ?: 'RET-0001',
@@ -626,11 +640,14 @@ class LabelController extends Controller {
                 'label_1_val'    => $item['customer_name'] ?: 'Retail Customer',
                 'label_2_name'   => 'Color',
                 'label_2_val'    => 'STANDARD',
-                'label_3_name'   => 'Size',
-                'label_3_val'    => $size ?: 'Standard',
-                'label_4_name'   => 'Code',
+                'label_3_name'   => 'Design',
+                'label_3_val'    => $designVal,
+                'design'         => $designVal,
+                'label_4_name'   => 'Price',
+                'label_4_val'    => '₹' . number_format($priceVal, 2),
+                'price'          => $priceVal,
+                'price_mrp'      => $priceVal,
                 'tag_code'       => $tagCode,
-                'price_mrp'      => $mrp,
                 'qr_payload'     => $qrText,
                 'section_title'  => 'RETURN / RESTOCK LABEL',
                 'section_badge'  => $badge,
@@ -638,10 +655,10 @@ class LabelController extends Controller {
                 'item_code'      => $tagCode,
                 'brand_name'     => $concernName,
                 'category_name'  => $catName ?: 'Apparel',
-                'size_or_unit'   => $size ?: 'Free Size',
-                'color_or_spec'  => 'Customer: ' . ($item['customer_name'] ?? 'Retail'),
                 'cost_or_ref'    => 'Return #' . $item['return_no'],
                 'extra_details'  => [
+                    'Design'     => $designVal,
+                    'Price'      => '₹' . number_format($priceVal, 2),
                     'Return No'  => $item['return_no'],
                     'Invoice No' => $item['invoice_no'] ?: 'Direct Return',
                     'Date'       => date('d-m-Y', strtotime($item['return_date'] ?: date('Y-m-d'))),
@@ -665,10 +682,13 @@ class LabelController extends Controller {
             }
 
             $cid = $cid ?: (int)$v['concern_id'];
+            $designVal = $v['subcategory_name'] ?: 'STANDARD';
+            $priceVal = (float)$v['mrp'];
+
             $tagCode = QrService::generateTagCode(
                 $v['name'],
                 '',
-                $v['subcategory_name'] ?? '',
+                $designVal,
                 (string)$v['id']
             );
             $qrText = $tagCode;
@@ -681,11 +701,14 @@ class LabelController extends Controller {
                 'label_1_val'    => $v['category_name'] ?? 'Apparel',
                 'label_2_name'   => 'Color',
                 'label_2_val'    => 'STANDARD',
-                'label_3_name'   => 'Size',
-                'label_3_val'    => $v['size'] ?: 'Standard',
-                'label_4_name'   => 'Code',
+                'label_3_name'   => 'Design',
+                'label_3_val'    => $designVal,
+                'design'         => $designVal,
+                'label_4_name'   => 'Price',
+                'label_4_val'    => '₹' . number_format($priceVal, 2),
+                'price'          => $priceVal,
+                'price_mrp'      => $priceVal,
                 'tag_code'       => $tagCode,
-                'price_mrp'      => (float)$v['mrp'],
                 'qr_payload'     => $qrText,
                 'section_title'  => 'PRODUCT CATALOG LABEL',
                 'section_badge'  => 'CATALOG VARIANT',
@@ -693,12 +716,11 @@ class LabelController extends Controller {
                 'item_code'      => $tagCode,
                 'brand_name'     => $concernName,
                 'category_name'  => $v['category_name'] ?? 'Apparel',
-                'size_or_unit'   => $v['size'] ?: 'Standard',
-                'color_or_spec'  => $v['subcategory_name'] ?? '',
                 'cost_or_ref'    => 'Catalog',
                 'extra_details'  => [
+                    'Design'     => $designVal,
+                    'Price'      => '₹' . number_format($priceVal, 2),
                     'SKU'        => $v['sku_code'],
-                    'Weight'     => number_format((float)$v['weight'], 3) . ' ' . $v['weight_unit']
                 ]
             ];
         }
@@ -887,9 +909,16 @@ class LabelController extends Controller {
      * and redirects user to the Purchase Stocks module.
      */
     public function addToStock(): void {
-        if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
-            $this->validateCsrf();
+        if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
+            http_response_code(405);
+            if (!headers_sent()) {
+                header('Allow: POST');
+            }
+            $this->flash('error', 'Use the Label Generation Add to Stock form to inward items.');
+            $this->redirect('/m/label_generation');
+            return;
         }
+        $this->validateCsrf();
 
         $cid = Auth::concernId();
         $billId = (int)($_POST['bill_id'] ?? ($_GET['bill_id'] ?? 0));

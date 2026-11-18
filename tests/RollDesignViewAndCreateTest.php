@@ -129,9 +129,10 @@ $viewFile = dirname(__DIR__) . '/app/views/concern/purchase_billing_create.php';
 $viewContent = file_get_contents($viewFile);
 
 assertCheck("View contains quick select container", strpos($viewContent, 'roll-spec-selector-bar') !== false);
+assertCheck("View uses Fabric Name label for roll field", substr_count($viewContent, 'Fabric Name') >= 3);
 assertCheck("View contains '-- Choose from Saved Color & Design Registry --'", strpos($viewContent, '-- Choose from Saved Color & Design Registry --') !== false);
-assertCheck("View dropdown contains '+ Create New Color & Design...' option", strpos($viewContent, '➕ + Create New Color & Design...') !== false);
-assertCheck("View dropdown contains 'View All Saved Registry...' option", strpos($viewContent, '👁️ View All Saved Registry') !== false);
+assertCheck("View dropdown does not contain '+ Create New Color & Design...' option", strpos($viewContent, '➕ + Create New Color & Design...') === false);
+assertCheck("View dropdown does not contain 'View All Saved Registry...' option", strpos($viewContent, '👁️ View All Saved Registry') === false);
 assertCheck("View contains View button with viewCurrentRollSpec()", strpos($viewContent, 'viewCurrentRollSpec') !== false);
 assertCheck("View contains New button with openCreateDesignModal()", strpos($viewContent, 'openCreateDesignModal') !== false);
 
@@ -141,6 +142,8 @@ assertCheck("Create modal contains design pattern input", strpos($viewContent, '
 assertCheck("Create modal contains color shade input", strpos($viewContent, 'id="newDesignColor"') !== false);
 assertCheck("Create modal contains price input", strpos($viewContent, 'id="newDesignPrice"') !== false);
 assertCheck("Create modal contains HSN input", strpos($viewContent, 'id="newDesignHsn"') !== false);
+assertCheck("Create modal does not contain Initial Net Weight field", strpos($viewContent, 'id="newDesignWeight"') === false);
+assertCheck("Create modal does not contain Supplier / Dye House field", strpos($viewContent, 'id="newDesignSupplier"') === false);
 
 assertCheck("View contains #modalViewRollSpecs", strpos($viewContent, 'id="modalViewRollSpecs"') !== false);
 assertCheck("View modal contains #viewSpecDetailCard", strpos($viewContent, 'id="viewSpecDetailCard"') !== false);
@@ -153,8 +156,8 @@ assertCheck("JS contains getSavedRollSpecsOptionsHtml()", strpos($viewContent, '
 assertCheck("JS contains applySavedRollSpec()", strpos($viewContent, 'function applySavedRollSpec(') !== false);
 assertCheck("JS contains updateAllRollQuickSelects()", strpos($viewContent, 'function updateAllRollQuickSelects(') !== false);
 assertCheck("JS contains selectSpecFromRegistry()", strpos($viewContent, 'function selectSpecFromRegistry(') !== false);
-assertCheck("JS handles __NEW__ option selection", strpos($viewContent, "val === '__NEW__'") !== false);
-assertCheck("JS handles __VIEW_ALL__ option selection", strpos($viewContent, "val === '__VIEW_ALL__'") !== false);
+assertCheck("JS does not handle removed __NEW__ option", strpos($viewContent, "val === '__NEW__'") === false);
+assertCheck("JS does not handle removed __VIEW_ALL__ option", strpos($viewContent, "val === '__VIEW_ALL__'") === false);
 
 // -----------------------------------------------------------
 // TEST SUMMARY

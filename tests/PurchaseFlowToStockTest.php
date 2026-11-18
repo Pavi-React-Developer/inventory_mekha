@@ -76,6 +76,7 @@ assertCheck("Test Purchase Bill inserted with ID {$testBillId}", $testBillId > 0
 
 $billData = DB::fetch("SELECT * FROM purchase_bills WHERE id = ?", [$testBillId]);
 assertCheck("Initial inward_status of bill is 'pending'", ($billData['inward_status'] ?? '') === 'pending');
+$testPattern = "STRIPES {$uniqueSuffix}";
 
 // Add 2 roll items with pending inward
 DB::query("INSERT INTO purchase_bill_items (
@@ -83,12 +84,18 @@ DB::query("INSERT INTO purchase_bill_items (
     specification, color, pattern, designs_count, rq_qty, unit,
     gross_weight, net_weight, qty, inward_status, unit_price, gst_rate, total_price, tax_amount
 ) VALUES 
-(1, ?, 'rolls', 'Premium Cotton', 'ROLL-T1', 'Combed 40s', 'SKY BLUE', 'STRIPES 01', 1, 5, 'Rolls', 105.00, 100.00, 5.00, 'pending', 5000.00, 5.00, 25000.00, 1250.00),
-(1, ?, 'rolls', 'Premium Cotton', 'ROLL-T2', 'Combed 40s', 'SKY BLUE', 'STRIPES 01', 1, 5, 'Rolls', 105.00, 100.00, 5.00, 'pending', 5000.00, 5.00, 25000.00, 1250.00)",
-[$testBillId, $testBillId]);
+(1, ?, 'rolls', 'Premium Cotton', 'ROLL-T1', 'Combed 40s', 'SKY BLUE', ?, 1, 5, 'Rolls', 105.00, 100.00, 5.00, 'pending', 5000.00, 5.00, 25000.00, 1250.00),
+(1, ?, 'rolls', 'Premium Cotton', 'ROLL-T2', 'Combed 40s', 'SKY BLUE', ?, 1, 5, 'Rolls', 105.00, 100.00, 5.00, 'pending', 5000.00, 5.00, 25000.00, 1250.00)",
+[$testBillId, $testPattern, $testBillId, $testPattern]);
 
 $itemsCount = (int)DB::fetchValue("SELECT COUNT(*) FROM purchase_bill_items WHERE purchase_bill_id = ?", [$testBillId]);
 assertCheck("Bill items inserted with pending status", $itemsCount === 2);
+RollRegistryService::syncSpecs(1);
+$pendingRollSpec = DB::fetch(
+    "SELECT * FROM fabric_roll_specs WHERE concern_id = 1 AND color = 'SKY BLUE' AND design_name = ?",
+    [$testPattern]
+);
+assertCheck("Pending roll bill is absent from Purchase Stocks registry", empty($pendingRollSpec));
 
 // -----------------------------------------------------------
 // TEST GROUP 3: Label Generation -> "Add to Stock" Action
@@ -118,6 +125,14 @@ $labelController = new class extends LabelController {
     }
 };
 
+$_SERVER['REQUEST_METHOD'] = 'GET';
+$_GET = ['bill_id' => $testBillId];
+$labelController->addToStock();
+$billAfterGet = DB::fetch("SELECT inward_status FROM purchase_bills WHERE id = ?", [$testBillId]);
+assertCheck("GET request cannot add purchase bill to stock", ($billAfterGet['inward_status'] ?? '') === 'pending');
+
+$_SERVER['REQUEST_METHOD'] = 'POST';
+$_GET = [];
 $labelController->addToStock();
 
 assertCheck("addToStock redirected user to purchase_stocks", strpos($labelController->lastRedirect ?? '', '/m/purchase_stocks?tab=rolls') !== false, "Redirected to: " . ($labelController->lastRedirect ?? ''));
@@ -126,6 +141,11 @@ assertCheck("Success flash message set", $labelController->lastFlashType === 'su
 // Verify database status transition
 $updatedBill = DB::fetch("SELECT * FROM purchase_bills WHERE id = ?", [$testBillId]);
 assertCheck("purchase_bills inward_status transitioned to 'completed'", ($updatedBill['inward_status'] ?? '') === 'completed');
+$inwardedRollSpec = DB::fetch(
+    "SELECT * FROM fabric_roll_specs WHERE concern_id = 1 AND color = 'SKY BLUE' AND design_name = ?",
+    [$testPattern]
+);
+assertCheck("Roll appears in Purchase Stocks after Add to Stock", !empty($inwardedRollSpec) && (float)$inwardedRollSpec['qty'] === 10.0);
 
 $pendingItems = (int)DB::fetchValue("SELECT COUNT(*) FROM purchase_bill_items WHERE purchase_bill_id = ? AND inward_status = 'pending'", [$testBillId]);
 assertCheck("All bill items transitioned to 'completed'", $pendingItems === 0);
@@ -136,9 +156,10 @@ assertCheck("All bill items transitioned to 'completed'", $pendingItems === 0);
 echo "\n--- Group 4: Roll Spec Registry Synchronization ---\n";
 
 $skyBlueSpec = DB::fetch(
-    "SELECT * FROM fabric_roll_specs WHERE concern_id = 1 AND color = 'SKY BLUE' AND design_name = 'STRIPES 01'"
+    "SELECT * FROM fabric_roll_specs WHERE concern_id = 1 AND color = 'SKY BLUE' AND design_name = ?",
+    [$testPattern]
 );
-assertCheck("Fabric roll spec registered for SKY BLUE / STRIPES 01", !empty($skyBlueSpec));
+assertCheck("Fabric roll spec registered for SKY BLUE / test pattern", !empty($skyBlueSpec));
 assertCheck("Accumulated roll qty reflects inwarded items (at least 10 Rolls)", (float)($skyBlueSpec['qty'] ?? 0) >= 10.0);
 
 // -----------------------------------------------------------
@@ -223,6 +244,7 @@ assertCheck("Concern 2 blocked from adding Concern 1 bill to stock", $labelContr
 // Clean up test records
 DB::query("DELETE FROM purchase_bills WHERE id IN (?, ?)", [$testBillId, $fgBillId]);
 DB::query("DELETE FROM stock_ledger WHERE ref_module = 'Purchase Inward' AND ref_id = ?", [$fgBillId]);
+RollRegistryService::syncSpecs(1);
 if ($initialStock > 0) {
     DB::query("UPDATE stocks SET qty = ? WHERE concern_id = 1 AND variant_id = ? AND location = 'Main Store'", [$initialStock, $variantId]);
 } else {
