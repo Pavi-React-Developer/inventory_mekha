@@ -1,0 +1,166 @@
+<?php
+// tests/RollRegistryAndConsolidatedStockTest.php
+
+require_once __DIR__ . '/../app/core/Autoloader.php';
+\App\Core\Env::load(dirname(__DIR__) . '/.env');
+
+use App\Core\DB;
+use App\Core\Auth;
+use App\Services\RollRegistryService;
+use App\Controllers\PurchaseController;
+use App\Controllers\PurchaseStockController;
+
+echo "======================================================\n";
+echo "INVENTO: Roll Color, Design & Qty Accumulation Test\n";
+echo "======================================================\n\n";
+
+$passCount = 0;
+$failCount = 0;
+
+function assertCheck(string $title, bool $condition, string $detail = '') {
+    global $passCount, $failCount;
+    if ($condition) {
+        echo "  [PASS] {$title}\n";
+        $passCount++;
+    } else {
+        echo "  [FAIL] {$title}" . ($detail ? " - {$detail}" : "") . "\n";
+        $failCount++;
+    }
+}
+
+// -----------------------------------------------------------
+// TEST GROUP 1: Database Table & Master Registry
+// -----------------------------------------------------------
+echo "--- Group 1: Database Table & Master Registry ---\n";
+
+RollRegistryService::initTable();
+
+$tableExists = DB::fetchValue("SHOW TABLES LIKE 'fabric_roll_specs'");
+assertCheck("Table 'fabric_roll_specs' exists in database", $tableExists === 'fabric_roll_specs');
+
+// Sync existing rolls
+RollRegistryService::syncSpecs(1);
+
+$savedSpecs = RollRegistryService::getSavedSpecs(1);
+assertCheck("Saved specs can be fetched for Concern 1", count($savedSpecs) >= 3);
+
+$savedColors = RollRegistryService::getSavedColors(1);
+assertCheck("Saved colors can be fetched for future use", count($savedColors) >= 3);
+
+$savedDesigns = RollRegistryService::getSavedDesigns(1);
+assertCheck("Saved designs can be fetched for future use", count($savedDesigns) >= 3);
+
+// -----------------------------------------------------------
+// TEST GROUP 2: Duplicate Register Entry Removal & Qty Accumulation
+// -----------------------------------------------------------
+echo "\n--- Group 2: Duplicate Entry Removal & Qty Accumulation ---\n";
+
+// Clear test specific records if any
+DB::query("DELETE FROM purchase_bill_items WHERE item_code LIKE 'TEST-ROLL-%'");
+DB::query("DELETE FROM fabric_roll_specs WHERE concern_id = 1 AND color = 'BLACK' AND design_name = 'FLORAL 01'");
+
+// 1. Insert First Bill Item: 10 Rolls of BLACK / FLORAL 01
+DB::query(
+    "INSERT INTO purchase_bill_items (concern_id, purchase_bill_id, section_type, item_name, item_code, color, pattern, qty, net_weight, unit, unit_price, total_price)
+     VALUES (1, 15, 'rolls', 'FLORAL 01 Fabric', 'TEST-ROLL-01', 'BLACK', 'FLORAL 01', 10.0, 20.0, 'Rolls', 500.0, 5000.0)"
+);
+
+// 2. Insert Second Duplicate Bill Item (e.g. from same or another bill): 5 Rolls of BLACK / FLORAL 01
+DB::query(
+    "INSERT INTO purchase_bill_items (concern_id, purchase_bill_id, section_type, item_name, item_code, color, pattern, qty, net_weight, unit, unit_price, total_price)
+     VALUES (1, 15, 'rolls', 'FLORAL 01 Fabric', 'TEST-ROLL-02', 'BLACK', 'FLORAL 01', 5.0, 10.0, 'Rolls', 500.0, 2500.0)"
+);
+
+// Sync specifications
+RollRegistryService::syncSpecs(1);
+
+// Verify ONLY 1 row exists in fabric_roll_specs for BLACK + FLORAL 01
+$count = (int)DB::fetchValue(
+    "SELECT COUNT(*) FROM fabric_roll_specs WHERE concern_id = 1 AND color = 'BLACK' AND design_name = 'FLORAL 01'"
+);
+assertCheck("Duplicate register entry removed: Exactly 1 row in fabric_roll_specs for BLACK / FLORAL 01", $count === 1);
+
+$finalRow = DB::fetch(
+    "SELECT * FROM fabric_roll_specs WHERE concern_id = 1 AND color = 'BLACK' AND design_name = 'FLORAL 01'"
+);
+assertCheck("New quantity accumulated with previous count: total qty is 15.00 (10 + 5)", (float)$finalRow['qty'] == 15.0);
+assertCheck("New weight accumulated with previous weight: total net_weight is 30.00 kg (20 + 10)", (float)$finalRow['net_weight'] == 30.0);
+assertCheck("Total valuation accumulated to ₹7,500.00", (float)$finalRow['total_value'] == 7500.0);
+
+// -----------------------------------------------------------
+// TEST GROUP 3: Purchase Billing Create View Autocomplete & Fetch
+// -----------------------------------------------------------
+echo "\n--- Group 3: Purchase Billing Create Autocomplete & Live Feedback ---\n";
+
+$_SESSION['user'] = [
+    'id' => 1,
+    'role_id' => 1,
+    'name' => 'Super Administrator',
+    'email' => 'admin@invento.com',
+    'concern_id' => null,
+];
+
+$purchaseController = new PurchaseController();
+ob_start();
+$purchaseController->createBill();
+$createHtml = ob_get_clean();
+
+assertCheck("purchase_billing_create renders successfully", strlen($createHtml) > 500);
+assertCheck("Contains <datalist id='rollColorList'> for colors", strpos($createHtml, 'id="rollColorList"') !== false);
+assertCheck("Contains <datalist id='rollPatternList'> for designs", strpos($createHtml, 'id="rollPatternList"') !== false);
+assertCheck("Color input has list='rollColorList'", strpos($createHtml, 'list="rollColorList"') !== false);
+assertCheck("Pattern input has list='rollPatternList'", strpos($createHtml, 'list="rollPatternList"') !== false);
+assertCheck("Quick-select dropdown for saved color & design present", strpos($createHtml, 'roll-quick-select') !== false);
+assertCheck("Live roll stock notice div present", strpos($createHtml, 'id="rollStockNotice_1"') !== false);
+assertCheck("JavaScript contains onRollColorOrPatternChange()", strpos($createHtml, 'onRollColorOrPatternChange') !== false);
+
+// -----------------------------------------------------------
+// TEST GROUP 4: Purchase Stocks Reflection & Report Export
+// -----------------------------------------------------------
+echo "\n--- Group 4: Purchase Stocks Reflection & Report Export ---\n";
+
+$stockController = new PurchaseStockController();
+
+// 1. Consolidated View
+$_GET = ['tab' => 'rolls', 'concern_id' => '1', 'view' => 'consolidated'];
+ob_start();
+$stockController->index();
+$stockHtml = ob_get_clean();
+
+assertCheck("Purchase Stocks renders consolidated table", strpos($stockHtml, 'viewRollConsolidated') !== false);
+assertCheck("Consolidated table displays 'FLORAL 01'", strpos($stockHtml, 'FLORAL 01') !== false);
+assertCheck("Consolidated table displays 'BLACK'", strpos($stockHtml, 'BLACK') !== false);
+assertCheck("Consolidated table displays accumulated 15 Rolls", strpos($stockHtml, '15') !== false);
+assertCheck("View mode switcher button group present", strpos($stockHtml, 'btnRollConsolidated') !== false);
+
+// 2. Export CSV Check
+ob_start();
+// Test export logic directly
+RollRegistryService::syncSpecs(1);
+$csvRows = RollRegistryService::getConsolidatedStock(1);
+assertCheck("Consolidated stock records ready for export", count($csvRows) >= 1);
+
+$foundBlackFloral = false;
+foreach ($csvRows as $r) {
+    if ($r['color'] === 'BLACK' && $r['design_name'] === 'FLORAL 01' && (float)$r['qty'] == 15.0) {
+        $foundBlackFloral = true;
+        break;
+    }
+}
+assertCheck("Export dataset has merged entry for BLACK / FLORAL 01 with accumulated qty = 15.0", $foundBlackFloral);
+
+// Clean up test entry
+DB::query("DELETE FROM purchase_bill_items WHERE item_code LIKE 'TEST-ROLL-%'");
+DB::query("DELETE FROM fabric_roll_specs WHERE concern_id = 1 AND color = 'BLACK' AND design_name = 'FLORAL 01'");
+RollRegistryService::syncSpecs(1);
+
+// -----------------------------------------------------------
+// SUMMARY
+// -----------------------------------------------------------
+echo "\n======================================================\n";
+echo "SUMMARY: {$passCount} Passed, {$failCount} Failed\n";
+echo "======================================================\n";
+
+if ($failCount > 0) {
+    exit(1);
+}

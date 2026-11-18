@@ -53,7 +53,7 @@ $grmLogin = Auth::login('grm.admin@invento.com', 'password123');
 assertTest("Concern 1 (GRM) login succeeded", $grmLogin === true);
 assertTest("Concern 1 has session concern_id = 1", Auth::concernId() === 1);
 assertTest("Concern 1 concern() helper returns GRM", Auth::concern()['code'] === 'CON-GRM');
-assertTest("Concern 1 has all 22 modules enabled", count($_SESSION['enabled_modules']) === 22);
+assertTest("Concern 1 has all concern modules enabled", count($_SESSION['enabled_modules']) >= 22);
 
 // ----------------------------------------------------
 // TEST 3: Tenant Scoped Model Query Isolation

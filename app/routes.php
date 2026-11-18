@@ -11,6 +11,7 @@ use App\Controllers\LabelController;
 use App\Controllers\StockController;
 use App\Controllers\InwardController;
 use App\Controllers\PurchaseController;
+use App\Controllers\PurchaseStockController;
 use App\Controllers\SalesController;
 use App\Controllers\ProductionController;
 use App\Controllers\FinanceController;
@@ -68,6 +69,11 @@ $router->post('/m/variants/store', [VariantController::class, 'store'], 'stocks'
 // QR Label Generation & Barcode Scanning
 $router->get('/m/label_generation', [LabelController::class, 'index'], 'label_generation', 'view');
 $router->post('/m/label_generation/generate', [LabelController::class, 'generate'], 'label_generation', 'add');
+$router->post('/m/label_generation/map_variant', [LabelController::class, 'mapVariant'], 'label_generation', 'edit');
+$router->post('/m/label/add_to_stock', [LabelController::class, 'addToStock'], 'label_generation', 'edit');
+$router->get('/m/label/add_to_stock', [LabelController::class, 'addToStock'], 'label_generation', 'edit');
+$router->post('/m/label_generation/add_to_stock', [LabelController::class, 'addToStock'], 'label_generation', 'edit');
+$router->get('/m/label_generation/add_to_stock', [LabelController::class, 'addToStock'], 'label_generation', 'edit');
 $router->get('/scan', [LabelController::class, 'scanPage'], 'stocks', 'view');
 $router->get('/api/qr/lookup', [LabelController::class, 'lookup'], 'stocks', 'view');
 $router->post('/api/qr/lookup', [LabelController::class, 'lookup'], 'stocks', 'view');
@@ -93,8 +99,14 @@ $router->post('/m/purchase_billing/update', [PurchaseController::class, 'updateB
 $router->post('/m/purchase_billing/update_status', [PurchaseController::class, 'updateBillStatus'], 'purchase_billing', 'edit');
 $router->post('/m/purchase_billing/delete', [PurchaseController::class, 'deleteBill'], 'purchase_billing', 'delete');
 $router->post('/m/purchase_billing/save_hsn', [PurchaseController::class, 'saveHsnAjax'], 'purchase_billing', 'add');
+$router->post('/m/purchase_billing/save_roll_spec', [PurchaseController::class, 'saveRollSpecAjax'], 'purchase_billing', 'add');
 $router->get('/m/purchase_billing/view', [PurchaseController::class, 'viewBill'], 'purchase_billing', 'view');
 $router->get('/m/purchase_billing/download_items', [PurchaseController::class, 'downloadItems'], 'purchase_billing', 'view');
+
+// Purchase Stocks (3 Sections: Rolls, Trims/Other Garments, Finished Goods)
+$router->get('/m/purchase_stocks', [PurchaseStockController::class, 'index'], 'purchase_stocks', 'view');
+$router->get('/m/purchase_stocks/export', [PurchaseStockController::class, 'export'], 'purchase_stocks', 'view');
+
 $router->get('/m/purchase_damage', [PurchaseController::class, 'damage'], 'purchase_damage', 'view');
 $router->post('/m/purchase_damage/store', [PurchaseController::class, 'storeDamage'], 'purchase_damage', 'add');
 

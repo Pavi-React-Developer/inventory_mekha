@@ -7,6 +7,38 @@ use App\Core\DB;
 
 class QrService {
     /**
+     * Build simplified tag code:
+     * First 3 letters of product - first letter of color - 2 letters of design
+     * E.g. FAB-R-FL, THR-W-SP, COT-B-ST
+     */
+    public static function generateTagCode(?string $product, ?string $color = '', ?string $design = '', string $fallbackId = ''): string {
+        // 1. First 3 letters of product
+        $p = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', (string)$product));
+        if (strlen($p) < 3) {
+            $p = str_pad($p, 3, 'X');
+        }
+        $prod3 = substr($p, 0, 3);
+
+        // 2. First letter of color
+        $c = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', (string)$color));
+        $col1 = (strlen($c) > 0) ? substr($c, 0, 1) : 'X';
+
+        // 3. 2 letters of design / pattern
+        $d = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', (string)$design));
+        if (strlen($d) === 0) {
+            $cleanId = preg_replace('/[^A-Za-z0-9]/', '', (string)$fallbackId);
+            $d = strlen($cleanId) >= 2 ? substr($cleanId, 0, 2) : (strlen($cleanId) === 1 ? '0' . $cleanId : '01');
+        } elseif (strlen($d) === 1) {
+            $d = '0' . $d;
+        } else {
+            $d = substr($d, 0, 2);
+        }
+        $des2 = $d;
+
+        return "{$prod3}-{$col1}-{$des2}";
+    }
+
+    /**
      * Build standard payload: C{cat}-S{subcat}-V{var}
      */
     public static function generatePayload(int $categoryId, int $subcategoryId, int $variantId): string {

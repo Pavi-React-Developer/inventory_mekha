@@ -179,13 +179,18 @@ CREATE TABLE IF NOT EXISTS `stock_ledger` (
 CREATE TABLE IF NOT EXISTS `label_jobs` (
     `id` INT AUTO_INCREMENT PRIMARY KEY,
     `concern_id` INT NOT NULL,
-    `variant_id` INT NOT NULL,
+    `label_type` VARCHAR(50) NOT NULL DEFAULT 'production', -- 'purchase_raw', 'purchase_fg', 'production', 'return'
+    `ref_id` INT NULL,
+    `variant_id` INT NULL,
+    `item_title` VARCHAR(255) NULL,
+    `item_code` VARCHAR(100) NULL,
+    `qr_payload` VARCHAR(255) NULL,
     `qty` INT NOT NULL DEFAULT 1,
     `printed_by` INT NULL,
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX `idx_label_concern` (`concern_id`),
     CONSTRAINT `fk_lj_concern` FOREIGN KEY (`concern_id`) REFERENCES `concerns`(`id`) ON DELETE CASCADE,
-    CONSTRAINT `fk_lj_variant` FOREIGN KEY (`variant_id`) REFERENCES `variants`(`id`) ON DELETE CASCADE
+    CONSTRAINT `fk_lj_variant` FOREIGN KEY (`variant_id`) REFERENCES `variants`(`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 12. DOC SERIES (Number sequence generation per doc type)
@@ -305,6 +310,7 @@ CREATE TABLE IF NOT EXISTS `purchase_bill_items` (
     `gross_weight` DECIMAL(12,2) NULL,
     `net_weight` DECIMAL(12,2) NULL,
     `qty` DECIMAL(12,2) NOT NULL,
+    `inward_status` ENUM('pending', 'completed') NOT NULL DEFAULT 'pending',
     `unit_price` DECIMAL(12,2) NOT NULL,
     `gst_rate` DECIMAL(5,2) NOT NULL DEFAULT 0.00,
     `gst_type` VARCHAR(50) NULL,
@@ -320,6 +326,28 @@ CREATE TABLE IF NOT EXISTS `purchase_bill_items` (
     CONSTRAINT `fk_pbi_concern` FOREIGN KEY (`concern_id`) REFERENCES `concerns`(`id`) ON DELETE CASCADE,
     CONSTRAINT `fk_pbi_bill` FOREIGN KEY (`purchase_bill_id`) REFERENCES `purchase_bills`(`id`) ON DELETE CASCADE,
     CONSTRAINT `fk_pbi_variant` FOREIGN KEY (`variant_id`) REFERENCES `variants`(`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 16b. FABRIC ROLL SPECIFICATIONS & CONSOLIDATED STOCK REGISTRY
+CREATE TABLE IF NOT EXISTS `fabric_roll_specs` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `concern_id` INT NOT NULL,
+    `color` VARCHAR(100) NOT NULL,
+    `design_name` VARCHAR(150) NOT NULL,
+    `qty` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    `net_weight` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    `unit` VARCHAR(50) NOT NULL DEFAULT 'Rolls',
+    `last_unit_price` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    `total_value` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    `bills_count` INT NOT NULL DEFAULT 1,
+    `last_bill_no` VARCHAR(100) NULL,
+    `last_supplier_name` VARCHAR(150) NULL,
+    `hsn_code` VARCHAR(50) NULL,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY `uk_concern_color_design` (`concern_id`, `color`, `design_name`),
+    INDEX `idx_frs_concern` (`concern_id`),
+    CONSTRAINT `fk_frs_concern` FOREIGN KEY (`concern_id`) REFERENCES `concerns`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 17. INWARDS & ITEMS
@@ -535,6 +563,7 @@ CREATE TABLE IF NOT EXISTS `sales_invoice_items` (
     `sales_invoice_id` INT NOT NULL,
     `variant_id` INT NOT NULL,
     `qty` DECIMAL(12,2) NOT NULL,
+    `inward_status` ENUM('pending', 'completed') NOT NULL DEFAULT 'pending',
     `unit_price` DECIMAL(12,2) NOT NULL,
     `total_price` DECIMAL(12,2) NOT NULL,
     INDEX `idx_sii_concern` (`concern_id`),
@@ -623,8 +652,11 @@ CREATE TABLE IF NOT EXISTS `expenses` (
     `expense_no` VARCHAR(50) NOT NULL,
     `expense_date` DATE NOT NULL,
     `category` VARCHAR(100) NOT NULL,
+    `paid_to` VARCHAR(255) NULL,
+    `item_particulars` VARCHAR(255) NULL,
     `amount` DECIMAL(12,2) NOT NULL,
     `payment_mode` VARCHAR(50) NOT NULL DEFAULT 'Cash',
+    `status` VARCHAR(50) NOT NULL DEFAULT 'Paid',
     `account_id` INT NULL,
     `description` TEXT NULL,
     `created_by` INT NULL,

@@ -9,6 +9,7 @@ use App\Core\Auth;
 use App\Services\StockService;
 use App\Services\NumberSeries;
 use App\Services\CloudinaryService;
+use App\Services\RollRegistryService;
 use Exception;
 
 class PurchaseController extends Controller {
@@ -286,14 +287,22 @@ class PurchaseController extends Controller {
             $allConcerns = DB::fetchAll("SELECT id, name, code FROM concerns ORDER BY id ASC");
         }
 
+        $targetCid = $cid ?: 1;
+        $savedRollSpecs = RollRegistryService::getSavedSpecs($targetCid);
+        $savedColors    = RollRegistryService::getSavedColors($targetCid);
+        $savedDesigns   = RollRegistryService::getSavedDesigns($targetCid);
+
         $this->render('concern/purchase_billing_create', [
-            'pageTitle'     => 'Record Production Purchase',
-            'currentModule' => 'purchase_billing',
-            'suppliers'     => $suppliers,
-            'variants'      => $variants,
-            'selectedCid'   => $cid,
-            'allConcerns'   => $allConcerns,
-            'hsnList'       => $hsnList,
+            'pageTitle'      => 'Record Production Purchase',
+            'currentModule'  => 'purchase_billing',
+            'suppliers'      => $suppliers,
+            'variants'       => $variants,
+            'selectedCid'    => $cid,
+            'allConcerns'    => $allConcerns,
+            'hsnList'        => $hsnList,
+            'savedRollSpecs' => $savedRollSpecs,
+            'savedColors'    => $savedColors,
+            'savedDesigns'   => $savedDesigns,
         ]);
     }
 
@@ -335,16 +344,24 @@ class PurchaseController extends Controller {
             $allConcerns = DB::fetchAll("SELECT id, name, code FROM concerns ORDER BY id ASC");
         }
 
+        $targetCid = $cid ?: (int)$bill['concern_id'];
+        $savedRollSpecs = RollRegistryService::getSavedSpecs($targetCid);
+        $savedColors    = RollRegistryService::getSavedColors($targetCid);
+        $savedDesigns   = RollRegistryService::getSavedDesigns($targetCid);
+
         $this->render('concern/purchase_billing_create', [
-            'pageTitle'     => 'Edit Purchase Bill: #' . $bill['bill_no'],
-            'currentModule' => 'purchase_billing',
-            'suppliers'     => $suppliers,
-            'variants'      => $variants,
-            'selectedCid'   => $cid,
-            'allConcerns'   => $allConcerns,
-            'hsnList'       => $hsnList,
-            'bill'          => $bill,
-            'existingItems' => $items,
+            'pageTitle'      => 'Edit Purchase Bill: #' . $bill['bill_no'],
+            'currentModule'  => 'purchase_billing',
+            'suppliers'      => $suppliers,
+            'variants'       => $variants,
+            'selectedCid'    => $cid,
+            'allConcerns'    => $allConcerns,
+            'hsnList'        => $hsnList,
+            'bill'           => $bill,
+            'existingItems'  => $items,
+            'savedRollSpecs' => $savedRollSpecs,
+            'savedColors'    => $savedColors,
+            'savedDesigns'   => $savedDesigns,
         ]);
     }
 
@@ -385,6 +402,41 @@ class PurchaseController extends Controller {
                 'gst_rate' => $rate,
                 'label' => $code . ($desc ? ' - ' . $desc : '')
             ]);
+        } catch (\Exception $e) {
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    public function saveRollSpecAjax(): void {
+        header('Content-Type: application/json; charset=utf-8');
+        $cid = Auth::concernId() ?: (int)($_POST['concern_id'] ?? 1);
+
+        $color = strtoupper(trim($_POST['color'] ?? ''));
+        $designName = strtoupper(trim($_POST['design_name'] ?? ''));
+        $unitPrice = isset($_POST['unit_price']) && $_POST['unit_price'] !== '' ? (float)$_POST['unit_price'] : 0.0;
+        $hsnCode = trim($_POST['hsn_code'] ?? '');
+        $initialQty = isset($_POST['qty']) && $_POST['qty'] !== '' ? (float)$_POST['qty'] : 0.0;
+        $netWeight = isset($_POST['net_weight']) && $_POST['net_weight'] !== '' ? (float)$_POST['net_weight'] : 0.0;
+        $supplierName = trim($_POST['supplier_name'] ?? '');
+
+        if (empty($color) || empty($designName)) {
+            echo json_encode(['success' => false, 'message' => 'Color / Shade and Design Name / Pattern are required.']);
+            exit;
+        }
+
+        try {
+            $res = RollRegistryService::createOrUpdateSpec(
+                $cid,
+                $color,
+                $designName,
+                $unitPrice,
+                $hsnCode,
+                $initialQty,
+                $netWeight,
+                $supplierName
+            );
+            echo json_encode($res);
         } catch (\Exception $e) {
             echo json_encode(['success' => false, 'message' => $e->getMessage()]);
         }
@@ -745,15 +797,21 @@ class PurchaseController extends Controller {
                         }
                     }
 
+                    $rollPattern = trim($r['pattern'] ?? ($r['design_name'] ?? ''));
+                    $rollColor   = trim($r['color'] ?? ($r['shade'] ?? ''));
+                    $rollShade   = trim($r['shade'] ?? '');
+                    $rollSpec    = (!empty($rollShade) && strcasecmp($rollShade, $rollColor) !== 0) ? $rollShade : null;
+                    $rollName    = !empty($rollPattern) ? ($rollPattern . ' Fabric') : trim($r['roll_code'] ?? ('ROLL #' . $idx));
+
                     $itemsToInsert[] = [
                         'section_type'  => 'rolls',
                         'variant_id'    => !empty($r['variant_id']) ? (int)$r['variant_id'] : null,
-                        'item_name'     => trim($r['roll_code'] ?? ('ROLL #' . $idx)),
+                        'item_name'     => $rollName,
                         'item_code'     => trim($r['roll_code'] ?? ('ROLL #' . $idx)),
                         'hsn_code'      => trim($r['hsn'] ?? ($r['hsn_code'] ?? '')),
-                        'specification' => trim($r['shade'] ?? ($r['color'] ?? '')),
-                        'color'         => trim($r['color'] ?? ($r['shade'] ?? '')),
-                        'pattern'       => trim($r['pattern'] ?? ($r['design_name'] ?? '')),
+                        'specification' => $rollSpec,
+                        'color'         => $rollColor,
+                        'pattern'       => $rollPattern,
                         'designs_count' => 1,
                         'rq_qty'        => $rq,
                         'unit'          => 'RQ',
@@ -955,9 +1013,9 @@ class PurchaseController extends Controller {
                     "INSERT INTO purchase_bill_items (
                         concern_id, purchase_bill_id, variant_id, section_type, item_name, item_code,
                         hsn_code, specification, color, pattern, designs_count, rq_qty, unit,
-                        gross_weight, net_weight, qty, unit_price, gst_rate, gst_type, tax_mode, total_price, tax_amount,
+                        gross_weight, net_weight, qty, inward_status, unit_price, gst_rate, gst_type, tax_mode, total_price, tax_amount,
                         photo_path, category_name, product_type, mrp, selling_price
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     [
                         $cid,
                         $billId,
@@ -975,6 +1033,7 @@ class PurchaseController extends Controller {
                         $item['gross_weight'],
                         $item['net_weight'],
                         $item['qty'],
+                        $inwardStatus,
                         $item['unit_price'],
                         $item['gst_rate'],
                         $item['gst_type'],
@@ -988,6 +1047,24 @@ class PurchaseController extends Controller {
                         $item['selling_price'],
                     ]
                 );
+
+                // If bill was directly marked completed upon creation, inward finished goods to stock ledger
+                if ($inwardStatus === 'completed' && !empty($item['variant_id']) && $item['section_type'] === 'finished_goods') {
+                    try {
+                        StockService::move(
+                            $cid,
+                            (int)$item['variant_id'],
+                            'Main Store',
+                            (float)$item['qty'],
+                            0.00,
+                            'Purchase Inward',
+                            $billId,
+                            "Purchase Inward from Bill #{$billNo}"
+                        );
+                    } catch (\Exception $stockEx) {
+                        // Stock movement logged or skipped if zero
+                    }
+                }
 
                 // Ensure newly recorded HSN code is preserved in HSN master for future use
                 if (!empty($item['hsn_code']) && $item['hsn_code'] !== '-') {
@@ -1005,8 +1082,38 @@ class PurchaseController extends Controller {
 
             DB::commit();
 
-            $this->flash('success', "Production Purchase '{$billNo}' recorded successfully for ₹" . number_format($netAmount, 2) . " (" . count($itemsToInsert) . " items)!");
-            $this->redirect('/m/purchase_billing');
+            // Synchronize and consolidate fabric roll specifications & accumulated stock
+            RollRegistryService::syncSpecs($cid);
+
+            $hasRolls = false;
+            $hasOther = false;
+            $hasFg = false;
+            foreach ($itemsToInsert as $it) {
+                if ($it['section_type'] === 'rolls') {
+                    $hasRolls = true;
+                } elseif ($it['section_type'] === 'garment_other') {
+                    $hasOther = true;
+                } elseif ($it['section_type'] === 'finished_goods') {
+                    $hasFg = true;
+                }
+            }
+
+            if ($hasRolls) {
+                $targetTab = 'purchase_raw';
+                $targetSubtab = 'rolls';
+            } elseif ($hasOther) {
+                $targetTab = 'purchase_raw';
+                $targetSubtab = 'garment_other';
+            } elseif ($hasFg) {
+                $targetTab = 'purchase_fg';
+                $targetSubtab = '';
+            } else {
+                $targetTab = 'purchase_raw';
+                $targetSubtab = 'rolls';
+            }
+
+            $this->flash('success', "Production Purchase '{$billNo}' recorded successfully! Now print QR/barcode labels or click 'Add to Stock' to inward into inventory.");
+            $this->redirect("/m/label_generation?bill_id={$billId}&tab={$targetTab}" . ($targetSubtab ? "&subtab={$targetSubtab}" : ''));
         } catch (Exception $e) {
             DB::rollBack();
             $this->flash('error', 'Error recording production purchase: ' . $e->getMessage());
@@ -1117,15 +1224,21 @@ class PurchaseController extends Controller {
                         }
                     }
 
+                    $rollPattern = trim($r['pattern'] ?? ($r['design_name'] ?? ''));
+                    $rollColor   = trim($r['color'] ?? ($r['shade'] ?? ''));
+                    $rollShade   = trim($r['shade'] ?? '');
+                    $rollSpec    = (!empty($rollShade) && strcasecmp($rollShade, $rollColor) !== 0) ? $rollShade : null;
+                    $rollName    = !empty($rollPattern) ? ($rollPattern . ' Fabric') : trim($r['roll_code'] ?? ('ROLL #' . $idx));
+
                     $itemsToInsert[] = [
                         'section_type'  => 'rolls',
                         'variant_id'    => !empty($r['variant_id']) ? (int)$r['variant_id'] : null,
-                        'item_name'     => trim($r['roll_code'] ?? ('ROLL #' . $idx)),
+                        'item_name'     => $rollName,
                         'item_code'     => trim($r['roll_code'] ?? ('ROLL #' . $idx)),
                         'hsn_code'      => trim($r['hsn'] ?? ($r['hsn_code'] ?? '')),
-                        'specification' => trim($r['shade'] ?? ($r['color'] ?? '')),
-                        'color'         => trim($r['color'] ?? ($r['shade'] ?? '')),
-                        'pattern'       => trim($r['pattern'] ?? ($r['design_name'] ?? '')),
+                        'specification' => $rollSpec,
+                        'color'         => $rollColor,
+                        'pattern'       => $rollPattern,
                         'designs_count' => 1,
                         'rq_qty'        => $rq,
                         'unit'          => 'RQ',
@@ -1293,9 +1406,9 @@ class PurchaseController extends Controller {
                     "INSERT INTO purchase_bill_items (
                         concern_id, purchase_bill_id, variant_id, section_type, item_name, item_code,
                         hsn_code, specification, color, pattern, designs_count, rq_qty, unit,
-                        gross_weight, net_weight, qty, unit_price, gst_rate, gst_type, tax_mode, total_price, tax_amount,
+                        gross_weight, net_weight, qty, inward_status, unit_price, gst_rate, gst_type, tax_mode, total_price, tax_amount,
                         photo_path, category_name, product_type, mrp, selling_price
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     [
                         $cid,
                         $billId,
@@ -1313,6 +1426,7 @@ class PurchaseController extends Controller {
                         $item['gross_weight'],
                         $item['net_weight'],
                         $item['qty'],
+                        $inwardStatus,
                         $item['unit_price'],
                         $item['gst_rate'],
                         $item['gst_type'],
@@ -1341,6 +1455,9 @@ class PurchaseController extends Controller {
             }
 
             DB::commit();
+
+            // Synchronize and consolidate fabric roll specifications & accumulated stock
+            RollRegistryService::syncSpecs($cid);
 
             $this->flash('success', "Purchase Bill '#{$bill['bill_no']}' updated successfully for ₹" . number_format($netAmount, 2) . " (" . count($itemsToInsert) . " items)!");
             $this->redirect('/m/purchase_billing');
@@ -1412,6 +1529,9 @@ class PurchaseController extends Controller {
             DB::query("DELETE FROM purchase_bill_items WHERE purchase_bill_id = ?", [$id]);
             DB::query("DELETE FROM purchase_bills WHERE id = ?", [$id]);
             DB::commit();
+
+            // Synchronize and consolidate fabric roll specifications & accumulated stock
+            RollRegistryService::syncSpecs($cid);
 
             $this->flash('success', "Purchase Bill #{$bill['bill_no']} deleted successfully.");
         } catch (\Exception $e) {
