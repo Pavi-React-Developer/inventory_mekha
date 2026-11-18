@@ -17,6 +17,7 @@ use App\Controllers\ProductionController;
 use App\Controllers\CatalogMappingController;
 use App\Controllers\FinanceController;
 use App\Controllers\DamageController;
+use App\Controllers\StaffController;
 
 /** @var Router $router */
 
@@ -274,3 +275,10 @@ $router->post('/m/cash_flow/shift/open', [FinanceController::class, 'openShift']
 $router->post('/m/cash_flow/shift/close', [FinanceController::class, 'closeShift'], 'cash_flow', 'add');
 $router->post('/m/cash/shift/open', [FinanceController::class, 'openShift'], 'cash', 'add');
 $router->post('/m/cash/shift/close', [FinanceController::class, 'closeShift'], 'cash', 'add');
+
+// Staff Management
+$router->get('/m/staff', [StaffController::class, 'index'], 'staff', 'view');
+$router->get('/m/staff/export', [StaffController::class, 'export'], 'staff', 'view');
+$router->post('/m/staff/store', [StaffController::class, 'store'], 'staff', 'add');
+$router->post('/m/staff/update', [StaffController::class, 'update'], 'staff', 'edit');
+$router->post('/m/staff/delete', [StaffController::class, 'delete'], 'staff', 'delete');

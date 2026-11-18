@@ -232,6 +232,7 @@
             }
 
             foreach ($grouped as $groupName => $mods):
+                if ($groupName === 'Staff') continue; // Rendered as the last module below Masters
                 // If Finance group, merge 'cash' and 'cash_flow' into a single 'Cash & Cash Flow' module
                 if ($groupName === 'Finance') {
                     $hasCashOrFlow = false;
@@ -291,6 +292,12 @@
             <a href="<?= \App\Core\Controller::url('/m/variants') ?>" class="nav-link <?= (isset($currentModule) && $currentModule === 'variants') ? 'active' : '' ?>">
                 <i class="bi bi-tags"></i>
                 <span>Product Variants</span>
+            </a>
+
+            <div class="nav-group-title">Staff</div>
+            <a href="<?= \App\Core\Controller::url('/m/staff') ?>" class="nav-link <?= (isset($currentModule) && $currentModule === 'staff') ? 'active' : '' ?>">
+                <i class="bi bi-people-fill"></i>
+                <span>Staff</span>
             </a>
         </div>
     </nav>

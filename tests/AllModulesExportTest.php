@@ -55,6 +55,7 @@ $endpoints = [
     'Variants' => ['App\Controllers\VariantController', 'exportVariants'],
     'Concerns' => ['App\Controllers\AdminController', 'exportConcerns'],
     'Assets' => ['App\Controllers\AdminController', 'exportAssets'],
+    'Staff' => ['App\Controllers\StaffController', 'export'],
 ];
 
 echo "TEST: Execution of All Export Controllers in Excel, PDF & CSV Formats\n";

@@ -451,6 +451,28 @@ assertCrud('18. Finance: Cash & Bank Accounts CRUD', function() use ($cid) {
     if ($del) throw new Exception("Failed to delete account");
 });
 
+// 19. Staff Register CRUD
+assertCrud('19. People/Staff: Staff Register CRUD', function() use ($cid) {
+    $code = 'STF-TEST-' . rand(100, 999);
+    DB::query(
+        "INSERT INTO staff (concern_id, staff_code, name, phone, designation, department, salary_type, base_salary, status, joining_date, created_at)
+         VALUES (?, ?, 'Vignesh Sundaram', '9842199999', 'Floor Manager', 'Production', 'monthly', 30000.00, 'active', CURDATE(), NOW())",
+        [$cid, $code]
+    );
+    $stfId = (int)DB::lastInsertId();
+
+    $stf = DB::fetch("SELECT * FROM staff WHERE id = ?", [$stfId]);
+    if (!$stf || $stf['name'] !== 'Vignesh Sundaram') throw new Exception("Failed to read staff");
+
+    DB::query("UPDATE staff SET designation = 'Senior Production Lead' WHERE id = ?", [$stfId]);
+    $u = DB::fetch("SELECT designation FROM staff WHERE id = ?", [$stfId]);
+    if ($u['designation'] !== 'Senior Production Lead') throw new Exception("Failed to update staff");
+
+    DB::query("DELETE FROM staff WHERE id = ?", [$stfId]);
+    $del = DB::fetch("SELECT * FROM staff WHERE id = ?", [$stfId]);
+    if ($del) throw new Exception("Failed to delete staff");
+});
+
 echo "\n======================================================\n";
 echo "SUMMARY: {$passed} PASSED, {$failed} FAILED\n";
 echo "======================================================\n";
