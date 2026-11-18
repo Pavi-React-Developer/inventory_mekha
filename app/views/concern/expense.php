@@ -611,6 +611,10 @@
                         <span class="badge bg-primary bg-opacity-10 text-primary" id="view_category"></span>
                     </li>
                     <li class="list-group-item px-0 d-flex justify-content-between">
+                        <span class="text-muted">Particulars / Items:</span>
+                        <strong class="text-dark" id="view_particulars">-</strong>
+                    </li>
+                    <li class="list-group-item px-0 d-flex justify-content-between">
                         <span class="text-muted">Paid To / Payee:</span>
                         <strong class="text-dark" id="view_paid_to"></strong>
                     </li>
@@ -924,36 +928,56 @@ document.addEventListener('click', function(e) {
 
 function showVoucherDetails(voucher) {
     if (!voucher) return;
-    document.getElementById('view_voucher_title').innerText = voucher.category || 'Operational Expense';
-    document.getElementById('view_voucher_no').innerText = voucher.expense_no || '';
-    document.getElementById('view_amount').innerText = '₹' + parseFloat(voucher.amount || 0).toLocaleString('en-IN', {minimumFractionDigits: 2});
-    document.getElementById('view_status').innerText = voucher.status || 'Paid';
-    document.getElementById('view_warehouse').innerText = (voucher.concern_name || 'Warehouse (WH-01)') + ' (' + (voucher.concern_code || 'WH-01') + ')';
-    document.getElementById('view_category').innerText = voucher.category || '-';
-    document.getElementById('view_particulars').innerText = voucher.item_particulars || voucher.description || '-';
-    document.getElementById('view_paid_to').innerText = voucher.paid_to || 'Counter Payee';
-    document.getElementById('view_pay_mode').innerText = voucher.payment_mode || 'Cash';
-    document.getElementById('view_date').innerText = voucher.expense_date || '';
-    document.getElementById('view_description').innerText = voucher.description || '-';
+    const setTxt = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.innerText = val;
+    };
 
-    const modal = new bootstrap.Modal(document.getElementById('modalViewVoucher'));
-    modal.show();
+    setTxt('view_voucher_title', voucher.category || 'Operational Expense');
+    setTxt('view_voucher_no', voucher.expense_no || '');
+    setTxt('view_amount', '₹' + parseFloat(voucher.amount || 0).toLocaleString('en-IN', {minimumFractionDigits: 2}));
+    setTxt('view_status', voucher.status || 'Paid');
+    setTxt('view_warehouse', (voucher.concern_name || 'Warehouse (WH-01)') + (voucher.concern_code ? ' (' + voucher.concern_code + ')' : ''));
+    setTxt('view_category', voucher.category || '-');
+    setTxt('view_particulars', voucher.item_particulars || voucher.description || '-');
+    setTxt('view_paid_to', voucher.paid_to || 'Counter Payee');
+    setTxt('view_pay_mode', voucher.payment_mode || 'Cash');
+    setTxt('view_date', voucher.expense_date || '');
+    setTxt('view_description', voucher.description || '-');
+
+    const modalEl = document.getElementById('modalViewVoucher');
+    if (modalEl) {
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        modal.show();
+    }
 }
 
 function openEditExpenseModal(exp) {
     if (!exp) return;
-    document.getElementById('edit_expense_id').value = exp.id || '';
-    document.getElementById('edit_expense_voucher_no').innerText = exp.expense_no || '';
-    document.getElementById('edit_expense_date').value = exp.expense_date || '';
-    document.getElementById('edit_expense_amount').value = parseFloat(exp.amount || 0).toFixed(2);
-    document.getElementById('edit_expense_category').value = exp.category || '';
-    document.getElementById('edit_expense_status').value = exp.status === 'Pending' ? 'Pending' : 'Paid';
-    document.getElementById('edit_expense_paid_to').value = exp.paid_to || '';
-    document.getElementById('edit_expense_particulars').value = exp.item_particulars || '';
-    document.getElementById('edit_expense_description').value = exp.description || '';
+    const setVal = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.value = val;
+    };
+    const setTxt = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.innerText = val;
+    };
 
-    const modal = new bootstrap.Modal(document.getElementById('modalEditExpense'));
-    modal.show();
+    setVal('edit_expense_id', exp.id || '');
+    setTxt('edit_expense_voucher_no', exp.expense_no || '');
+    setVal('edit_expense_date', exp.expense_date || '');
+    setVal('edit_expense_amount', parseFloat(exp.amount || 0).toFixed(2));
+    setVal('edit_expense_category', exp.category || '');
+    setVal('edit_expense_status', exp.status === 'Pending' ? 'Pending' : 'Paid');
+    setVal('edit_expense_paid_to', exp.paid_to || '');
+    setVal('edit_expense_particulars', exp.item_particulars || '');
+    setVal('edit_expense_description', exp.description || '');
+
+    const modalEl = document.getElementById('modalEditExpense');
+    if (modalEl) {
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        modal.show();
+    }
 }
 
 document.addEventListener('DOMContentLoaded', function() {
