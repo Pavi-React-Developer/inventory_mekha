@@ -191,6 +191,112 @@ class AdminController extends Controller {
         $this->renderJson(['success' => true, 'message' => 'Module status updated successfully!']);
     }
 
+    public function updateConcern(): void {
+        $this->validateCsrf();
+        $id = (int)($_POST['id'] ?? 0);
+        $concern = DB::fetch("SELECT * FROM concerns WHERE id = ?", [$id]);
+        if (!$concern) {
+            $this->flash('error', 'Concern not found.');
+            $this->redirect('/admin/concerns');
+        }
+
+        $name    = trim($_POST['name'] ?? $concern['name']);
+        $code    = strtoupper(trim($_POST['code'] ?? $concern['code']));
+        $gstin   = trim($_POST['gstin'] ?? $concern['gstin']);
+        $phone   = trim($_POST['phone'] ?? $concern['phone']);
+        $email   = trim($_POST['email'] ?? $concern['email']);
+        $address = trim($_POST['address'] ?? $concern['address']);
+        $status  = trim($_POST['status'] ?? $concern['status']);
+
+        try {
+            DB::query(
+                "UPDATE concerns SET name = ?, code = ?, gstin = ?, phone = ?, email = ?, address = ?, status = ? WHERE id = ?",
+                [$name, $code, $gstin, $phone, $email, $address, $status, $id]
+            );
+            $this->flash('success', "Concern '{$name}' updated successfully.");
+        } catch (Exception $e) {
+            $this->flash('error', 'Failed to update concern: ' . $e->getMessage());
+        }
+
+        $this->redirect('/admin/concerns');
+    }
+
+    public function deleteConcern(): void {
+        $this->validateCsrf();
+        $id = (int)($_POST['id'] ?? 0);
+        $concern = DB::fetch("SELECT * FROM concerns WHERE id = ?", [$id]);
+        if (!$concern) {
+            $this->flash('error', 'Concern not found.');
+            $this->redirect('/admin/concerns');
+        }
+
+        DB::beginTransaction();
+        try {
+            // Explicit clean deletion of all concern data in proper child -> parent order
+            $childTables = [
+                'stock_ledger',
+                'stocks',
+                'inward_items',
+                'inwards',
+                'outward_items',
+                'outwards',
+                'dispatches',
+                'purchase_bill_items',
+                'purchase_bills',
+                'purchase_damages',
+                'concern_damages',
+                'returns_exchanges',
+                'cutting_logs',
+                'stitching_logs',
+                'qc_inspections',
+                'label_jobs',
+                'production_programs',
+                'catalogs',
+                'customer_requests',
+                'sales_invoice_items',
+                'sales_invoices',
+                'batches',
+                'variants',
+                'subcategories',
+                'categories',
+                'brands',
+                'customers',
+                'suppliers',
+                'assets',
+                'expenses',
+                'cash_transactions',
+                'cashier_shifts',
+                'cash_accounts',
+                'doc_series',
+                'concern_modules',
+                'users',
+                'roles'
+            ];
+
+            foreach ($childTables as $tbl) {
+                DB::query("DELETE FROM {$tbl} WHERE concern_id = ?", [$id]);
+            }
+
+            DB::query("DELETE FROM concerns WHERE id = ?", [$id]);
+
+            // If the user's active session was pinned to this deleted concern, reset to Consolidated view
+            if (Auth::concernId() === $id) {
+                Auth::switchConcern(null);
+            }
+
+            DB::commit();
+
+            AuditLog::log('DELETE_CONCERN', 'concerns', $id, ['name' => $concern['name'], 'code' => $concern['code']]);
+
+            $this->flash('success', "Concern '{$concern['name']}' ({$concern['code']}) and all associated records deleted successfully.");
+        } catch (Exception $e) {
+            DB::rollBack();
+            $this->flash('error', 'Failed to delete concern: ' . $e->getMessage());
+        }
+
+        $this->redirect('/admin/concerns');
+    }
+
     public function assets(): void {
         $assets = DB::fetchAll(
             "SELECT a.*, c.name AS concern_name 
@@ -237,6 +343,57 @@ class AdminController extends Controller {
             $this->flash('success', "Asset '{$name}' ({$code}) recorded successfully.");
         } catch (Exception $e) {
             $this->flash('error', 'Failed to save asset: ' . $e->getMessage());
+        }
+
+        $this->redirect('/admin/assets');
+    }
+
+    public function updateAsset(): void {
+        $this->validateCsrf();
+        $id = (int)($_POST['id'] ?? 0);
+        $asset = DB::fetch("SELECT * FROM assets WHERE id = ?", [$id]);
+        if (!$asset) {
+            $this->flash('error', 'Asset not found.');
+            $this->redirect('/admin/assets');
+        }
+
+        $code      = trim($_POST['asset_code'] ?? $asset['asset_code']);
+        $name      = trim($_POST['name'] ?? $asset['name']);
+        $category  = trim($_POST['category'] ?? $asset['category']);
+        $cost      = (float)($_POST['purchase_cost'] ?? $asset['purchase_cost']);
+        $value     = (float)($_POST['current_value'] ?? $asset['current_value']);
+        $date      = $_POST['purchase_date'] ?: $asset['purchase_date'];
+        $location  = trim($_POST['location'] ?? $asset['location']);
+        $status    = trim($_POST['status'] ?? $asset['status']);
+        $notes     = trim($_POST['notes'] ?? $asset['notes']);
+
+        try {
+            DB::query(
+                "UPDATE assets SET asset_code = ?, name = ?, category = ?, purchase_cost = ?, current_value = ?, purchase_date = ?, location = ?, status = ?, notes = ? WHERE id = ?",
+                [$code, $name, $category, $cost, $value, $date, $location, $status, $notes, $id]
+            );
+            $this->flash('success', "Asset '{$name}' updated successfully.");
+        } catch (Exception $e) {
+            $this->flash('error', 'Failed to update asset: ' . $e->getMessage());
+        }
+
+        $this->redirect('/admin/assets');
+    }
+
+    public function deleteAsset(): void {
+        $this->validateCsrf();
+        $id = (int)($_POST['id'] ?? 0);
+        $asset = DB::fetch("SELECT * FROM assets WHERE id = ?", [$id]);
+        if (!$asset) {
+            $this->flash('error', 'Asset not found.');
+            $this->redirect('/admin/assets');
+        }
+
+        try {
+            DB::query("DELETE FROM assets WHERE id = ?", [$id]);
+            $this->flash('success', "Asset '{$asset['name']}' ({$asset['asset_code']}) deleted successfully.");
+        } catch (Exception $e) {
+            $this->flash('error', 'Failed to delete asset: ' . $e->getMessage());
         }
 
         $this->redirect('/admin/assets');
@@ -368,6 +525,134 @@ class AdminController extends Controller {
             \App\Services\ExportService::renderPdfView('Consolidated Multi-Concern Performance Report', $metadata, $headers, $exportData, $totalsRow);
         } else {
             \App\Services\ExportService::downloadCsv($filename, $headers, $exportData, $totalsRow);
+        }
+    }
+
+    public function exportConcerns(): void {
+        $format = strtolower($_GET['format'] ?? 'excel');
+        $period = $_GET['period'] ?? 'all';
+        $singleDate = $_GET['single_date'] ?? null;
+        $fromDate = $_GET['from_date'] ?? null;
+        $toDate = $_GET['to_date'] ?? null;
+
+        $dateScope = \App\Services\ExportService::resolveDateRange($period, $singleDate, $fromDate, $toDate);
+
+        $sql = "SELECT c.*, 
+                       (SELECT COUNT(*) FROM concern_modules cm WHERE cm.concern_id = c.id AND cm.enabled = 1) AS active_modules_count,
+                       (SELECT COUNT(*) FROM users u WHERE u.concern_id = c.id) AS users_count,
+                       (SELECT COUNT(*) FROM variants v WHERE v.concern_id = c.id) AS variants_count
+                FROM concerns c";
+        $params = [];
+        if ($dateScope['start_date'] && $dateScope['end_date']) {
+            $sql .= " WHERE DATE(c.created_at) BETWEEN ? AND ?";
+            $params[] = $dateScope['start_date'];
+            $params[] = $dateScope['end_date'];
+        }
+        $sql .= " ORDER BY c.id DESC";
+        $concerns = DB::fetchAll($sql, $params);
+
+        $headers = [
+            'Concern Code', 'Business Name', 'GSTIN', 'Phone', 'Email', 
+            'Active Modules', 'Assigned Users', 'Total SKUs', 'Status', 'Registered Date'
+        ];
+
+        $rows = [];
+        foreach ($concerns as $c) {
+            $rows[] = [
+                $c['code'],
+                $c['name'],
+                $c['gstin'] ?: '-',
+                $c['phone'] ?: '-',
+                $c['email'] ?: '-',
+                (int)$c['active_modules_count'],
+                (int)$c['users_count'],
+                (int)$c['variants_count'],
+                strtoupper($c['status'] ?? 'ACTIVE'),
+                date('d M Y', strtotime($c['created_at']))
+            ];
+        }
+
+        $totals = ['Total Registered Concerns: ' . count($concerns), '', '', '', '', '', '', '', '', ''];
+        $metadata = [
+            'Report Title' => 'Registered Enterprise Concerns & Tenant Directory',
+            'Scope / Period' => $dateScope['label'],
+            'Generated At' => date('d M Y, h:i A'),
+            'Total Tenants' => count($concerns)
+        ];
+
+        $filename = 'concerns_directory_' . date('Ymd_His');
+
+        if ($format === 'pdf') {
+            \App\Services\ExportService::renderPdfView('Enterprise Concerns Directory Report', $metadata, $headers, $rows, $totals);
+        } elseif ($format === 'csv') {
+            \App\Services\ExportService::downloadCsv($filename, $headers, $rows, $totals);
+        } else {
+            \App\Services\ExportService::downloadExcel($filename, 'Enterprise Concerns Directory Report', $metadata, $headers, $rows, $totals);
+        }
+    }
+
+    public function exportAssets(): void {
+        $format = strtolower($_GET['format'] ?? 'excel');
+        $period = $_GET['period'] ?? 'all';
+        $singleDate = $_GET['single_date'] ?? null;
+        $fromDate = $_GET['from_date'] ?? null;
+        $toDate = $_GET['to_date'] ?? null;
+
+        $dateScope = \App\Services\ExportService::resolveDateRange($period, $singleDate, $fromDate, $toDate);
+
+        $sql = "SELECT a.*, c.name AS concern_name 
+                FROM assets a
+                LEFT JOIN concerns c ON a.concern_id = c.id";
+        $params = [];
+        if ($dateScope['start_date'] && $dateScope['end_date']) {
+            $sql .= " WHERE DATE(a.purchase_date) BETWEEN ? AND ?";
+            $params[] = $dateScope['start_date'];
+            $params[] = $dateScope['end_date'];
+        }
+        $sql .= " ORDER BY a.id DESC";
+        $assets = DB::fetchAll($sql, $params);
+
+        $headers = [
+            'Asset Code', 'Asset Name', 'Concern / Location', 'Purchase Date', 
+            'Cost Value (₹)', 'Current Value (₹)', 'Status'
+        ];
+
+        $rows = [];
+        $totCost = 0; $totCurrent = 0;
+        foreach ($assets as $a) {
+            $cost = (float)($a['cost_value'] ?? 0);
+            $curr = (float)($a['current_value'] ?? 0);
+            $totCost += $cost; $totCurrent += $curr;
+
+            $rows[] = [
+                $a['asset_code'] ?? ('AST-' . str_pad($a['id'], 4, '0', STR_PAD_LEFT)),
+                $a['name'],
+                $a['concern_name'] ?? 'General Corporate',
+                $a['purchase_date'] ? date('d M Y', strtotime($a['purchase_date'])) : '-',
+                '₹' . number_format($cost, 2),
+                '₹' . number_format($curr, 2),
+                strtoupper($a['status'] ?? 'ACTIVE')
+            ];
+        }
+
+        $totals = ['Total: ' . count($assets) . ' Assets', '', '', '', '₹' . number_format($totCost, 2), '₹' . number_format($totCurrent, 2), ''];
+        $metadata = [
+            'Report Title' => 'Corporate Capital Assets & Plant Equipment Register',
+            'Scope / Period' => $dateScope['label'],
+            'Generated At' => date('d M Y, h:i A'),
+            'Total Assets Count' => count($assets),
+            'Total Capital Cost' => '₹' . number_format($totCost, 2),
+            'Total Book Valuation' => '₹' . number_format($totCurrent, 2)
+        ];
+
+        $filename = 'assets_register_' . date('Ymd_His');
+
+        if ($format === 'pdf') {
+            \App\Services\ExportService::renderPdfView('Corporate Asset Register Report', $metadata, $headers, $rows, $totals);
+        } elseif ($format === 'csv') {
+            \App\Services\ExportService::downloadCsv($filename, $headers, $rows, $totals);
+        } else {
+            \App\Services\ExportService::downloadExcel($filename, 'Corporate Asset Register Report', $metadata, $headers, $rows, $totals);
         }
     }
 }

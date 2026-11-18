@@ -10,6 +10,15 @@
         </button>
     </div>
 
+    <!-- Export Intelligence Toolbar -->
+    <?php
+    $exportTitle = 'Export Supplier Directory (Excel & PDF)';
+    $exportSubtitle = 'Download registered vendors, spinning mills, contact directory, GSTIN & ledger balances';
+    $exportUrl = \App\Core\Controller::url('/m/suppliers/export');
+    $prefix = 'sup_exp';
+    include __DIR__ . '/../partials/export_card.php';
+    ?>
+
     <!-- Quick Stats Summary Cards -->
     <?php
     $totalCount = count($suppliers);
