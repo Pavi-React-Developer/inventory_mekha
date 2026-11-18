@@ -87,7 +87,18 @@ if (!in_array('catalog_id', $varCols)) {
     DB::query('ALTER TABLE variants ADD INDEX idx_var_catalog (catalog_id)');
 }
 
-// 6. Seed standard HSN codes if table is empty
+// 6. Create hsn_masters table if not exists and seed standard HSN codes
+DB::query("CREATE TABLE IF NOT EXISTS `hsn_masters` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `concern_id` INT NULL,
+    `hsn_code` VARCHAR(50) NOT NULL,
+    `description` VARCHAR(255) NULL,
+    `gst_rate` DECIMAL(5,2) NOT NULL DEFAULT 5.00,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX `idx_hsn_concern` (`concern_id`),
+    INDEX `idx_hsn_code` (`hsn_code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
 $hsnCount = (int)DB::fetchValue("SELECT COUNT(*) FROM hsn_masters");
 if ($hsnCount === 0) {
     $defaultHsns = [
@@ -107,28 +118,31 @@ if ($hsnCount === 0) {
     }
 }
 
-// 7. Seed sample categories for Concern 1 if not present to match the image
-$kidsCat = DB::fetch("SELECT id FROM categories WHERE name = 'KIDS' AND concern_id = 1");
-if (!$kidsCat) {
-    DB::query("INSERT INTO categories (concern_id, name, code, default_hsn, default_gst_rate, status) VALUES (1, 'KIDS', 'K', '107', 5.00, 'active')");
-    $kidsCatId = (int)DB::lastInsertId();
-} else {
-    $kidsCatId = (int)$kidsCat['id'];
-    DB::query("UPDATE categories SET code = 'K', default_hsn = '107', default_gst_rate = 5.00 WHERE id = ?", [$kidsCatId]);
-}
+// 7. Seed sample categories for first available Concern if present
+$targetConcernId = (int)DB::fetchValue("SELECT id FROM concerns ORDER BY id ASC LIMIT 1");
+if ($targetConcernId > 0) {
+    $kidsCat = DB::fetch("SELECT id FROM categories WHERE name = 'KIDS' AND concern_id = ?", [$targetConcernId]);
+    if (!$kidsCat) {
+        DB::query("INSERT INTO categories (concern_id, name, code, default_hsn, default_gst_rate, status) VALUES (?, 'KIDS', 'K', '107', 5.00, 'active')", [$targetConcernId]);
+        $kidsCatId = (int)DB::lastInsertId();
+    } else {
+        $kidsCatId = (int)$kidsCat['id'];
+        DB::query("UPDATE categories SET code = 'K', default_hsn = '107', default_gst_rate = 5.00 WHERE id = ?", [$kidsCatId]);
+    }
 
-$babySub = DB::fetch("SELECT id FROM subcategories WHERE name = 'BABY' AND category_id = ?", [$kidsCatId]);
-if (!$babySub) {
-    DB::query("INSERT INTO subcategories (concern_id, category_id, name, code, status) VALUES (1, ?, 'BABY', 'B', 'active')", [$kidsCatId]);
-    $babySubId = (int)DB::lastInsertId();
-} else {
-    $babySubId = (int)$babySub['id'];
-    DB::query("UPDATE subcategories SET code = 'B' WHERE id = ?", [$babySubId]);
-}
+    $babySub = DB::fetch("SELECT id FROM subcategories WHERE name = 'BABY' AND category_id = ?", [$kidsCatId]);
+    if (!$babySub) {
+        DB::query("INSERT INTO subcategories (concern_id, category_id, name, code, status) VALUES (?, ?, 'BABY', 'B', 'active')", [$targetConcernId, $kidsCatId]);
+        $babySubId = (int)DB::lastInsertId();
+    } else {
+        $babySubId = (int)$babySub['id'];
+        DB::query("UPDATE subcategories SET code = 'B' WHERE id = ?", [$babySubId]);
+    }
 
-$dressSubSub = DB::fetch("SELECT id FROM sub_subcategories WHERE name = 'DRESS' AND subcategory_id = ?", [$babySubId]);
-if (!$dressSubSub) {
-    DB::query("INSERT INTO sub_subcategories (concern_id, subcategory_id, name, code, status) VALUES (1, ?, 'DRESS', 'D', 'active')", [$babySubId]);
+    $dressSubSub = DB::fetch("SELECT id FROM sub_subcategories WHERE name = 'DRESS' AND subcategory_id = ?", [$babySubId]);
+    if (!$dressSubSub) {
+        DB::query("INSERT INTO sub_subcategories (concern_id, subcategory_id, name, code, status) VALUES (?, ?, 'DRESS', 'D', 'active')", [$targetConcernId, $babySubId]);
+    }
 }
 
 // Also check and update existing categories codes

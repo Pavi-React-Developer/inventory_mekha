@@ -34,7 +34,21 @@ if (!$authSuccess) {
 }
 echo "Super Admin Authenticated Successfully.\n\n";
 
-$cid = 1; // Primary concern ID for tests
+$cid = (int)DB::fetchValue("SELECT id FROM concerns WHERE status = 'active' ORDER BY id ASC LIMIT 1");
+if (!$cid) {
+    DB::query("INSERT INTO concerns (name, code, status) VALUES ('Test Active Concern', 'CON-TST', 'active')");
+    $cid = (int)DB::lastInsertId();
+}
+
+$sup = DB::fetch("SELECT id FROM suppliers WHERE concern_id = ? LIMIT 1", [$cid]);
+if (!$sup) {
+    DB::query("INSERT INTO suppliers (concern_id, name, code, status) VALUES (?, 'Test Vendor', 'SUP-TST', 'active')", [$cid]);
+}
+
+$cust = DB::fetch("SELECT id FROM customers WHERE concern_id = ? LIMIT 1", [$cid]);
+if (!$cust) {
+    DB::query("INSERT INTO customers (concern_id, name, phone, status) VALUES (?, 'Test Customer', '9876543210', 'active')", [$cid]);
+}
 
 // 1. Concerns CRUD
 assertCrud('1. Super Admin: Concern CRUD', function() {
