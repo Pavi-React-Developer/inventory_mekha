@@ -14,6 +14,7 @@ use App\Controllers\PurchaseController;
 use App\Controllers\PurchaseStockController;
 use App\Controllers\SalesController;
 use App\Controllers\ProductionController;
+use App\Controllers\CatalogMappingController;
 use App\Controllers\FinanceController;
 use App\Controllers\DamageController;
 
@@ -198,6 +199,36 @@ $router->post('/production/catalog/delete', [ProductionController::class, 'delet
 $router->post('/m/catalog/delete', [ProductionController::class, 'deleteStyle'], 'catalog_program', 'delete');
 $router->get('/production/programs', [ProductionController::class, 'programsList'], 'catalog_program', 'view');
 $router->get('/m/programs', [ProductionController::class, 'programsList'], 'catalog_program', 'view');
+$router->get('/production/programs/create', [ProductionController::class, 'createProgram'], 'catalog_program', 'add');
+$router->get('/m/programs/create', [ProductionController::class, 'createProgram'], 'catalog_program', 'add');
+$router->post('/production/programs/store', [ProductionController::class, 'storeProgramV2'], 'catalog_program', 'add');
+$router->post('/m/programs/store', [ProductionController::class, 'storeProgramV2'], 'catalog_program', 'add');
+$router->get('/production/programs/view', [ProductionController::class, 'viewProgram'], 'catalog_program', 'view');
+$router->get('/m/programs/view', [ProductionController::class, 'viewProgram'], 'catalog_program', 'view');
+$router->get('/production/programs/edit', [ProductionController::class, 'editProgram'], 'catalog_program', 'edit');
+$router->get('/m/programs/edit', [ProductionController::class, 'editProgram'], 'catalog_program', 'edit');
+$router->post('/production/programs/update', [ProductionController::class, 'updateProgram'], 'catalog_program', 'edit');
+$router->post('/m/programs/update', [ProductionController::class, 'updateProgram'], 'catalog_program', 'edit');
+$router->post('/production/programs/delete', [ProductionController::class, 'deleteProgram'], 'catalog_program', 'delete');
+$router->post('/m/programs/delete', [ProductionController::class, 'deleteProgram'], 'catalog_program', 'delete');
+$router->post('/production/programs/status', [ProductionController::class, 'updateProgramStatus'], 'catalog_program', 'edit');
+$router->post('/m/programs/status', [ProductionController::class, 'updateProgramStatus'], 'catalog_program', 'edit');
+$router->get('/api/programs/available-rolls', [ProductionController::class, 'apiAvailableRolls'], 'catalog_program', 'view');
+$router->get('/api/programs/roll-lookup', [ProductionController::class, 'apiRollLookup'], 'catalog_program', 'view');
+$router->get('/api/programs/details', [ProductionController::class, 'apiProgramDetails'], 'catalog_program', 'view');
+
+// Catalog Mapping Module (Purchased Finished Goods -> 3-Tier Hierarchy & Attributes)
+$router->get('/production/catalog-mapping', [CatalogMappingController::class, 'index'], 'catalog_mapping', 'view');
+$router->get('/m/catalog_mapping', [CatalogMappingController::class, 'index'], 'catalog_mapping', 'view');
+$router->get('/production/catalog-mapping/map', [CatalogMappingController::class, 'mapItemForm'], 'catalog_mapping', 'add');
+$router->get('/m/catalog_mapping/map', [CatalogMappingController::class, 'mapItemForm'], 'catalog_mapping', 'add');
+$router->post('/production/catalog-mapping/save', [CatalogMappingController::class, 'saveMapping'], 'catalog_mapping', 'add');
+$router->post('/m/catalog_mapping/save', [CatalogMappingController::class, 'saveMapping'], 'catalog_mapping', 'add');
+$router->post('/production/catalog-mapping/unmap', [CatalogMappingController::class, 'unmapItem'], 'catalog_mapping', 'delete');
+$router->post('/m/catalog_mapping/unmap', [CatalogMappingController::class, 'unmapItem'], 'catalog_mapping', 'delete');
+$router->post('/production/catalog-mapping/quick-category', [CatalogMappingController::class, 'quickCreateCategory'], 'catalog_mapping', 'add');
+$router->post('/production/catalog-mapping/quick-attribute', [CatalogMappingController::class, 'quickCreateAttribute'], 'catalog_mapping', 'add');
+$router->get('/api/catalog-mapping/item-details', [CatalogMappingController::class, 'apiItemDetails'], 'catalog_mapping', 'view');
 
 // APIs for 3-Tier Hierarchy & HSN Lookups
 $router->get('/api/categories/subcategories', [ProductionController::class, 'getSubcategoriesAjax'], 'catalog_program', 'view');

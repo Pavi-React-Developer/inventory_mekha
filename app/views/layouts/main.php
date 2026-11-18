@@ -270,6 +270,7 @@
                     if ($m['code'] === 'admin_reports') $href = \App\Core\Controller::url('/admin/reports');
                     if ($m['code'] === 'concern_dashboard') $href = \App\Core\Controller::url('/dashboard');
                     if ($m['code'] === 'catalog_program') $href = \App\Core\Controller::url('/production/catalog');
+                    if ($m['code'] === 'catalog_mapping') $href = \App\Core\Controller::url('/production/catalog-mapping');
 
                     if ($m['code'] === 'cash_flow') {
                         $isActive = (isset($currentModule) && in_array($currentModule, ['cash_flow', 'cash'])) || 

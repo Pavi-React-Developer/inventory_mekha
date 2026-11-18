@@ -61,6 +61,34 @@ Auth::login('grm.admin@invento.com', 'password123');
 assertTest("Concern 1 authenticated", Auth::concernId() === 1);
 
 $sample = DB::fetch("SELECT * FROM catalogs WHERE style_code = 'GRM-STY-0001' AND concern_id = 1");
+if (!$sample) {
+    $validCatId = (int)DB::fetchValue("SELECT id FROM categories WHERE concern_id = 1 LIMIT 1");
+    if (!$validCatId) {
+        DB::query("INSERT INTO categories (concern_id, name, code, default_hsn, default_gst_rate, status) VALUES (1, 'Kids Wear', 'KW', '6109', 5.00, 'active')");
+        $validCatId = (int)DB::lastInsertId();
+    }
+    DB::query(
+        "INSERT INTO catalogs (concern_id, code, style_code, short_code, name, category_id, hierarchy_path, hsn_code, gst_rate, sizes, status, created_at)
+         VALUES (1, 'GRM-STY-0001', 'GRM-STY-0001', 'KBD', 'KIDS - BABY - DRESS', ?, 'KIDS > BABY > DRESS', '107', 5.00, '[\"S\",\"M\",\"L\"]', 'in_house', NOW())",
+        [$validCatId]
+    );
+    $sampleCatId = (int)DB::lastInsertId();
+    $sample = DB::fetch("SELECT * FROM catalogs WHERE id = ?", [$sampleCatId]);
+}
+
+$sampleCatId = (int)$sample['id'];
+$existingVars = DB::fetchAll("SELECT * FROM variants WHERE catalog_id = ?", [$sampleCatId]);
+if (count($existingVars) < 3) {
+    $validCatId = (int)$sample['category_id'] ?: 1;
+    DB::query("DELETE FROM variants WHERE catalog_id = ?", [$sampleCatId]);
+    foreach (['S', 'M', 'L'] as $sz) {
+        DB::query(
+            "INSERT INTO variants (concern_id, catalog_id, sku_code, name, category_id, size, price, mrp, creation_date, status, created_at)
+             VALUES (1, ?, ?, ?, ?, ?, 299.00, 399.00, CURDATE(), 'active', NOW())",
+            [$sampleCatId, "GRM-STY-0001-{$sz}", "KIDS - BABY - DRESS - {$sz}", $validCatId, $sz]
+        );
+    }
+}
 assertTest("Sample style 'GRM-STY-0001' exists", !empty($sample));
 assertTest("Style short_code is 'KBD'", ($sample['short_code'] ?? '') === 'KBD');
 assertTest("Style name is 'KIDS - BABY - DRESS'", ($sample['name'] ?? '') === 'KIDS - BABY - DRESS');

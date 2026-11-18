@@ -20,6 +20,7 @@ INSERT INTO `modules` (`code`, `name`, `icon`, `sort_order`, `group_name`, `is_s
 ('purchase_damage', 'Purchase Damage', 'bi-shield-x', 23, 'Purchase', 0),
 
 ('catalog_program', 'Catalog & Program', 'bi-journal-bookmark', 30, 'Production', 0),
+('catalog_mapping', 'Catalog Mapping', 'bi-diagram-3-fill', 30.5, 'Production', 0),
 ('cutting_wastage', 'Cutting & Wastage', 'bi-scissors', 31, 'Production', 0),
 ('stitching_wastage', 'Stitching & Wastage', 'bi-layers', 32, 'Production', 0),
 ('label_generation', 'Label Generation', 'bi-qr-code', 33, 'Production', 0),
@@ -117,24 +118,36 @@ INSERT INTO `cash_accounts` (`id`, `concern_id`, `name`, `account_type`, `accoun
 ON DUPLICATE KEY UPDATE `balance`=VALUES(`balance`);
 
 -- Categories for Concern 1
-INSERT INTO `categories` (`id`, `concern_id`, `name`) VALUES
-(1, 1, 'Raw Fabric'),
-(2, 1, 'Apparel Finished Goods'),
-(3, 1, 'Accessories & Trims'),
-(4, 2, 'Yarn'),
-(5, 2, 'Finished Knits')
-ON DUPLICATE KEY UPDATE `name`=VALUES(`name`);
+INSERT INTO `categories` (`id`, `concern_id`, `name`, `code`, `default_hsn`, `default_gst_rate`) VALUES
+(1, 1, 'Raw Fabric', 'RF', '5208', 5.00),
+(2, 1, 'Apparel Finished Goods', 'FG', '6109', 5.00),
+(3, 1, 'Accessories & Trims', 'AT', '6109', 12.00),
+(4, 2, 'Yarn', 'YN', '5205', 5.00),
+(5, 2, 'Finished Knits', 'FK', '6006', 5.00),
+(6, 1, 'KIDS', 'K', '107', 5.00)
+ON DUPLICATE KEY UPDATE `name`=VALUES(`name`), `code`=VALUES(`code`), `default_hsn`=VALUES(`default_hsn`), `default_gst_rate`=VALUES(`default_gst_rate`);
 
 -- Subcategories
-INSERT INTO `subcategories` (`id`, `concern_id`, `category_id`, `name`) VALUES
-(1, 1, 1, '100% Combed Cotton Single Jersey'),
-(2, 1, 1, 'Poly Cotton Rib 2x2'),
-(3, 1, 2, 'Men Crew Neck T-Shirt'),
-(4, 1, 2, 'Women Polo T-Shirt'),
-(5, 1, 3, 'Woven Neck Labels'),
-(6, 2, 4, '30s Combed Cotton Yarn'),
-(7, 2, 5, 'Bio-Washed Knitted Fabric')
-ON DUPLICATE KEY UPDATE `name`=VALUES(`name`);
+INSERT INTO `subcategories` (`id`, `concern_id`, `category_id`, `name`, `code`) VALUES
+(1, 1, 1, '100% Combed Cotton Single Jersey', 'SJ'),
+(2, 1, 1, 'Poly Cotton Rib 2x2', 'RB'),
+(3, 1, 2, 'Men Crew Neck T-Shirt', 'MC'),
+(4, 1, 2, 'Women Polo T-Shirt', 'WP'),
+(5, 1, 3, 'Woven Neck Labels', 'NL'),
+(6, 2, 4, '30s Combed Cotton Yarn', '30S'),
+(7, 2, 5, 'Bio-Washed Knitted Fabric', 'BW'),
+(8, 1, 6, 'BABY', 'B')
+ON DUPLICATE KEY UPDATE `name`=VALUES(`name`), `code`=VALUES(`code`);
+
+-- Sub-Subcategories
+INSERT INTO `sub_subcategories` (`id`, `concern_id`, `subcategory_id`, `name`, `code`) VALUES
+(1, 1, 8, 'DRESS', 'D')
+ON DUPLICATE KEY UPDATE `name`=VALUES(`name`), `code`=VALUES(`code`);
+
+-- Sample Product Style (Catalog)
+INSERT INTO `catalogs` (`id`, `concern_id`, `code`, `style_code`, `short_code`, `category_id`, `subcategory_id`, `sub_sub_category_id`, `main_category_code`, `sub_category_code`, `sub_sub_category_code`, `hierarchy_path`, `hsn_code`, `gst_rate`, `sizes`, `status`, `name`) VALUES
+(1, 1, 'GRM-STY-0001', 'GRM-STY-0001', 'KBD', 6, 8, 1, 'K', 'B', 'D', 'KIDS > BABY > DRESS', '107', 5.00, '["S","M","L"]', 'in_house', 'KIDS - BABY - DRESS')
+ON DUPLICATE KEY UPDATE `style_code`=VALUES(`style_code`), `short_code`=VALUES(`short_code`), `name`=VALUES(`name`);
 
 -- Brands
 INSERT INTO `brands` (`id`, `concern_id`, `name`) VALUES
