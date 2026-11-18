@@ -295,6 +295,11 @@ $router->post('/m/cash/shift/close', [FinanceController::class, 'closeShift'], '
 
 // Staff Management
 $router->get('/m/staff', [StaffController::class, 'index'], 'staff', 'view');
+$router->get('/m/staff/roles', [StaffController::class, 'roles'], 'staff', 'view');
+$router->post('/m/staff/assign-role', [StaffController::class, 'assignRole'], 'staff', 'edit');
+$router->post('/m/staff/save-role-permissions', [StaffController::class, 'saveRolePermissions'], 'staff', 'edit');
+$router->post('/m/staff/create-role', [StaffController::class, 'createRole'], 'staff', 'add');
+$router->get('/api/staff/role-permissions', [StaffController::class, 'apiGetRolePermissions'], 'staff', 'view');
 $router->get('/m/staff/export', [StaffController::class, 'export'], 'staff', 'view');
 $router->post('/m/staff/store', [StaffController::class, 'store'], 'staff', 'add');
 $router->post('/m/staff/update', [StaffController::class, 'update'], 'staff', 'edit');

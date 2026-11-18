@@ -202,7 +202,7 @@
                                         <?= htmlspecialchars($c['code']) ?>
                                     </span>
                                     <span class="badge bg-light text-dark border">
-                                        <i class="bi bi-people me-1"></i> <?= (int)$c['staff_count'] ?> Staff
+                                        <i class="bi bi-people me-1"></i> <?= (int)($c['staff_count'] ?? 0) ?> Staff
                                     </span>
                                 </div>
                                 <h6 class="fw-bold text-dark mb-1"><?= htmlspecialchars($c['name']) ?></h6>

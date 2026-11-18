@@ -297,9 +297,13 @@
             </a>
 
             <div class="nav-group-title">Staff</div>
-            <a href="<?= \App\Core\Controller::url('/m/staff') ?>" class="nav-link <?= (isset($currentModule) && $currentModule === 'staff') ? 'active' : '' ?>">
+            <a href="<?= \App\Core\Controller::url('/m/staff') ?>" class="nav-link <?= (isset($currentModule) && $currentModule === 'staff' && (empty($currentSubModule) || $currentSubModule === 'all')) ? 'active' : '' ?>">
                 <i class="bi bi-people-fill"></i>
-                <span>Staff</span>
+                <span>All Staff</span>
+            </a>
+            <a href="<?= \App\Core\Controller::url('/m/staff/roles') ?>" class="nav-link <?= (isset($currentSubModule) && $currentSubModule === 'roles') ? 'active' : '' ?>">
+                <i class="bi bi-person-badge-fill"></i>
+                <span>Role Assign</span>
             </a>
         </div>
     </nav>
