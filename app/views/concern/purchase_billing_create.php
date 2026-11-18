@@ -105,11 +105,8 @@ if ($isEdit && !empty($existingItems)) {
                         <input type="text" name="payment_reference" id="billPaymentRef" class="form-control form-control-sm" placeholder="e.g. UTR-998812 / CHQ-0012" value="<?= htmlspecialchars($bill['payment_reference'] ?? '') ?>">
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label small fw-bold text-dark">Inward / Warehouse Status</label>
-                        <select name="inward_status" class="form-select form-select-sm">
-                            <option value="pending" <?= ($bill['inward_status'] ?? '') === 'pending' ? 'selected' : '' ?>>Pending (Goods not yet inwarded)</option>
-                            <option value="completed" <?= ($bill['inward_status'] ?? '') === 'completed' ? 'selected' : '' ?>>Completed (Goods received in stock)</option>
-                        </select>
+                        <label class="form-label small fw-bold text-dark">Stock Status</label>
+                        <div class="form-control form-control-sm bg-white text-muted">Pending - use Label Generation to add stock</div>
                     </div>
                 </div>
 
@@ -186,6 +183,18 @@ if ($isEdit && !empty($existingItems)) {
                             </button>
                         </div>
 
+                        <!-- Autocomplete Datalists for Color and Design Patterns -->
+                        <datalist id="rollColorList">
+                            <?php foreach ($savedColors ?? [] as $sc): ?>
+                                <option value="<?= htmlspecialchars($sc['color']) ?>"></option>
+                            <?php endforeach; ?>
+                        </datalist>
+                        <datalist id="rollPatternList">
+                            <?php foreach ($savedDesigns ?? [] as $sd): ?>
+                                <option value="<?= htmlspecialchars($sd['design_name']) ?>"></option>
+                            <?php endforeach; ?>
+                        </datalist>
+
                         <!-- Dynamic Roll Input Cards -->
                         <div id="rollsContainer">
                             <!-- Roll #1 (Starts Empty with Placeholders) -->
@@ -201,23 +210,62 @@ if ($isEdit && !empty($existingItems)) {
                                     </button>
                                 </div>
                                 <div class="card-body p-3">
-                                    <!-- Row 1: Roll No, Color, Design Name, Qty, Weight, Price (Removed Designs field per Image 3) -->
-                                    <div class="row g-2 mb-3 align-items-end">
+                                    <!-- Quick Select from Saved Color & Design Registry with View and + New options -->
+                                    <div class="mb-3 p-2.5 rounded bg-light border d-flex flex-wrap align-items-center justify-content-between gap-2 roll-spec-selector-bar">
+                                        <div class="d-flex align-items-center gap-1.5 small text-secondary">
+                                            <i class="bi bi-bookmark-star text-primary"></i>
+                                            <span class="fw-semibold">Roll Design / Pattern:</span>
+                                        </div>
+                                        <div class="flex-grow-1" style="max-width: 520px;">
+                                            <div class="input-group input-group-sm">
+                                                <select class="form-select form-select-sm roll-quick-select" id="rollQuickSelect_1" onchange="applySavedRollSpec(this, 1)">
+                                                    <option value="">-- Choose from Saved Color & Design Registry --</option>
+                                                    <?php if (!empty($savedRollSpecs)): ?>
+                                                        <optgroup label="Saved Specifications">
+                                                            <?php foreach ($savedRollSpecs as $spec): ?>
+                                                                <option value="<?= htmlspecialchars($spec['design_name']) ?>|<?= htmlspecialchars($spec['color']) ?>"
+                                                                        data-color="<?= htmlspecialchars($spec['color']) ?>"
+                                                                        data-pattern="<?= htmlspecialchars($spec['design_name']) ?>"
+                                                                        data-qty="<?= (float)$spec['qty'] ?>"
+                                                                        data-weight="<?= (float)$spec['net_weight'] ?>"
+                                                                        data-price="<?= (float)$spec['last_unit_price'] ?>"
+                                                                        data-hsn="<?= htmlspecialchars($spec['hsn_code'] ?? '') ?>"
+                                                                        data-supplier="<?= htmlspecialchars($spec['last_supplier_name'] ?? '') ?>"
+                                                                        data-bill="<?= htmlspecialchars($spec['last_bill_no'] ?? '') ?>"
+                                                                        data-bills="<?= (int)($spec['bills_count'] ?? 1) ?>">
+                                                                    <?= htmlspecialchars($spec['design_name']) ?> &bull; <?= htmlspecialchars($spec['color']) ?> (Available: <?= (float)$spec['qty'] ?> Rolls)
+                                                                </option>
+                                                            <?php endforeach; ?>
+                                                        </optgroup>
+                                                    <?php endif; ?>
+                                                </select>
+                                                <button type="button" class="btn btn-outline-info btn-sm btn-view-spec px-2" id="btnViewSpec_1" onclick="viewCurrentRollSpec(1)" title="View Details of Selected Design">
+                                                    <i class="bi bi-eye"></i> View
+                                                </button>
+                                                <button type="button" class="btn btn-primary btn-sm px-2 fw-semibold" onclick="openCreateDesignModal(1)" title="Create New Design & Color">
+                                                    <i class="bi bi-plus-lg"></i> New
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Row 1: Fabric Name, Color, Design Name, Qty, Weight, Price -->
+                                    <div class="row g-2 mb-2 align-items-end">
                                         <div class="col-md-2">
-                                            <label class="form-label small fw-semibold mb-1">Roll No. / Code <span class="text-danger">*</span></label>
-                                            <input type="text" name="rolls[1][roll_code]" class="form-control form-control-sm font-monospace text-uppercase roll-input-code" placeholder="ROLL #1" value="" required oninput="syncRollsTable()">
+                                            <label class="form-label small fw-semibold mb-1">Fabric Name <span class="text-danger">*</span></label>
+                                            <input type="text" name="rolls[1][roll_code]" class="form-control form-control-sm font-monospace text-uppercase roll-input-code" placeholder="E.G. COTTON" value="" required oninput="syncRollsTable()">
                                         </div>
                                         <div class="col-md-2">
                                             <label class="form-label small fw-semibold mb-1">Color / Shade <span class="text-danger">*</span></label>
-                                            <input type="text" name="rolls[1][color]" class="form-control form-control-sm text-uppercase roll-input-color" placeholder="E.G. NAVY BLUE" value="" required oninput="syncRollsTable()">
+                                            <input type="text" name="rolls[1][color]" list="rollColorList" class="form-control form-control-sm text-uppercase roll-input-color" placeholder="E.G. BLACK" value="" required oninput="onRollColorOrPatternChange(1); syncRollsTable()">
                                         </div>
                                         <div class="col-md-2">
                                             <label class="form-label small fw-semibold mb-1">Design Name / Pattern <span class="text-danger">*</span></label>
-                                            <input type="text" name="rolls[1][pattern]" class="form-control form-control-sm text-uppercase roll-input-pattern" placeholder="E.G. FLORAL 01" value="" required oninput="syncRollsTable()">
+                                            <input type="text" name="rolls[1][pattern]" list="rollPatternList" class="form-control form-control-sm text-uppercase roll-input-pattern" placeholder="E.G. FLORAL 01" value="" required oninput="onRollColorOrPatternChange(1); syncRollsTable()">
                                         </div>
                                         <div class="col-md-2">
                                             <label class="form-label small fw-semibold mb-1">Qty <span class="text-danger">*</span></label>
-                                            <input type="number" min="1" step="1" name="rolls[1][rq]" class="form-control form-control-sm roll-input-rq" placeholder="1" value="1" required oninput="syncRollsTable()">
+                                            <input type="number" min="1" step="1" name="rolls[1][rq]" class="form-control form-control-sm roll-input-rq" placeholder="1" value="1" required oninput="onRollColorOrPatternChange(1); syncRollsTable()">
                                         </div>
                                         <div class="col-md-2">
                                             <label class="form-label small fw-semibold mb-1">Weight (kg) <span class="text-danger">*</span></label>
@@ -234,6 +282,9 @@ if ($isEdit && !empty($existingItems)) {
                                             </div>
                                         </div>
                                     </div>
+
+                                    <!-- Live Roll Stock Accumulation Notice -->
+                                    <div class="roll-stock-notice mb-3" id="rollStockNotice_1" style="display: none;"></div>
 
                                     <!-- Row 2: HSN Code, Tax Mode (Include/Exclude GST), GST & Dynamic Tax Fields -->
                                     <div class="row g-2 mb-3 align-items-end">
@@ -638,11 +689,171 @@ if ($isEdit && !empty($existingItems)) {
     </div>
 </div>
 
+<!-- Modal: Register New Roll Color & Design (Create Option) -->
+<div class="modal fade" id="modalCreateRollDesign" tabindex="-1" aria-labelledby="modalCreateRollDesignLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-3">
+            <div class="modal-header text-white px-4 py-3" style="background: #2563eb;">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-plus-circle-fill fs-5"></i>
+                    <h5 class="modal-title fw-bold fs-6 mb-0" id="modalCreateRollDesignLabel">Register New Roll Color & Design</h5>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="alert alert-primary py-2 px-3 small d-flex align-items-center gap-2 mb-3">
+                    <i class="bi bi-info-circle-fill text-primary fs-5"></i>
+                    <div>
+                        Add a new design pattern & color to your concern registry. It will be immediately saved and available for all purchase and stock workflows.
+                    </div>
+                </div>
+
+                <form id="formCreateRollDesign" onsubmit="event.preventDefault(); saveAndApplyRollDesign();">
+                    <input type="hidden" id="newDesignTargetRow" value="1">
+                    
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold text-dark mb-1">Design Name / Pattern <span class="text-danger">*</span></label>
+                            <input type="text" id="newDesignPattern" class="form-control text-uppercase" placeholder="E.G. FLORAL 01, CHECKS" required list="rollPatternList">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold text-dark mb-1">Color / Shade <span class="text-danger">*</span></label>
+                            <input type="text" id="newDesignColor" class="form-control text-uppercase" placeholder="E.G. NAVY BLUE, RED" required list="rollColorList">
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold text-secondary mb-1">Standard / Unit Price (₹)</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text">₹</span>
+                                <input type="number" step="0.01" min="0" id="newDesignPrice" class="form-control" placeholder="0.00">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold text-secondary mb-1">HSN Code</label>
+                            <input type="text" id="newDesignHsn" class="form-control text-uppercase form-control-sm" placeholder="E.G. 6543, 5208">
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center pt-3 border-top">
+                        <button type="button" class="btn btn-secondary px-4 fw-semibold" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary px-4 fw-semibold shadow-sm" id="btnSubmitRollDesign">
+                            <i class="bi bi-check-circle me-1"></i> Save & Apply to Roll
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: View Saved Color & Design Registry (View Option) -->
+<div class="modal fade" id="modalViewRollSpecs" tabindex="-1" aria-labelledby="modalViewRollSpecsLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg rounded-3">
+            <div class="modal-header bg-dark text-white px-4 py-3">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-eye-fill text-info fs-5"></i>
+                    <h5 class="modal-title fw-bold fs-6 mb-0" id="modalViewRollSpecsLabel">Roll Color & Design Specification Viewer</h5>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <!-- Single Spec Highlight View (when viewing selected spec) -->
+                <div id="viewSpecDetailCard" class="card border-info mb-3 bg-light shadow-sm" style="display: none;">
+                    <div class="card-body p-3">
+                        <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 pb-2 border-bottom">
+                            <div>
+                                <span class="badge bg-primary text-uppercase px-2.5 py-1.5 fs-6 me-2" id="vSpecPatternBadge">PATTERN</span>
+                                <span class="badge bg-dark text-uppercase px-2.5 py-1.5 fs-6" id="vSpecColorBadge">COLOR</span>
+                            </div>
+                            <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 small fw-semibold">
+                                <i class="bi bi-check-circle-fill me-1"></i> Selected Specification
+                            </span>
+                        </div>
+                        <div class="row g-2 text-center mb-3">
+                            <div class="col-sm-3 col-6">
+                                <div class="p-2 bg-white rounded border">
+                                    <div class="text-muted small">Available Rolls</div>
+                                    <div class="fs-5 fw-bold text-primary" id="vSpecQty">0.00</div>
+                                </div>
+                            </div>
+                            <div class="col-sm-3 col-6">
+                                <div class="p-2 bg-white rounded border">
+                                    <div class="text-muted small">Net Weight</div>
+                                    <div class="fs-5 fw-bold text-dark" id="vSpecWeight">0.00 kg</div>
+                                </div>
+                            </div>
+                            <div class="col-sm-3 col-6">
+                                <div class="p-2 bg-white rounded border">
+                                    <div class="text-muted small">Last Unit Price</div>
+                                    <div class="fs-5 fw-bold text-success" id="vSpecPrice">₹0.00</div>
+                                </div>
+                            </div>
+                            <div class="col-sm-3 col-6">
+                                <div class="p-2 bg-white rounded border">
+                                    <div class="text-muted small">HSN Code</div>
+                                    <div class="fs-5 fw-bold text-secondary" id="vSpecHsn">-</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="small text-muted d-flex flex-wrap justify-content-between gap-2 p-2 bg-white rounded border">
+                            <div><i class="bi bi-clock-history me-1"></i> Inward Bills: <strong id="vSpecBillsCount">0</strong></div>
+                            <div><i class="bi bi-receipt me-1"></i> Last Bill: <strong id="vSpecLastBill">N/A</strong></div>
+                            <div><i class="bi bi-building me-1"></i> Supplier: <strong id="vSpecSupplier">N/A</strong></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Directory Search & Table -->
+                <div class="d-flex flex-wrap justify-content-between align-items-center mb-2 gap-2">
+                    <h6 class="fw-bold mb-0 text-secondary">
+                        <i class="bi bi-table me-1 text-primary"></i> Saved Specifications Directory (<span id="vSpecTotalCount">0</span>)
+                    </h6>
+                    <div class="input-group input-group-sm" style="max-width: 280px;">
+                        <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+                        <input type="text" id="vSpecSearchInput" class="form-control border-start-0" placeholder="Filter pattern, color, HSN..." oninput="filterRegistrySpecsTable(this.value)">
+                    </div>
+                </div>
+
+                <div class="table-responsive rounded border" style="max-height: 280px; overflow-y: auto;">
+                    <table class="table table-sm table-hover align-middle mb-0" id="tableRegistrySpecs">
+                        <thead class="table-light sticky-top">
+                            <tr class="small text-uppercase text-secondary">
+                                <th>Design / Pattern</th>
+                                <th>Color / Shade</th>
+                                <th class="text-end">Stock (Rolls)</th>
+                                <th class="text-end">Weight (kg)</th>
+                                <th class="text-end">Last Price</th>
+                                <th>HSN</th>
+                                <th class="text-center">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbodyRegistrySpecs" class="small">
+                            <!-- Populated via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer py-2 px-3 bg-light d-flex justify-content-between">
+                <button type="button" class="btn btn-outline-primary btn-sm" onclick="openCreateDesignModal(targetRollRowIndex)">
+                    <i class="bi bi-plus-lg me-1"></i> + Register New Design
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm px-4" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 const isEditMode = <?= $isEdit ? 'true' : 'false' ?>;
 const existingRolls = <?= json_encode($existingRolls) ?>;
 const existingOther = <?= json_encode($existingOther) ?>;
 const existingFinished = <?= json_encode($existingFinished) ?>;
+let savedRollSpecsRegistry = <?= json_encode($savedRollSpecs ?? []) ?>;
+const savedColorsRegistry = <?= json_encode($savedColors ?? []) ?>;
+const savedDesignsRegistry = <?= json_encode($savedDesigns ?? []) ?>;
 
 let rollCounter = 1;
 let otherCounter = 0;
@@ -1158,6 +1369,473 @@ function onFinishedHsnChange(fgId) {
 // ==========================================
 // 1. ROLLS LOGIC (IMAGE 1, 2 & 3)
 // ==========================================
+let targetRollRowIndex = 1;
+
+function getSavedRollSpecsOptionsHtml(selectedVal = '') {
+    let html = '<option value="">-- Choose from Saved Color & Design Registry --</option>';
+    if (Array.isArray(savedRollSpecsRegistry) && savedRollSpecsRegistry.length > 0) {
+        html += '<optgroup label="Saved Specifications">';
+        savedRollSpecsRegistry.forEach(spec => {
+            const qtyVal = parseFloat(spec.qty) || 0;
+            const wtVal = parseFloat(spec.net_weight) || 0;
+            const priceVal = parseFloat(spec.last_unit_price) || 0;
+            const val = `${spec.design_name}|${spec.color}`;
+            const isSel = (selectedVal && selectedVal.toUpperCase() === val.toUpperCase()) ? 'selected' : '';
+            html += `<option value="${escapeHtml(val)}" 
+                             data-color="${escapeHtml(spec.color)}" 
+                             data-pattern="${escapeHtml(spec.design_name)}" 
+                             data-qty="${qtyVal}" 
+                             data-weight="${wtVal}" 
+                             data-price="${priceVal}" 
+                             data-hsn="${escapeHtml(spec.hsn_code || '')}" 
+                             data-supplier="${escapeHtml(spec.last_supplier_name || '')}" 
+                             data-bill="${escapeHtml(spec.last_bill_no || '')}" 
+                             data-bills="${parseInt(spec.bills_count || 1)}" 
+                             ${isSel}>
+                        ${escapeHtml(spec.design_name)} &bull; ${escapeHtml(spec.color)} (Available: ${qtyVal} Rolls)
+                     </option>`;
+        });
+        html += '</optgroup>';
+    }
+    return html;
+}
+
+function onRollColorOrPatternChange(idx) {
+    const card = document.getElementById('rollCard_' + idx);
+    if (!card) return;
+    const colorInp = card.querySelector('.roll-input-color');
+    const patInp = card.querySelector('.roll-input-pattern');
+    const qtyInp = card.querySelector('.roll-input-rq');
+    const noticeDiv = document.getElementById('rollStockNotice_' + idx);
+    if (!colorInp || !patInp || !noticeDiv) return;
+
+    const colorVal = colorInp.value.trim().toUpperCase();
+    const patVal = patInp.value.trim().toUpperCase();
+    const qtyVal = parseFloat(qtyInp ? qtyInp.value : 0) || 1;
+
+    if (colorVal && patVal && Array.isArray(savedRollSpecsRegistry) && savedRollSpecsRegistry.length > 0) {
+        const match = savedRollSpecsRegistry.find(s => 
+            s.color.toUpperCase() === colorVal && s.design_name.toUpperCase() === patVal
+        );
+        if (match) {
+            const prevQty = parseFloat(match.qty) || 0;
+            const prevWt = parseFloat(match.net_weight) || 0;
+            const newTot = prevQty + qtyVal;
+            noticeDiv.style.display = 'block';
+            noticeDiv.className = 'roll-stock-notice mb-3 p-2.5 rounded bg-info-subtle text-info-emphasis border border-info-subtle';
+            noticeDiv.innerHTML = `
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                    <div>
+                        <i class="bi bi-clock-history text-info me-1"></i>
+                        <strong>Registered Specification Found:</strong> Previous Count: <strong>${prevQty} Rolls</strong> (${prevWt.toFixed(2)} kg).
+                    </div>
+                    <div>
+                        <span class="badge bg-success text-white px-2 py-1">New Accumulated Stock: ${newTot} Rolls</span>
+                    </div>
+                </div>
+                <div class="text-muted small mt-1" style="font-size: 0.72rem;">
+                    Entering this bill will add <strong>${qtyVal} roll(s)</strong> to the previous count. Duplicate register entries will be removed.
+                </div>
+            `;
+            return;
+        }
+    }
+    noticeDiv.style.display = 'none';
+    noticeDiv.innerHTML = '';
+}
+
+function applySavedRollSpec(selectEl, idx) {
+    if (!selectEl) return;
+    const val = selectEl.value;
+
+    const opt = selectEl.options[selectEl.selectedIndex];
+    if (!opt || !opt.value) return;
+    const card = document.getElementById('rollCard_' + idx);
+    if (!card) return;
+
+    const color = opt.getAttribute('data-color') || '';
+    const pattern = opt.getAttribute('data-pattern') || '';
+    const price = parseFloat(opt.getAttribute('data-price') || 0);
+    const hsn = opt.getAttribute('data-hsn') || '';
+
+    const colorInp = card.querySelector('.roll-input-color');
+    const patInp = card.querySelector('.roll-input-pattern');
+    const priceInp = card.querySelector('.roll-input-price');
+    const hsnSel = card.querySelector('.roll-input-hsn');
+
+    if (colorInp) colorInp.value = color;
+    if (patInp) patInp.value = pattern;
+    if (priceInp && price > 0 && (!priceInp.value || parseFloat(priceInp.value) === 0)) {
+        priceInp.value = price.toFixed(2);
+    }
+    if (hsnSel && hsn) {
+        hsnSel.value = hsn;
+        onRollHsnChange(idx);
+    }
+
+    onRollColorOrPatternChange(idx);
+    syncRollsTable();
+}
+
+function viewCurrentRollSpec(idx) {
+    targetRollRowIndex = idx || 1;
+    const card = document.getElementById('rollCard_' + idx);
+    const selectEl = document.getElementById('rollQuickSelect_' + idx);
+
+    let selectedPattern = '';
+    let selectedColor = '';
+
+    if (selectEl && selectEl.value) {
+        const parts = selectEl.value.split('|');
+        selectedPattern = parts[0] || '';
+        selectedColor = parts[1] || '';
+    } else if (card) {
+        const colorInp = card.querySelector('.roll-input-color');
+        const patInp = card.querySelector('.roll-input-pattern');
+        selectedColor = colorInp ? colorInp.value.trim().toUpperCase() : '';
+        selectedPattern = patInp ? patInp.value.trim().toUpperCase() : '';
+    }
+
+    let foundSpec = null;
+    if (selectedPattern && selectedColor && Array.isArray(savedRollSpecsRegistry)) {
+        foundSpec = savedRollSpecsRegistry.find(s => 
+            s.design_name.toUpperCase() === selectedPattern.toUpperCase() && 
+            s.color.toUpperCase() === selectedColor.toUpperCase()
+        );
+    }
+
+    openViewRollSpecsModal(idx, foundSpec);
+}
+
+function openCreateDesignModal(idx) {
+    targetRollRowIndex = idx || 1;
+    document.getElementById('newDesignTargetRow').value = targetRollRowIndex;
+
+    document.getElementById('newDesignPattern').value = '';
+    document.getElementById('newDesignColor').value = '';
+    document.getElementById('newDesignPrice').value = '';
+    document.getElementById('newDesignHsn').value = '';
+
+    const card = document.getElementById('rollCard_' + targetRollRowIndex);
+    if (card) {
+        const colorInp = card.querySelector('.roll-input-color');
+        const patInp = card.querySelector('.roll-input-pattern');
+        const priceInp = card.querySelector('.roll-input-price');
+        const hsnSel = card.querySelector('.roll-input-hsn');
+        if (colorInp && colorInp.value) document.getElementById('newDesignColor').value = colorInp.value.trim().toUpperCase();
+        if (patInp && patInp.value) document.getElementById('newDesignPattern').value = patInp.value.trim().toUpperCase();
+        if (priceInp && priceInp.value) document.getElementById('newDesignPrice').value = priceInp.value;
+        if (hsnSel && hsnSel.value) document.getElementById('newDesignHsn').value = hsnSel.value;
+    }
+
+    const viewModalEl = document.getElementById('modalViewRollSpecs');
+    const viewModal = bootstrap.Modal.getInstance(viewModalEl);
+    if (viewModal) viewModal.hide();
+
+    const modal = new bootstrap.Modal(document.getElementById('modalCreateRollDesign'));
+    modal.show();
+}
+
+function saveAndApplyRollDesign() {
+    const rowIdx = parseInt(document.getElementById('newDesignTargetRow').value) || 1;
+    const pattern = document.getElementById('newDesignPattern').value.trim().toUpperCase();
+    const color = document.getElementById('newDesignColor').value.trim().toUpperCase();
+    const price = parseFloat(document.getElementById('newDesignPrice').value) || 0.0;
+    const hsn = document.getElementById('newDesignHsn').value.trim().toUpperCase();
+    const weight = 0.0;
+    const supplier = '';
+
+    if (!pattern || !color) {
+        alert('Please provide both Design Name / Pattern and Color / Shade.');
+        return;
+    }
+
+    const btn = document.getElementById('btnSubmitRollDesign');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Saving...';
+
+    const formData = new FormData();
+    formData.append('design_name', pattern);
+    formData.append('color', color);
+    formData.append('unit_price', price);
+    formData.append('hsn_code', hsn);
+    formData.append('net_weight', weight);
+    formData.append('supplier_name', supplier);
+    <?php if ($selectedCid): ?>
+    formData.append('concern_id', '<?= (int)$selectedCid ?>');
+    <?php endif; ?>
+
+    fetch('<?= \App\Core\Controller::url('/m/purchase_billing/save_roll_spec') ?>', {
+        method: 'POST',
+        body: formData
+    })
+    .then(r => r.json())
+    .then(res => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-check-circle me-1"></i> Save & Apply to Roll';
+
+        if (res.success) {
+            const spec = res.spec || {
+                design_name: pattern,
+                color: color,
+                last_unit_price: price,
+                hsn_code: hsn,
+                net_weight: weight,
+                qty: 0,
+                unit: 'Rolls',
+                bills_count: 0,
+                last_bill_no: '',
+                last_supplier_name: supplier
+            };
+
+            const existingIdx = savedRollSpecsRegistry.findIndex(s => 
+                s.design_name.toUpperCase() === pattern && s.color.toUpperCase() === color
+            );
+            if (existingIdx >= 0) {
+                savedRollSpecsRegistry[existingIdx] = spec;
+            } else {
+                savedRollSpecsRegistry.push(spec);
+                savedRollSpecsRegistry.sort((a,b) => a.design_name.localeCompare(b.design_name));
+            }
+
+            updateAllRollQuickSelects(`${pattern}|${color}`, rowIdx);
+
+            const card = document.getElementById('rollCard_' + rowIdx);
+            if (card) {
+                const colorInp = card.querySelector('.roll-input-color');
+                const patInp = card.querySelector('.roll-input-pattern');
+                const priceInp = card.querySelector('.roll-input-price');
+                const hsnSel = card.querySelector('.roll-input-hsn');
+                const wtInp = card.querySelector('.roll-input-weight');
+
+                if (colorInp) colorInp.value = color;
+                if (patInp) patInp.value = pattern;
+                if (priceInp && price > 0) priceInp.value = price.toFixed(2);
+                if (wtInp && weight > 0 && (!wtInp.value || parseFloat(wtInp.value) === 0)) wtInp.value = weight.toFixed(2);
+                if (hsnSel && hsn) {
+                    let hasHsn = false;
+                    for (let i = 0; i < hsnSel.options.length; i++) {
+                        if (hsnSel.options[i].value === hsn) { hasHsn = true; break; }
+                    }
+                    if (!hasHsn) {
+                        const opt = document.createElement('option');
+                        opt.value = hsn;
+                        opt.textContent = hsn;
+                        hsnSel.appendChild(opt);
+                    }
+                    hsnSel.value = hsn;
+                    onRollHsnChange(rowIdx);
+                }
+
+                onRollColorOrPatternChange(rowIdx);
+                syncRollsTable();
+            }
+
+            updateRollDatalists(pattern, color);
+
+            const modalEl = document.getElementById('modalCreateRollDesign');
+            const modal = bootstrap.Modal.getInstance(modalEl);
+            if (modal) modal.hide();
+
+            showToastNotice(`Design registered successfully: ${pattern} • ${color}`);
+        } else {
+            alert('Failed to register design: ' + (res.message || 'Unknown error'));
+        }
+    })
+    .catch(err => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-check-circle me-1"></i> Save & Apply to Roll';
+        console.error('Error saving roll spec:', err);
+        alert('Server connection error. Please try again.');
+    });
+}
+
+function updateAllRollQuickSelects(selectedVal = '', targetRowIdx = 1) {
+    document.querySelectorAll('.roll-quick-select').forEach(sel => {
+        const rowIdMatch = sel.id ? sel.id.match(/rollQuickSelect_(\d+)/) : null;
+        const rowId = rowIdMatch ? parseInt(rowIdMatch[1]) : null;
+        const currentVal = (rowId === targetRowIdx) ? selectedVal : sel.value;
+        sel.innerHTML = getSavedRollSpecsOptionsHtml(currentVal);
+    });
+}
+
+function updateRollDatalists(pattern, color) {
+    const patList = document.getElementById('rollPatternList');
+    if (patList) {
+        let exists = false;
+        for (let opt of patList.options) {
+            if (opt.value.toUpperCase() === pattern.toUpperCase()) { exists = true; break; }
+        }
+        if (!exists) {
+            const opt = document.createElement('option');
+            opt.value = pattern;
+            patList.appendChild(opt);
+        }
+    }
+
+    const colList = document.getElementById('rollColorList');
+    if (colList) {
+        let exists = false;
+        for (let opt of colList.options) {
+            if (opt.value.toUpperCase() === color.toUpperCase()) { exists = true; break; }
+        }
+        if (!exists) {
+            const opt = document.createElement('option');
+            opt.value = color;
+            colList.appendChild(opt);
+        }
+    }
+}
+
+function openViewRollSpecsModal(idx, foundSpec = null) {
+    targetRollRowIndex = idx || 1;
+    const detailCard = document.getElementById('viewSpecDetailCard');
+    
+    if (foundSpec) {
+        detailCard.style.display = 'block';
+        document.getElementById('vSpecPatternBadge').textContent = foundSpec.design_name || '-';
+        document.getElementById('vSpecColorBadge').textContent = foundSpec.color || '-';
+        document.getElementById('vSpecQty').textContent = (parseFloat(foundSpec.qty) || 0) + ' ' + (foundSpec.unit || 'Rolls');
+        document.getElementById('vSpecWeight').textContent = (parseFloat(foundSpec.net_weight) || 0).toFixed(2) + ' kg';
+        document.getElementById('vSpecPrice').textContent = '₹' + (parseFloat(foundSpec.last_unit_price) || 0).toFixed(2);
+        document.getElementById('vSpecHsn').textContent = foundSpec.hsn_code || 'N/A';
+        document.getElementById('vSpecBillsCount').textContent = foundSpec.bills_count || '0';
+        document.getElementById('vSpecLastBill').textContent = foundSpec.last_bill_no || 'N/A';
+        document.getElementById('vSpecSupplier').textContent = foundSpec.last_supplier_name || 'N/A';
+    } else {
+        detailCard.style.display = 'none';
+    }
+
+    const searchInput = document.getElementById('vSpecSearchInput');
+    if (searchInput) searchInput.value = '';
+    renderRegistrySpecsTable('');
+
+    const modal = new bootstrap.Modal(document.getElementById('modalViewRollSpecs'));
+    modal.show();
+}
+
+function renderRegistrySpecsTable(filter = '') {
+    const tbody = document.getElementById('tbodyRegistrySpecs');
+    const countSpan = document.getElementById('vSpecTotalCount');
+    if (!tbody) return;
+
+    if (!Array.isArray(savedRollSpecsRegistry) || savedRollSpecsRegistry.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted py-3">No saved color & design specifications registered yet. Click "+ Register New Design" to add one!</td></tr>`;
+        if (countSpan) countSpan.textContent = '0';
+        return;
+    }
+
+    const q = filter.trim().toUpperCase();
+    const filtered = savedRollSpecsRegistry.filter(s => {
+        if (!q) return true;
+        return (s.design_name && s.design_name.toUpperCase().includes(q)) ||
+               (s.color && s.color.toUpperCase().includes(q)) ||
+               (s.hsn_code && s.hsn_code.toUpperCase().includes(q)) ||
+               (s.last_supplier_name && s.last_supplier_name.toUpperCase().includes(q));
+    });
+
+    if (countSpan) countSpan.textContent = filtered.length;
+
+    if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted py-3">No matching specifications found for "${escapeHtml(filter)}".</td></tr>`;
+        return;
+    }
+
+    let rowsHtml = '';
+    filtered.forEach(s => {
+        const qty = parseFloat(s.qty) || 0;
+        const wt = parseFloat(s.net_weight) || 0;
+        const price = parseFloat(s.last_unit_price) || 0;
+        const safeDesign = escapeHtml(s.design_name);
+        const safeColor = escapeHtml(s.color);
+
+        rowsHtml += `
+            <tr>
+                <td class="fw-bold text-dark font-monospace">${safeDesign}</td>
+                <td><span class="badge bg-secondary-subtle text-secondary border font-monospace">${safeColor}</span></td>
+                <td class="text-end fw-semibold text-primary">${qty} ${escapeHtml(s.unit || 'Rolls')}</td>
+                <td class="text-end text-muted">${wt.toFixed(2)}</td>
+                <td class="text-end fw-semibold text-success">₹${price.toFixed(2)}</td>
+                <td class="text-muted">${escapeHtml(s.hsn_code || '-')}</td>
+                <td class="text-center">
+                    <button type="button" class="btn btn-primary btn-sm py-0 px-2 fw-semibold" onclick="selectSpecFromRegistry('${safeDesign}', '${safeColor}')">
+                        <i class="bi bi-arrow-down-left me-1"></i> Apply
+                    </button>
+                </td>
+            </tr>
+        `;
+    });
+    tbody.innerHTML = rowsHtml;
+}
+
+function filterRegistrySpecsTable(val) {
+    renderRegistrySpecsTable(val);
+}
+
+function selectSpecFromRegistry(pattern, color) {
+    const val = `${pattern}|${color}`;
+    const sel = document.getElementById('rollQuickSelect_' + targetRollRowIndex);
+    if (sel) {
+        sel.value = val;
+        applySavedRollSpec(sel, targetRollRowIndex);
+    } else {
+        const spec = savedRollSpecsRegistry.find(s => 
+            s.design_name.toUpperCase() === pattern.toUpperCase() && 
+            s.color.toUpperCase() === color.toUpperCase()
+        );
+        if (spec) {
+            const card = document.getElementById('rollCard_' + targetRollRowIndex);
+            if (card) {
+                const colorInp = card.querySelector('.roll-input-color');
+                const patInp = card.querySelector('.roll-input-pattern');
+                const priceInp = card.querySelector('.roll-input-price');
+                const hsnSel = card.querySelector('.roll-input-hsn');
+
+                if (colorInp) colorInp.value = spec.color;
+                if (patInp) patInp.value = spec.design_name;
+                if (priceInp && parseFloat(spec.last_unit_price) > 0) priceInp.value = parseFloat(spec.last_unit_price).toFixed(2);
+                if (hsnSel && spec.hsn_code) {
+                    hsnSel.value = spec.hsn_code;
+                    onRollHsnChange(targetRollRowIndex);
+                }
+                onRollColorOrPatternChange(targetRollRowIndex);
+                syncRollsTable();
+            }
+        }
+    }
+
+    const modalEl = document.getElementById('modalViewRollSpecs');
+    const modal = bootstrap.Modal.getInstance(modalEl);
+    if (modal) modal.hide();
+
+    showToastNotice(`Applied: ${pattern} • ${color}`);
+}
+
+function showToastNotice(msg) {
+    let toast = document.getElementById('rollSpecQuickToast');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'rollSpecQuickToast';
+        toast.className = 'position-fixed bottom-0 end-0 p-3';
+        toast.style.zIndex = '9999';
+        document.body.appendChild(toast);
+    }
+    toast.innerHTML = `
+        <div class="toast align-items-center text-bg-dark border-0 show shadow-lg" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body d-flex align-items-center gap-2">
+                    <i class="bi bi-check-circle-fill text-success fs-5"></i>
+                    <span>${escapeHtml(msg)}</span>
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
+    `;
+    setTimeout(() => {
+        if (toast) toast.innerHTML = '';
+    }, 3500);
+}
+
 function addRollRow() {
     rollCounter++;
     const rollCode = generateRollCode(rollCounter);
@@ -1165,6 +1843,29 @@ function addRollRow() {
     const div = document.createElement('div');
     div.className = 'roll-card card border mb-4 shadow-sm rounded-3';
     div.id = 'rollCard_' + rollCounter;
+
+    const quickSelectHtml = `
+        <div class="mb-3 p-2.5 rounded bg-light border d-flex flex-wrap align-items-center justify-content-between gap-2 roll-spec-selector-bar">
+            <div class="d-flex align-items-center gap-1.5 small text-secondary">
+                <i class="bi bi-bookmark-star text-primary"></i>
+                <span class="fw-semibold">Roll Design / Pattern:</span>
+            </div>
+            <div class="flex-grow-1" style="max-width: 520px;">
+                <div class="input-group input-group-sm">
+                    <select class="form-select form-select-sm roll-quick-select" id="rollQuickSelect_${rollCounter}" onchange="applySavedRollSpec(this, ${rollCounter})">
+                        ${getSavedRollSpecsOptionsHtml()}
+                    </select>
+                    <button type="button" class="btn btn-outline-info btn-sm btn-view-spec px-2" id="btnViewSpec_${rollCounter}" onclick="viewCurrentRollSpec(${rollCounter})" title="View Details of Selected Design">
+                        <i class="bi bi-eye"></i> View
+                    </button>
+                    <button type="button" class="btn btn-primary btn-sm px-2 fw-semibold" onclick="openCreateDesignModal(${rollCounter})" title="Create New Design & Color">
+                        <i class="bi bi-plus-lg"></i> New
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+
     div.innerHTML = `
         <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center">
             <div class="d-flex align-items-center gap-2">
@@ -1177,23 +1878,24 @@ function addRollRow() {
             </button>
         </div>
         <div class="card-body p-3">
-            <!-- Row 1: Roll No, Color, Pattern, Qty, Weight, Price (No Designs field) -->
-            <div class="row g-2 mb-3 align-items-end">
+            ${quickSelectHtml}
+            <!-- Row 1: Roll No, Color, Pattern, Qty, Weight, Price -->
+            <div class="row g-2 mb-2 align-items-end">
                 <div class="col-md-2">
-                    <label class="form-label small fw-semibold mb-1">Roll No. / Code <span class="text-danger">*</span></label>
-                    <input type="text" name="rolls[${rollCounter}][roll_code]" class="form-control form-control-sm font-monospace text-uppercase roll-input-code" placeholder="ROLL #${rollCounter}" value="" required oninput="syncRollsTable()">
+                <label class="form-label small fw-semibold mb-1">Fabric Name <span class="text-danger">*</span></label>
+                <input type="text" name="rolls[${rollCounter}][roll_code]" class="form-control form-control-sm font-monospace text-uppercase roll-input-code" placeholder="E.G. COTTON" value="" required oninput="syncRollsTable()">
                 </div>
                 <div class="col-md-2">
                     <label class="form-label small fw-semibold mb-1">Color / Shade <span class="text-danger">*</span></label>
-                    <input type="text" name="rolls[${rollCounter}][color]" class="form-control form-control-sm text-uppercase roll-input-color" placeholder="E.G. NAVY BLUE" value="" required oninput="syncRollsTable()">
+                    <input type="text" name="rolls[${rollCounter}][color]" list="rollColorList" class="form-control form-control-sm text-uppercase roll-input-color" placeholder="E.G. BLACK" value="" required oninput="onRollColorOrPatternChange(${rollCounter}); syncRollsTable()">
                 </div>
                 <div class="col-md-2">
                     <label class="form-label small fw-semibold mb-1">Design Name / Pattern <span class="text-danger">*</span></label>
-                    <input type="text" name="rolls[${rollCounter}][pattern]" class="form-control form-control-sm text-uppercase roll-input-pattern" placeholder="E.G. FLORAL 01" value="" required oninput="syncRollsTable()">
+                    <input type="text" name="rolls[${rollCounter}][pattern]" list="rollPatternList" class="form-control form-control-sm text-uppercase roll-input-pattern" placeholder="E.G. FLORAL 01" value="" required oninput="onRollColorOrPatternChange(${rollCounter}); syncRollsTable()">
                 </div>
                 <div class="col-md-2">
                     <label class="form-label small fw-semibold mb-1">Qty <span class="text-danger">*</span></label>
-                    <input type="number" min="1" step="1" name="rolls[${rollCounter}][rq]" class="form-control form-control-sm roll-input-rq" placeholder="1" value="1" required oninput="syncRollsTable()">
+                    <input type="number" min="1" step="1" name="rolls[${rollCounter}][rq]" class="form-control form-control-sm roll-input-rq" placeholder="1" value="1" required oninput="onRollColorOrPatternChange(${rollCounter}); syncRollsTable()">
                 </div>
                 <div class="col-md-2">
                     <label class="form-label small fw-semibold mb-1">Weight (kg) <span class="text-danger">*</span></label>
@@ -1210,6 +1912,10 @@ function addRollRow() {
                     </div>
                 </div>
             </div>
+
+            <!-- Live Roll Stock Accumulation Notice -->
+            <div class="roll-stock-notice mb-3" id="rollStockNotice_${rollCounter}" style="display: none;"></div>
+
             <!-- Row 2: HSN Code, Tax Mode, GST & Dynamic Fields -->
             <div class="row g-2 mb-3 align-items-end">
                 <div class="col-md-3">
@@ -1933,6 +2639,32 @@ function loadInitialData() {
             const gstRate = parseFloat(r.gst_rate) || 0;
             const halfRate = (gstRate / 2).toFixed(2);
 
+            const rPat = (r.pattern || r.item_name || '').trim().toUpperCase();
+            const rCol = (r.color || '').trim().toUpperCase();
+            const rSpecVal = (rPat && rCol) ? `${rPat}|${rCol}` : '';
+
+            const quickSelectHtml = `
+                <div class="mb-3 p-2.5 rounded bg-light border d-flex flex-wrap align-items-center justify-content-between gap-2 roll-spec-selector-bar">
+                    <div class="d-flex align-items-center gap-1.5 small text-secondary">
+                        <i class="bi bi-bookmark-star text-primary"></i>
+                        <span class="fw-semibold">Roll Design / Pattern:</span>
+                    </div>
+                    <div class="flex-grow-1" style="max-width: 520px;">
+                        <div class="input-group input-group-sm">
+                            <select class="form-select form-select-sm roll-quick-select" id="rollQuickSelect_${rollCounter}" onchange="applySavedRollSpec(this, ${rollCounter})">
+                                ${getSavedRollSpecsOptionsHtml(rSpecVal)}
+                            </select>
+                            <button type="button" class="btn btn-outline-info btn-sm btn-view-spec px-2" id="btnViewSpec_${rollCounter}" onclick="viewCurrentRollSpec(${rollCounter})" title="View Details of Selected Design">
+                                <i class="bi bi-eye"></i> View
+                            </button>
+                            <button type="button" class="btn btn-primary btn-sm px-2 fw-semibold" onclick="openCreateDesignModal(${rollCounter})" title="Create New Design & Color">
+                                <i class="bi bi-plus-lg"></i> New
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+
             div.innerHTML = `
                 <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center">
                     <div class="d-flex align-items-center gap-2">
@@ -1946,23 +2678,25 @@ function loadInitialData() {
                 </div>
                 <div class="card-body p-3">
                     <input type="hidden" name="rolls[${rollCounter}][existing_photo]" value="${escapeHtml(existingPhoto)}">
+                    ${quickSelectHtml}
+                    <div id="rollStockNotice_${rollCounter}" style="display: none;"></div>
                     <!-- Row 1: Roll No, Color, Pattern, RQ, Weight, Price -->
                     <div class="row g-2 mb-3 align-items-end">
                         <div class="col-md-2">
-                            <label class="form-label small fw-semibold mb-1">Roll No. / Code <span class="text-danger">*</span></label>
-                            <input type="text" name="rolls[${rollCounter}][roll_code]" class="form-control form-control-sm font-monospace text-uppercase roll-input-code" placeholder="ROLL #${rollCounter}" value="${escapeHtml(r.item_code || ('ROLL #' + rollCounter))}" required oninput="syncRollsTable()">
+                            <label class="form-label small fw-semibold mb-1">Fabric Name <span class="text-danger">*</span></label>
+                            <input type="text" name="rolls[${rollCounter}][roll_code]" class="form-control form-control-sm font-monospace text-uppercase roll-input-code" placeholder="E.G. COTTON" value="${escapeHtml(r.item_code || ('ROLL #' + rollCounter))}" required oninput="syncRollsTable()">
                         </div>
                         <div class="col-md-2">
                             <label class="form-label small fw-semibold mb-1">Color / Shade <span class="text-danger">*</span></label>
-                            <input type="text" name="rolls[${rollCounter}][color]" class="form-control form-control-sm text-uppercase roll-input-color" placeholder="E.G. NAVY BLUE" value="${escapeHtml(r.color || '')}" required oninput="syncRollsTable()">
+                            <input type="text" name="rolls[${rollCounter}][color]" class="form-control form-control-sm text-uppercase roll-input-color" placeholder="E.G. NAVY BLUE" value="${escapeHtml(r.color || '')}" required oninput="onRollColorOrPatternChange(${rollCounter}); syncRollsTable()">
                         </div>
                         <div class="col-md-2">
                             <label class="form-label small fw-semibold mb-1">Design Name / Pattern <span class="text-danger">*</span></label>
-                            <input type="text" name="rolls[${rollCounter}][pattern]" class="form-control form-control-sm text-uppercase roll-input-pattern" placeholder="E.G. FLORAL 01" value="${escapeHtml(r.pattern || '')}" required oninput="syncRollsTable()">
+                            <input type="text" name="rolls[${rollCounter}][pattern]" class="form-control form-control-sm text-uppercase roll-input-pattern" placeholder="E.G. FLORAL 01" value="${escapeHtml(r.pattern || '')}" required oninput="onRollColorOrPatternChange(${rollCounter}); syncRollsTable()">
                         </div>
                         <div class="col-md-2">
                             <label class="form-label small fw-semibold mb-1">Qty <span class="text-danger">*</span></label>
-                            <input type="number" min="1" step="1" name="rolls[${rollCounter}][rq]" class="form-control form-control-sm roll-input-rq" placeholder="1" value="${parseInt(r.rq_qty) || 1}" required oninput="syncRollsTable()">
+                            <input type="number" min="1" step="1" name="rolls[${rollCounter}][rq]" class="form-control form-control-sm roll-input-rq" placeholder="1" value="${parseInt(r.rq_qty) || 1}" required oninput="onRollColorOrPatternChange(${rollCounter}); syncRollsTable()">
                         </div>
                         <div class="col-md-2">
                             <label class="form-label small fw-semibold mb-1">Weight (kg) <span class="text-danger">*</span></label>

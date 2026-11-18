@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= htmlspecialchars($pageTitle) ?></title>
+    <title><?= htmlspecialchars($pageTitle ?? 'Print Labels - INVENTO') ?></title>
     <link rel="stylesheet" href="<?= \App\Core\Controller::url('/assets/css/bootstrap.min.css') ?>">
     <link rel="stylesheet" href="<?= \App\Core\Controller::url('/assets/css/bootstrap-icons.min.css') ?>">
     <style>
@@ -11,7 +11,8 @@
             background-color: #f1f5f9;
             margin: 0;
             padding: 1.5rem;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            color: #0f172a;
         }
         .print-toolbar {
             background: #ffffff;
@@ -22,6 +23,8 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
+            flex-wrap: gap;
+            gap: 1rem;
         }
         .label-grid {
             display: grid;
@@ -30,79 +33,125 @@
             max-width: 980px;
             margin: 0 auto;
         }
+        .label-grid.thermal-mode {
+            grid-template-columns: 1fr;
+            max-width: 420px;
+            gap: 16px;
+        }
         .label-sticker {
             background: #ffffff;
-            border: 2px dashed #94a3b8;
-            border-radius: 8px;
-            padding: 10px;
+            border: 1.5px solid #0f172a;
+            border-radius: 10px;
+            padding: 8px 12px;
             display: flex;
-            gap: 10px;
-            align-items: center;
+            flex-direction: column;
             page-break-inside: avoid;
+            break-inside: avoid;
             box-sizing: border-box;
-            height: 145px;
+            min-height: 140px;
+            position: relative;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
         }
-        .label-qr-box {
-            width: 85px;
-            height: 85px;
+        .label-header-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 6px;
+            padding-bottom: 4px;
+        }
+        .concern-check-icon {
+            background-color: #0d6efd;
+            color: #ffffff;
+            width: 17px;
+            height: 17px;
+            border-radius: 4px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            margin-right: 6px;
+            flex-shrink: 0;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+        .concern-name-text {
+            font-weight: 800;
+            font-size: 0.82rem;
+            color: #0f172a;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 170px;
+        }
+        .ref-pill-badge {
+            background-color: #e0f2fe;
+            color: #0284c7;
+            border: 1px solid #bae6fd;
+            font-family: monospace;
+            font-size: 0.70rem;
+            font-weight: 600;
+            padding: 1px 7px;
+            border-radius: 12px;
+            white-space: nowrap;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+        .label-divider {
+            border-top: 1px dashed #cbd5e1;
+            margin: 4px 0 6px 0;
+        }
+        .label-body-content {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex: 1;
+        }
+        .label-qr-wrapper {
+            width: 76px;
+            height: 76px;
             flex-shrink: 0;
             display: flex;
             align-items: center;
             justify-content: center;
             background: #ffffff;
         }
-        .label-info {
+        .label-qr-box {
+            width: 76px;
+            height: 76px;
+        }
+        .label-details-stack {
             flex: 1;
             overflow: hidden;
-            line-height: 1.25;
+            line-height: 1.35;
+            font-size: 0.76rem;
         }
-        .label-brand {
-            font-size: 0.68rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            color: #2563eb;
-            letter-spacing: 0.05em;
-        }
-        .label-title {
-            font-size: 0.82rem;
-            font-weight: 700;
+        .label-item-title {
+            font-size: 0.86rem;
+            font-weight: 800;
             color: #0f172a;
+            text-transform: uppercase;
+            margin-bottom: 2px;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            margin-top: 1px;
-            margin-bottom: 2px;
         }
-        .label-sku {
-            font-size: 0.72rem;
-            font-family: monospace;
-            background: #f1f5f9;
-            padding: 1px 4px;
-            border-radius: 3px;
-            display: inline-block;
+        .label-detail-row {
+            color: #334155;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-size: 0.75rem;
         }
-        .label-meta {
-            font-size: 0.7rem;
+        .label-detail-row .detail-label {
             color: #64748b;
-            margin-top: 3px;
+            font-weight: 500;
+            margin-right: 3px;
         }
-        .label-price-box {
-            margin-top: 4px;
-            display: flex;
-            align-items: baseline;
-            gap: 6px;
-        }
-        .label-mrp {
-            font-size: 0.88rem;
-            font-weight: 800;
-            color: #b91c1c;
-        }
-        .label-code-tag {
-            font-size: 0.65rem;
-            font-family: monospace;
-            color: #475569;
-            text-align: center;
-            margin-top: 3px;
+        .label-detail-row .detail-val {
+            color: #0f172a;
+            font-weight: 600;
         }
 
         @media print {
@@ -118,53 +167,131 @@
                 gap: 8px !important;
             }
             .label-sticker {
-                border: 1px solid #000000 !important;
+                border: 1.2px solid #000000 !important;
+                box-shadow: none !important;
                 break-inside: avoid;
+            }
+            .concern-check-icon {
+                background-color: #000000 !important;
+                color: #ffffff !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+            .ref-pill-badge {
+                border: 1px solid #000000 !important;
+                color: #000000 !important;
+                background-color: #f1f5f9 !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
             }
         }
     </style>
 </head>
 <body>
 
+<?php
+$concern = \App\Core\Auth::concern();
+$concernName = $labelData['concern_name'] ?? ($concern['name'] ?? 'INVENTO ERP');
+$refNo       = $labelData['ref_no'] ?? ($labelData['cost_or_ref'] ?? 'REF-001');
+$headerTitle = $labelData['header_title'] ?? ($labelData['item_title'] ?? 'Garment Item');
+$label1Name  = $labelData['label_1_name'] ?? 'Item';
+$label1Val   = $labelData['label_1_val'] ?? ($labelData['item_title'] ?? '-');
+$label2Name  = $labelData['label_2_name'] ?? 'Color';
+$label2Val   = $labelData['label_2_val'] ?? ($labelData['color_or_spec'] ?? 'STANDARD');
+$designVal   = $labelData['design'] ?? ($labelData['label_3_val'] ?? ($labelData['pattern'] ?? 'STANDARD'));
+$priceVal    = (float)($labelData['price'] ?? ($labelData['price_mrp'] ?? 0));
+$tagCode     = $labelData['tag_code'] ?? ($labelData['item_code'] ?? 'SKU');
+$qrText      = $qrCodeText ?? ($labelData['qr_payload'] ?? $tagCode);
+$badge       = $labelData['section_badge'] ?? 'STANDARD';
+?>
+
 <div class="print-toolbar">
     <div>
-        <h5 class="mb-0 fw-bold"><i class="bi bi-printer text-primary me-2"></i> Print Sheet Preview (Job #<?= (int)$jobId ?>)</h5>
-        <small class="text-muted"><?= (int)$qty ?> label copies generated for <strong><?= htmlspecialchars($variant['name']) ?></strong></small>
+        <h5 class="mb-0 fw-bold d-flex align-items-center gap-2">
+            <i class="bi bi-printer text-primary"></i> 
+            <span>Print Sheet Preview</span>
+            <span class="badge bg-primary-subtle text-primary border border-primary fs-6">Job #<?= (int)($jobId ?? 1) ?></span>
+        </h5>
+        <small class="text-muted">
+            <span class="badge bg-light text-dark border me-1"><?= htmlspecialchars($labelData['section_title'] ?? 'PRODUCT LABEL') ?></span>
+            <span class="badge bg-primary-subtle text-primary border me-1"><?= htmlspecialchars($badge) ?></span>
+            Printing <strong><?= (int)$qty ?> copies</strong> of <strong><?= htmlspecialchars($headerTitle) ?></strong> (<?= htmlspecialchars($tagCode) ?>) &bull; Concern: <strong><?= htmlspecialchars($concernName) ?></strong>
+        </small>
     </div>
-    <div class="d-flex gap-2">
-        <button class="btn btn-outline-secondary" onclick="window.close()">Close</button>
-        <button class="btn btn-primary fw-bold" onclick="window.print()">
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+        <div class="btn-group btn-group-sm me-2" role="group">
+            <button type="button" class="btn btn-outline-secondary active" id="btnLayoutA4" onclick="setLayout('a4')">
+                <i class="bi bi-grid-3x3"></i> A4 Grid (3 Col)
+            </button>
+            <button type="button" class="btn btn-outline-secondary" id="btnLayoutThermal" onclick="setLayout('thermal')">
+                <i class="bi bi-card-text"></i> Thermal Roll (1 Col)
+            </button>
+        </div>
+        <button class="btn btn-outline-secondary btn-sm" onclick="window.close()">Close</button>
+        <?php if (!empty($labelData['bill_id']) || !empty($labelData['item_id'])): ?>
+            <form action="<?= \App\Core\Controller::url('/m/label/add_to_stock') ?>" method="POST" class="d-inline" target="_self">
+                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'] ?? '') ?>">
+                <input type="hidden" name="bill_id" value="<?= (int)($labelData['bill_id'] ?? 0) ?>">
+                <input type="hidden" name="item_id" value="<?= (int)($labelData['item_id'] ?? 0) ?>">
+                <input type="hidden" name="tab" value="<?= htmlspecialchars($labelData['stock_tab'] ?? 'rolls') ?>">
+                <button type="submit" class="btn btn-success btn-sm fw-bold px-3 shadow-sm d-flex align-items-center gap-1.5" title="Add items to Purchase Stocks">
+                    <i class="bi bi-box-arrow-in-down"></i> Add to Stock &rarr; Purchase Stocks
+                </button>
+            </form>
+        <?php else: ?>
+            <a href="<?= \App\Core\Controller::url('/m/purchase_stocks') ?>" class="btn btn-outline-success btn-sm fw-bold">
+                <i class="bi bi-boxes me-1"></i> View Purchase Stocks
+            </a>
+        <?php endif; ?>
+        <button class="btn btn-primary btn-sm fw-bold px-3" onclick="window.print()">
             <i class="bi bi-printer-fill me-1"></i> Print Labels Now
         </button>
     </div>
 </div>
 
-<div class="label-grid">
-    <?php 
-    $concern = \App\Core\Auth::concern();
-    $attrs = !empty($variant['attributes']) ? json_decode($variant['attributes'], true) : [];
-    for ($i = 0; $i < $qty; $i++): 
-    ?>
+<div class="label-grid" id="labelGrid">
+    <?php for ($i = 0; $i < $qty; $i++): ?>
         <div class="label-sticker">
-            <div>
-                <div class="label-qr-box qr-container" data-code="<?= htmlspecialchars($qrCodeText) ?>"></div>
-                <div class="label-code-tag"><?= htmlspecialchars($qrCodeText) ?></div>
+            <!-- Top Header: Concern Name Dynamically & Reference Badge (Image 2 Reference) -->
+            <div class="label-header-bar">
+                <div class="d-flex align-items-center">
+                    <span class="concern-check-icon"><i class="bi bi-check-lg"></i></span>
+                    <span class="concern-name-text"><?= htmlspecialchars($concernName) ?></span>
+                </div>
+                <span class="ref-pill-badge"><?= htmlspecialchars($refNo) ?></span>
             </div>
 
-            <div class="label-info">
-                <div class="label-brand"><?= htmlspecialchars($concern['name'] ?? 'INVENTO') ?></div>
-                <div class="label-title" title="<?= htmlspecialchars($variant['name']) ?>"><?= htmlspecialchars($variant['name']) ?></div>
-                <div class="d-flex align-items-center gap-1 mb-1">
-                    <span class="label-sku"><?= htmlspecialchars($variant['sku_code']) ?></span>
-                    <span class="badge bg-dark" style="font-size: 0.65rem;"><?= htmlspecialchars($variant['size'] ?: 'Free') ?></span>
+            <!-- Dashed Separator Line -->
+            <div class="label-divider"></div>
+
+            <!-- Body: QR on Left, Details Stack on Right -->
+            <div class="label-body-content">
+                <div class="label-qr-wrapper">
+                    <div class="label-qr-box qr-container" data-code="<?= htmlspecialchars($qrText) ?>"></div>
                 </div>
-                <div class="label-meta">
-                    Cat: <?= htmlspecialchars($variant['category_name'] ?? 'General') ?> &bull; 
-                    <?= number_format($variant['weight'], 3) ?> <?= htmlspecialchars($variant['weight_unit']) ?>
-                </div>
-                <div class="label-price-box">
-                    <span class="label-mrp">MRP ₹<?= number_format($variant['mrp'], 2) ?></span>
-                    <span class="text-muted small" style="font-size: 0.68rem;">(Incl. of all taxes)</span>
+
+                <div class="label-details-stack">
+                    <div class="label-item-title"><?= htmlspecialchars($headerTitle) ?></div>
+                    <div class="label-detail-row">
+                        <span class="detail-label"><?= htmlspecialchars($label1Name) ?>:</span>
+                        <span class="detail-val"><?= htmlspecialchars($label1Val) ?></span>
+                    </div>
+                    <div class="label-detail-row">
+                        <span class="detail-label"><?= htmlspecialchars($label2Name) ?>:</span>
+                        <span class="detail-val text-uppercase"><?= htmlspecialchars($label2Val) ?></span>
+                    </div>
+                    <div class="label-detail-row">
+                        <span class="detail-label">Design:</span>
+                        <span class="detail-val text-uppercase"><?= htmlspecialchars($designVal) ?></span>
+                    </div>
+                    <div class="label-detail-row">
+                        <span class="detail-label">Price:</span>
+                        <span class="detail-val fw-bold text-success">₹<?= number_format($priceVal, 2) ?></span>
+                    </div>
+                    <div class="label-detail-row">
+                        <span class="detail-label">Code:</span>
+                        <span class="detail-val font-monospace text-primary fw-bold"><?= htmlspecialchars($tagCode) ?></span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -175,7 +302,7 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const containers = document.querySelectorAll('.qr-container');
-    const code = "<?= htmlspecialchars($qrCodeText) ?>";
+    const code = "<?= htmlspecialchars($qrText) ?>";
     containers.forEach(el => {
         new QRCode(el, {
             text: code,
@@ -187,6 +314,21 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 });
+
+function setLayout(mode) {
+    const grid = document.getElementById('labelGrid');
+    const btnA4 = document.getElementById('btnLayoutA4');
+    const btnThermal = document.getElementById('btnLayoutThermal');
+    if (mode === 'thermal') {
+        grid.classList.add('thermal-mode');
+        btnThermal.classList.add('active');
+        btnA4.classList.remove('active');
+    } else {
+        grid.classList.remove('thermal-mode');
+        btnA4.classList.add('active');
+        btnThermal.classList.remove('active');
+    }
+}
 </script>
 
 </body>

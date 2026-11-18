@@ -16,7 +16,8 @@ INSERT INTO `modules` (`code`, `name`, `icon`, `sort_order`, `group_name`, `is_s
 
 ('suppliers', 'Supplier', 'bi-truck', 20, 'Purchase', 0),
 ('purchase_billing', 'Purchase Billing', 'bi-receipt', 21, 'Purchase', 0),
-('purchase_damage', 'Purchase Damage', 'bi-shield-x', 22, 'Purchase', 0),
+('purchase_stocks', 'Purchase Stocks', 'bi-boxes', 22, 'Purchase', 0),
+('purchase_damage', 'Purchase Damage', 'bi-shield-x', 23, 'Purchase', 0),
 
 ('catalog_program', 'Catalog & Program', 'bi-journal-bookmark', 30, 'Production', 0),
 ('cutting_wastage', 'Cutting & Wastage', 'bi-scissors', 31, 'Production', 0),

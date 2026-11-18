@@ -118,81 +118,100 @@
             <table class="table table-hover align-middle mb-0 table-custom" id="tableSuppliers">
                 <thead class="table-light text-muted small">
                     <tr>
-                        <th style="width: 40px;">#</th>
-                        <?php if (empty($selectedCid)): ?><th>Concern</th><?php endif; ?>
-                        <th>Code</th>
-                        <th>Supplier / Contact Person</th>
-                        <th>Company / Mill Name</th>
-                        <th>Phone</th>
-                        <th>Email</th>
+                        <th style="width: 45px;" class="ps-3">#</th>
+                        <th>Supplier & Mill</th>
+                        <th>Contact Details</th>
                         <th>GSTIN</th>
-                        <th>District</th>
-                        <th>State</th>
-                        <th>Address</th>
-                        <th>Status</th>
-                        <th class="text-end pe-3" style="min-width: 110px;">Actions</th>
+                        <th>Location & Address</th>
+                        <th class="text-center" style="width: 100px;">Status</th>
+                        <th class="text-end pe-3" style="width: 140px;">Actions</th>
                     </tr>
                 </thead>
                 <tbody id="supplierTableBody">
                     <?php if (empty($suppliers)): ?>
-                        <tr id="noSuppliersRow"><td colspan="<?= empty($selectedCid) ? 13 : 12 ?>" class="text-center py-4 text-muted">No suppliers registered. Click "Add Supplier" to register one.</td></tr>
+                        <tr id="noSuppliersRow"><td colspan="7" class="text-center py-4 text-muted">No suppliers registered. Click "Add Supplier" to register one.</td></tr>
                     <?php else: ?>
                         <?php $idx = 1; foreach ($suppliers as $sup): ?>
                             <tr class="supplier-row"
                                 data-name="<?= strtolower(htmlspecialchars($sup['name'])) ?>"
                                 data-company="<?= strtolower(htmlspecialchars($sup['company_name'] ?? '')) ?>"
+                                data-code="<?= strtolower(htmlspecialchars($sup['code'] ?? '')) ?>"
                                 data-phone="<?= htmlspecialchars($sup['phone'] ?? '') ?>"
                                 data-email="<?= strtolower(htmlspecialchars($sup['email'] ?? '')) ?>"
                                 data-gstin="<?= strtolower(htmlspecialchars($sup['gstin'] ?? '')) ?>"
-                                data-district="<?= strtolower(htmlspecialchars($sup['district'] ?? ($sup['city'] ?? ''))) ?>">
-                                <td class="text-muted small"><?= $idx++ ?></td>
-                                <?php if (empty($selectedCid)): ?>
-                                    <td>
-                                        <span class="badge bg-secondary-subtle text-secondary border">
-                                            <?= htmlspecialchars($sup['concern_name'] ?? ('Concern #' . $sup['concern_id'])) ?>
-                                        </span>
-                                    </td>
-                                <?php endif; ?>
-                                <td><span class="badge bg-dark font-monospace"><?= htmlspecialchars($sup['code'] ?: 'SUP') ?></span></td>
-                                <td class="fw-bold text-dark"><?= htmlspecialchars($sup['name']) ?></td>
+                                data-district="<?= strtolower(htmlspecialchars($sup['district'] ?? ($sup['city'] ?? ''))) ?>"
+                                data-state="<?= strtolower(htmlspecialchars($sup['state'] ?? '')) ?>"
+                                data-address="<?= strtolower(htmlspecialchars($sup['address'] ?? '')) ?>">
+                                <td class="text-muted small ps-3"><?= $idx++ ?></td>
                                 <td>
-                                    <div class="d-flex align-items-center gap-1 text-dark">
-                                        <i class="bi bi-building text-muted small"></i>
-                                        <span><?= htmlspecialchars($sup['company_name'] ?: '-') ?></span>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <div class="rounded-circle p-2 bg-primary-subtle text-primary flex-shrink-0" style="width: 38px; height: 38px; display: flex; align-items: center; justify-content: center;">
+                                            <i class="bi bi-building fs-6"></i>
+                                        </div>
+                                        <div>
+                                            <div class="fw-bold text-dark d-flex align-items-center gap-2 flex-wrap">
+                                                <span><?= htmlspecialchars($sup['company_name'] ?: $sup['name']) ?></span>
+                                                <span class="badge bg-dark font-monospace" style="font-size: 0.72rem;"><?= htmlspecialchars($sup['code'] ?: 'SUP') ?></span>
+                                            </div>
+                                            <div class="small text-muted d-flex align-items-center gap-2 mt-1 flex-wrap">
+                                                <span><i class="bi bi-person text-secondary me-1"></i><?= htmlspecialchars($sup['name']) ?></span>
+                                                <?php if (empty($selectedCid)): ?>
+                                                    <span class="badge bg-secondary-subtle text-secondary border py-0 px-1" style="font-size: 0.7rem;">
+                                                        <?= htmlspecialchars($sup['concern_name'] ?? ('Concern #' . $sup['concern_id'])) ?>
+                                                    </span>
+                                                <?php endif; ?>
+                                            </div>
+                                        </div>
                                     </div>
                                 </td>
                                 <td>
                                     <?php if (!empty($sup['phone'])): ?>
-                                        <a href="tel:<?= htmlspecialchars($sup['phone']) ?>" class="text-decoration-none text-dark fw-semibold small">
-                                            <i class="bi bi-telephone text-primary me-1"></i><?= htmlspecialchars($sup['phone']) ?>
+                                        <a href="tel:<?= htmlspecialchars($sup['phone']) ?>" class="text-decoration-none text-dark fw-semibold small d-flex align-items-center gap-1">
+                                            <i class="bi bi-telephone-fill text-primary" style="font-size: 0.8rem;"></i>
+                                            <span><?= htmlspecialchars($sup['phone']) ?></span>
                                         </a>
-                                    <?php else: ?>-<?php endif; ?>
-                                </td>
-                                <td>
-                                    <?php if (!empty($sup['email'])): ?>
-                                        <a href="mailto:<?= htmlspecialchars($sup['email']) ?>" class="text-decoration-none text-secondary small">
-                                            <?= htmlspecialchars($sup['email']) ?>
-                                        </a>
-                                    <?php else: ?>-<?php endif; ?>
-                                </td>
-                                <td><span class="badge bg-light text-dark border font-monospace"><?= htmlspecialchars($sup['gstin'] ?: '-') ?></span></td>
-                                <td><span class="fw-semibold text-dark"><?= htmlspecialchars($sup['district'] ?: ($sup['city'] ?: '-')) ?></span></td>
-                                <td><span class="badge bg-light text-secondary border"><?= htmlspecialchars($sup['state'] ?: 'Tamil Nadu') ?></span></td>
-                                <td class="small text-muted" title="<?= htmlspecialchars($sup['address'] ?: '') ?>" style="max-width: 180px;">
-                                    <div class="text-truncate"><?= htmlspecialchars($sup['address'] ?: '-') ?></div>
-                                </td>
-                                <td>
-                                    <?php if (($sup['status'] ?? 'active') === 'active'): ?>
-                                        <span class="badge bg-success-subtle text-success border border-success">Active</span>
                                     <?php else: ?>
-                                        <span class="badge bg-secondary-subtle text-secondary border">Inactive</span>
+                                        <span class="text-muted small">-</span>
+                                    <?php endif; ?>
+
+                                    <?php if (!empty($sup['email'])): ?>
+                                        <a href="mailto:<?= htmlspecialchars($sup['email']) ?>" class="text-decoration-none text-secondary small d-flex align-items-center gap-1 mt-1 text-truncate" style="max-width: 200px;" title="<?= htmlspecialchars($sup['email']) ?>">
+                                            <i class="bi bi-envelope text-muted" style="font-size: 0.85rem;"></i>
+                                            <span class="text-truncate"><?= htmlspecialchars($sup['email']) ?></span>
+                                        </a>
                                     <?php endif; ?>
                                 </td>
-                                <!-- CRUD Action Buttons -->
+                                <td>
+                                    <?php if (!empty($sup['gstin'])): ?>
+                                        <span class="badge bg-light text-dark border font-monospace px-2 py-1" style="font-size: 0.8rem; letter-spacing: 0.5px;">
+                                            <?= htmlspecialchars($sup['gstin']) ?>
+                                        </span>
+                                    <?php else: ?>
+                                        <span class="text-muted small fst-italic">Unregistered</span>
+                                    <?php endif; ?>
+                                </td>
+                                <td>
+                                    <div class="fw-semibold text-dark small d-flex align-items-center gap-1">
+                                        <i class="bi bi-geo-alt-fill text-danger" style="font-size: 0.8rem;"></i>
+                                        <span><?= htmlspecialchars($sup['district'] ?: ($sup['city'] ?: '-')) ?></span>
+                                        <span class="badge bg-light text-secondary border ms-1 py-0 px-1" style="font-size: 0.7rem; font-weight: normal;"><?= htmlspecialchars($sup['state'] ?: 'Tamil Nadu') ?></span>
+                                    </div>
+                                    <div class="small text-muted text-truncate mt-1" style="max-width: 220px;" title="<?= htmlspecialchars($sup['address'] ?: '') ?>">
+                                        <?= htmlspecialchars($sup['address'] ?: '-') ?>
+                                    </div>
+                                </td>
+                                <td class="text-center">
+                                    <?php if (($sup['status'] ?? 'active') === 'active'): ?>
+                                        <span class="badge bg-success-subtle text-success border border-success px-2 py-1">Active</span>
+                                    <?php else: ?>
+                                        <span class="badge bg-secondary-subtle text-secondary border px-2 py-1">Inactive</span>
+                                    <?php endif; ?>
+                                </td>
+                                <!-- CRUD & View Action Buttons -->
                                 <td class="text-end pe-3">
-                                    <div class="btn-group btn-group-sm">
+                                    <div class="btn-group btn-group-sm" role="group">
                                         <button type="button" class="btn btn-outline-info py-1 px-2"
-                                                title="View Supplier Profile"
+                                                title="View Supplier Details"
                                                 onclick="openViewSupplierModal(<?= htmlspecialchars(json_encode($sup)) ?>)">
                                             <i class="bi bi-eye"></i>
                                         </button>
@@ -444,88 +463,130 @@
     </div>
 </div>
 
-<!-- Modal 4: View Supplier Profile -->
+<!-- Modal 4: View Supplier Details -->
 <div class="modal fade" id="modalViewSupplier" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
-            <div class="modal-header border-bottom px-4 py-3 bg-light">
-                <div class="d-flex align-items-center gap-2">
-                    <span style="width: 36px; height: 36px; background: #e0f2fe; color: #0284c7; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1.15rem;">
-                        <i class="bi bi-building"></i>
-                    </span>
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header border-bottom bg-light">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="rounded-circle p-2 bg-primary-subtle text-primary" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
+                        <i class="bi bi-building fs-4"></i>
+                    </div>
                     <div>
-                        <h6 class="modal-title fw-bold text-dark mb-0" id="view_supplier_name">Supplier Details</h6>
-                        <small class="badge bg-dark font-monospace" id="view_supplier_code"></small>
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            <h5 class="modal-title fw-bold text-dark mb-0" id="viewSupplierCompany"></h5>
+                            <span class="badge bg-dark font-monospace" id="viewSupplierCodeBadge"></span>
+                            <span class="badge" id="viewSupplierStatusBadge"></span>
+                        </div>
+                        <small class="text-muted" id="viewSupplierSubtitle"></small>
                     </div>
                 </div>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body p-4">
-                <div class="d-flex justify-content-between align-items-center p-3 rounded-3 mb-3" style="background: #f8fafc; border: 1px solid #e2e8f0;">
-                    <div>
-                        <span class="text-secondary small d-block">Company / Entity</span>
-                        <strong class="text-dark fs-6" id="view_supplier_company">-</strong>
+                <div class="row g-3">
+                    <!-- Column 1: Primary Vendor & Contact Info -->
+                    <div class="col-md-6">
+                        <div class="card h-100 border border-light-subtle rounded-3 shadow-none bg-light-subtle p-3">
+                            <h6 class="fw-bold text-dark mb-3 d-flex align-items-center gap-2">
+                                <i class="bi bi-person-lines-fill text-primary"></i> Contact & Representative
+                            </h6>
+                            <div class="mb-2">
+                                <label class="text-muted small fw-semibold d-block">Contact Person</label>
+                                <span class="fw-bold text-dark" id="viewSupplierContact"></span>
+                            </div>
+                            <div class="mb-2">
+                                <label class="text-muted small fw-semibold d-block">Phone Number</label>
+                                <a href="#" id="viewSupplierPhoneLink" class="text-decoration-none fw-semibold text-primary d-inline-flex align-items-center gap-1">
+                                    <i class="bi bi-telephone-fill"></i>
+                                    <span id="viewSupplierPhone"></span>
+                                </a>
+                            </div>
+                            <div class="mb-2">
+                                <label class="text-muted small fw-semibold d-block">Email Address</label>
+                                <a href="#" id="viewSupplierEmailLink" class="text-decoration-none text-dark d-inline-flex align-items-center gap-1">
+                                    <i class="bi bi-envelope-fill text-secondary"></i>
+                                    <span id="viewSupplierEmail"></span>
+                                </a>
+                            </div>
+                            <div id="viewSupplierConcernWrapper" class="mt-2 pt-2 border-top">
+                                <label class="text-muted small fw-semibold d-block">Operating Business Concern</label>
+                                <span class="badge bg-secondary-subtle text-secondary border mt-1" id="viewSupplierConcern"></span>
+                            </div>
+                        </div>
                     </div>
-                    <div class="text-end">
-                        <span class="text-secondary small d-block">Status</span>
-                        <span class="badge" id="view_supplier_status">Active</span>
+
+                    <!-- Column 2: Tax & Statutory Details -->
+                    <div class="col-md-6">
+                        <div class="card h-100 border border-light-subtle rounded-3 shadow-none bg-light-subtle p-3">
+                            <h6 class="fw-bold text-dark mb-3 d-flex align-items-center gap-2">
+                                <i class="bi bi-shield-check text-success"></i> Tax & GST Registration
+                            </h6>
+                            <div class="mb-2">
+                                <label class="text-muted small fw-semibold d-block">GSTIN (15-Character)</label>
+                                <div class="d-flex align-items-center gap-2 mt-1">
+                                    <span class="badge bg-white text-dark border font-monospace px-2 py-1 fs-6" id="viewSupplierGstin"></span>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" title="Copy GSTIN" onclick="copyViewGstin()">
+                                        <i class="bi bi-clipboard"></i> Copy
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="mb-2 mt-3">
+                                <label class="text-muted small fw-semibold d-block">GST Tax Category</label>
+                                <span class="badge" id="viewSupplierGstCategory"></span>
+                            </div>
+                            <div class="mb-2 mt-2">
+                                <label class="text-muted small fw-semibold d-block">Status in System</label>
+                                <span class="badge" id="viewSupplierStatusDesc"></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Column 3: Full Address Details (Full Width) -->
+                    <div class="col-12">
+                        <div class="card border border-light-subtle rounded-3 shadow-none bg-light-subtle p-3">
+                            <h6 class="fw-bold text-dark mb-2 d-flex align-items-center gap-2">
+                                <i class="bi bi-geo-alt-fill text-danger"></i> Factory / Mill & Billing Address
+                            </h6>
+                            <div class="row g-2">
+                                <div class="col-md-6">
+                                    <label class="text-muted small fw-semibold d-block">Street / Door No / Area</label>
+                                    <div class="text-dark fw-medium" id="viewSupplierAddress"></div>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="text-muted small fw-semibold d-block">District / City</label>
+                                    <div class="text-dark fw-bold" id="viewSupplierDistrict"></div>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="text-muted small fw-semibold d-block">State</label>
+                                    <div class="text-dark fw-bold" id="viewSupplierState"></div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
-
-                <ul class="list-group list-group-flush small">
-                    <li class="list-group-item px-0 d-flex justify-content-between">
-                        <span class="text-muted"><i class="bi bi-telephone text-primary me-2"></i>Phone:</span>
-                        <strong class="text-dark" id="view_supplier_phone">-</strong>
-                    </li>
-                    <li class="list-group-item px-0 d-flex justify-content-between">
-                        <span class="text-muted"><i class="bi bi-envelope text-primary me-2"></i>Email:</span>
-                        <strong class="text-dark" id="view_supplier_email">-</strong>
-                    </li>
-                    <li class="list-group-item px-0 d-flex justify-content-between">
-                        <span class="text-muted"><i class="bi bi-receipt text-primary me-2"></i>GSTIN:</span>
-                        <span class="badge bg-light text-dark border font-monospace" id="view_supplier_gstin">Unregistered</span>
-                    </li>
-                    <li class="list-group-item px-0 d-flex justify-content-between">
-                        <span class="text-muted"><i class="bi bi-geo text-primary me-2"></i>Location:</span>
-                        <span class="text-dark fw-semibold" id="view_supplier_location">-</span>
-                    </li>
-                    <li class="list-group-item px-0">
-                        <span class="text-muted d-block mb-1"><i class="bi bi-geo-alt text-primary me-2"></i>Address:</span>
-                        <div class="text-dark p-2 bg-light rounded" id="view_supplier_address">-</div>
-                    </li>
-                </ul>
             </div>
-            <div class="modal-footer border-top px-4 py-2 bg-light">
-                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
+            <div class="modal-footer border-top bg-light justify-content-between">
+                <div>
+                    <a href="<?= \App\Core\Controller::url('/m/purchase_billing') ?>" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-receipt me-1"></i> View Invoices
+                    </a>
+                    <a href="<?= \App\Core\Controller::url('/m/purchase_billing/create') ?>" class="btn btn-outline-primary btn-sm ms-1">
+                        <i class="bi bi-plus-circle me-1"></i> New Purchase Bill
+                    </a>
+                </div>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary fw-semibold" id="btnEditFromView">
+                        <i class="bi bi-pencil me-1"></i> Edit Supplier
+                    </button>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
 <script>
-function openViewSupplierModal(sup) {
-    if (!sup) return;
-    document.getElementById('view_supplier_name').innerText = sup.name || 'Supplier';
-    document.getElementById('view_supplier_code').innerText = sup.code || 'SUP';
-    document.getElementById('view_supplier_company').innerText = sup.company_name || 'Individual Vendor';
-    document.getElementById('view_supplier_phone').innerText = sup.phone || '-';
-    document.getElementById('view_supplier_email').innerText = sup.email || '-';
-    document.getElementById('view_supplier_gstin').innerText = sup.gstin || 'Unregistered';
-    document.getElementById('view_supplier_location').innerText = (sup.district || sup.city || '-') + ', ' + (sup.state || 'Tamil Nadu');
-    document.getElementById('view_supplier_address').innerText = sup.address || 'No street address specified';
-
-    const statusBadge = document.getElementById('view_supplier_status');
-    if (sup.status === 'active') {
-        statusBadge.className = 'badge bg-success';
-        statusBadge.innerText = 'Active';
-    } else {
-        statusBadge.className = 'badge bg-secondary';
-        statusBadge.innerText = 'Inactive';
-    }
-
-    const modal = new bootstrap.Modal(document.getElementById('modalViewSupplier'));
-    modal.show();
-}
 // Filter Suppliers Table
 document.addEventListener('DOMContentLoaded', function () {
     const searchInput = document.getElementById('supplierSearchInput');
@@ -541,12 +602,23 @@ document.addEventListener('DOMContentLoaded', function () {
         rows.forEach(function (row) {
             const name = row.dataset.name || '';
             const company = row.dataset.company || '';
+            const code = row.dataset.code || '';
             const phone = row.dataset.phone || '';
             const email = row.dataset.email || '';
             const gstin = row.dataset.gstin || '';
             const rowDistrict = row.dataset.district || '';
+            const address = row.dataset.address || '';
 
-            const matchesQuery = !query || name.includes(query) || company.includes(query) || phone.includes(query) || email.includes(query) || gstin.includes(query) || rowDistrict.includes(query);
+            const matchesQuery = !query ||
+                name.includes(query) ||
+                company.includes(query) ||
+                code.includes(query) ||
+                phone.includes(query) ||
+                email.includes(query) ||
+                gstin.includes(query) ||
+                rowDistrict.includes(query) ||
+                address.includes(query);
+
             const matchesDistrict = !district || rowDistrict === district;
 
             if (matchesQuery && matchesDistrict) {
@@ -592,7 +664,147 @@ document.addEventListener('DOMContentLoaded', function () {
             e.target.value = e.target.value.toUpperCase().replace(/[^0-9A-Z]/g, '').slice(0, 15);
         });
     }
+
+    // Edit button from inside view modal
+    const btnEditFromView = document.getElementById('btnEditFromView');
+    if (btnEditFromView) {
+        btnEditFromView.addEventListener('click', function() {
+            const viewModalEl = document.getElementById('modalViewSupplier');
+            const viewModalInstance = bootstrap.Modal.getInstance(viewModalEl);
+            if (viewModalInstance) {
+                viewModalInstance.hide();
+            }
+            if (currentViewSupplier) {
+                setTimeout(function() {
+                    openEditSupplierModal(currentViewSupplier);
+                }, 300);
+            }
+        });
+    }
 });
+
+let currentViewSupplier = null;
+
+// View Supplier Modal Handler
+function openViewSupplierModal(sup) {
+    currentViewSupplier = sup;
+
+    const company = sup.company_name || sup.name || 'Unnamed Supplier';
+    const code = sup.code || 'SUP';
+    const contact = sup.name || '-';
+    const phone = sup.phone || '';
+    const email = sup.email || '';
+    const gstin = sup.gstin || '';
+    const address = sup.address || '-';
+    const district = sup.district || sup.city || '-';
+    const state = sup.state || 'Tamil Nadu';
+    const status = (sup.status || 'active').toLowerCase();
+    const concernName = sup.concern_name || (sup.concern_id ? 'Concern #' + sup.concern_id : '');
+
+    document.getElementById('viewSupplierCompany').textContent = company;
+    document.getElementById('viewSupplierCodeBadge').textContent = code;
+    document.getElementById('viewSupplierSubtitle').textContent = 'Contact: ' + contact + (concernName ? ' • ' + concernName : '');
+    document.getElementById('viewSupplierContact').textContent = contact;
+
+    // Status badge
+    const statusBadge = document.getElementById('viewSupplierStatusBadge');
+    const statusDesc = document.getElementById('viewSupplierStatusDesc');
+    if (status === 'active') {
+        statusBadge.className = 'badge bg-success-subtle text-success border border-success';
+        statusBadge.textContent = 'Active';
+        statusDesc.className = 'badge bg-success-subtle text-success border border-success';
+        statusDesc.textContent = 'Active Vendor (Eligible for Purchase Orders & Bills)';
+    } else {
+        statusBadge.className = 'badge bg-secondary-subtle text-secondary border';
+        statusBadge.textContent = 'Inactive';
+        statusDesc.className = 'badge bg-secondary-subtle text-secondary border';
+        statusDesc.textContent = 'Archived / Inactive (Disabled from new purchases)';
+    }
+
+    // Phone
+    const phoneLink = document.getElementById('viewSupplierPhoneLink');
+    if (phone) {
+        phoneLink.href = 'tel:' + phone;
+        document.getElementById('viewSupplierPhone').textContent = phone;
+        phoneLink.style.display = 'inline-flex';
+    } else {
+        document.getElementById('viewSupplierPhone').textContent = 'Not Provided';
+        phoneLink.href = '#';
+    }
+
+    // Email
+    const emailLink = document.getElementById('viewSupplierEmailLink');
+    if (email) {
+        emailLink.href = 'mailto:' + email;
+        document.getElementById('viewSupplierEmail').textContent = email;
+        emailLink.style.display = 'inline-flex';
+    } else {
+        document.getElementById('viewSupplierEmail').textContent = 'Not Provided';
+        emailLink.href = '#';
+    }
+
+    // Concern
+    const concernWrapper = document.getElementById('viewSupplierConcernWrapper');
+    if (concernName) {
+        document.getElementById('viewSupplierConcern').textContent = concernName;
+        concernWrapper.style.display = 'block';
+    } else {
+        concernWrapper.style.display = 'none';
+    }
+
+    // GSTIN
+    const gstinEl = document.getElementById('viewSupplierGstin');
+    const gstCatEl = document.getElementById('viewSupplierGstCategory');
+    if (gstin) {
+        gstinEl.textContent = gstin;
+        const isTn = state.toLowerCase().includes('tamil') || gstin.startsWith('33');
+        if (isTn) {
+            gstCatEl.className = 'badge bg-primary-subtle text-primary border';
+            gstCatEl.textContent = 'Intra-State GST (CGST + SGST @ State Rate)';
+        } else {
+            gstCatEl.className = 'badge bg-info-subtle text-info border';
+            gstCatEl.textContent = 'Inter-State GST (IGST applicable)';
+        }
+    } else {
+        gstinEl.textContent = 'Not Registered';
+        gstCatEl.className = 'badge bg-light text-muted border';
+        gstCatEl.textContent = 'Unregistered Vendor (No Input Tax Credit)';
+    }
+
+    // Address
+    document.getElementById('viewSupplierAddress').textContent = address;
+    document.getElementById('viewSupplierDistrict').textContent = district;
+    document.getElementById('viewSupplierState').textContent = state;
+
+    const modal = new bootstrap.Modal(document.getElementById('modalViewSupplier'));
+    modal.show();
+}
+
+function copyViewGstin() {
+    if (!currentViewSupplier || !currentViewSupplier.gstin) {
+        alert('No GSTIN registered for this supplier.');
+        return;
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(currentViewSupplier.gstin).then(function() {
+            alert('GSTIN copied to clipboard: ' + currentViewSupplier.gstin);
+        }).catch(function() {
+            fallbackCopy(currentViewSupplier.gstin);
+        });
+    } else {
+        fallbackCopy(currentViewSupplier.gstin);
+    }
+}
+
+function fallbackCopy(text) {
+    const temp = document.createElement('textarea');
+    temp.value = text;
+    document.body.appendChild(temp);
+    temp.select();
+    document.execCommand('copy');
+    document.body.removeChild(temp);
+    alert('GSTIN copied to clipboard: ' + text);
+}
 
 // Edit Supplier Modal Handler
 function openEditSupplierModal(sup) {

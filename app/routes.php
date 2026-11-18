@@ -11,6 +11,7 @@ use App\Controllers\LabelController;
 use App\Controllers\StockController;
 use App\Controllers\InwardController;
 use App\Controllers\PurchaseController;
+use App\Controllers\PurchaseStockController;
 use App\Controllers\SalesController;
 use App\Controllers\ProductionController;
 use App\Controllers\FinanceController;
@@ -78,6 +79,9 @@ $router->post('/m/variants/delete', [VariantController::class, 'delete'], 'stock
 $router->get('/m/label_generation', [LabelController::class, 'index'], 'label_generation', 'view');
 $router->get('/m/label_generation/export', [LabelController::class, 'exportJobs'], 'label_generation', 'view');
 $router->post('/m/label_generation/generate', [LabelController::class, 'generate'], 'label_generation', 'add');
+$router->post('/m/label_generation/map_variant', [LabelController::class, 'mapVariant'], 'label_generation', 'edit');
+$router->post('/m/label/add_to_stock', [LabelController::class, 'addToStock'], 'label_generation', 'edit');
+$router->post('/m/label_generation/add_to_stock', [LabelController::class, 'addToStock'], 'label_generation', 'edit');
 $router->get('/scan', [LabelController::class, 'scanPage'], 'stocks', 'view');
 $router->get('/api/qr/lookup', [LabelController::class, 'lookup'], 'stocks', 'view');
 $router->post('/api/qr/lookup', [LabelController::class, 'lookup'], 'stocks', 'view');
@@ -110,8 +114,15 @@ $router->post('/m/purchase_billing/update', [PurchaseController::class, 'updateB
 $router->post('/m/purchase_billing/update_status', [PurchaseController::class, 'updateBillStatus'], 'purchase_billing', 'edit');
 $router->post('/m/purchase_billing/delete', [PurchaseController::class, 'deleteBill'], 'purchase_billing', 'delete');
 $router->post('/m/purchase_billing/save_hsn', [PurchaseController::class, 'saveHsnAjax'], 'purchase_billing', 'add');
+$router->post('/m/purchase_billing/save_roll_spec', [PurchaseController::class, 'saveRollSpecAjax'], 'purchase_billing', 'add');
 $router->get('/m/purchase_billing/view', [PurchaseController::class, 'viewBill'], 'purchase_billing', 'view');
 $router->get('/m/purchase_billing/download_items', [PurchaseController::class, 'downloadItems'], 'purchase_billing', 'view');
+
+// Purchase Stocks (3 Sections: Rolls, Trims/Other Garments, Finished Goods)
+$router->get('/m/purchase_stocks', [PurchaseStockController::class, 'index'], 'purchase_stocks', 'view');
+$router->post('/m/purchase_stocks/update_consolidated_roll', [PurchaseStockController::class, 'updateConsolidatedRoll'], 'purchase_stocks', 'edit');
+$router->get('/m/purchase_stocks/export', [PurchaseStockController::class, 'export'], 'purchase_stocks', 'view');
+
 $router->get('/m/purchase_damage', [PurchaseController::class, 'damage'], 'purchase_damage', 'view');
 $router->get('/m/purchase_damage/export', [PurchaseController::class, 'exportDamage'], 'purchase_damage', 'view');
 $router->post('/m/purchase_damage/store', [PurchaseController::class, 'storeDamage'], 'purchase_damage', 'add');
@@ -173,6 +184,30 @@ $router->get('/m/catalog_program/export', [ProductionController::class, 'exportC
 $router->post('/m/catalog_program/store', [ProductionController::class, 'storeProgram'], 'catalog_program', 'add');
 $router->post('/m/catalog_program/update', [ProductionController::class, 'updateProgram'], 'catalog_program', 'edit');
 $router->post('/m/catalog_program/delete', [ProductionController::class, 'deleteProgram'], 'catalog_program', 'delete');
+$router->get('/production/catalog', [ProductionController::class, 'catalogProgram'], 'catalog_program', 'view');
+$router->get('/m/catalog', [ProductionController::class, 'catalogProgram'], 'catalog_program', 'view');
+$router->get('/production/catalog/create', [ProductionController::class, 'createStyle'], 'catalog_program', 'add');
+$router->get('/m/catalog/create', [ProductionController::class, 'createStyle'], 'catalog_program', 'add');
+$router->post('/production/catalog/store', [ProductionController::class, 'storeStyle'], 'catalog_program', 'add');
+$router->post('/m/catalog/store', [ProductionController::class, 'storeStyle'], 'catalog_program', 'add');
+$router->get('/production/catalog/edit', [ProductionController::class, 'editStyle'], 'catalog_program', 'edit');
+$router->get('/m/catalog/edit', [ProductionController::class, 'editStyle'], 'catalog_program', 'edit');
+$router->post('/production/catalog/update', [ProductionController::class, 'updateStyle'], 'catalog_program', 'edit');
+$router->post('/m/catalog/update', [ProductionController::class, 'updateStyle'], 'catalog_program', 'edit');
+$router->post('/production/catalog/delete', [ProductionController::class, 'deleteStyle'], 'catalog_program', 'delete');
+$router->post('/m/catalog/delete', [ProductionController::class, 'deleteStyle'], 'catalog_program', 'delete');
+$router->get('/production/programs', [ProductionController::class, 'programsList'], 'catalog_program', 'view');
+$router->get('/m/programs', [ProductionController::class, 'programsList'], 'catalog_program', 'view');
+
+// APIs for 3-Tier Hierarchy & HSN Lookups
+$router->get('/api/categories/subcategories', [ProductionController::class, 'getSubcategoriesAjax'], 'catalog_program', 'view');
+$router->get('/api/categories/subsubcategories', [ProductionController::class, 'getSubSubcategoriesAjax'], 'catalog_program', 'view');
+$router->post('/api/categories/quick-add', [ProductionController::class, 'quickAddCategoryAjax'], 'catalog_program', 'add');
+$router->post('/api/subcategories/quick-add', [ProductionController::class, 'quickAddSubcategoryAjax'], 'catalog_program', 'add');
+$router->post('/api/subsubcategories/quick-add', [ProductionController::class, 'quickAddSubSubcategoryAjax'], 'catalog_program', 'add');
+$router->get('/api/hsn/search', [ProductionController::class, 'searchHsnAjax'], 'catalog_program', 'view');
+$router->post('/api/hsn/quick-add', [ProductionController::class, 'quickAddHsnAjax'], 'catalog_program', 'add');
+$router->get('/api/catalog/style-details', [ProductionController::class, 'styleDetailsAjax'], 'catalog_program', 'view');
 $router->get('/m/cutting_wastage', [ProductionController::class, 'cutting'], 'cutting_wastage', 'view');
 $router->get('/m/cutting_wastage/export', [ProductionController::class, 'exportCutting'], 'cutting_wastage', 'view');
 $router->post('/m/cutting_wastage/store', [ProductionController::class, 'storeCutting'], 'cutting_wastage', 'add');
