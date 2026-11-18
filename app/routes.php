@@ -196,8 +196,23 @@ $router->post('/api/subsubcategories/quick-add', [ProductionController::class, '
 $router->get('/api/hsn/search', [ProductionController::class, 'searchHsnAjax'], 'catalog_program', 'view');
 $router->post('/api/hsn/quick-add', [ProductionController::class, 'quickAddHsnAjax'], 'catalog_program', 'add');
 $router->get('/api/catalog/style-details', [ProductionController::class, 'styleDetailsAjax'], 'catalog_program', 'view');
-$router->get('/m/cutting_wastage', [ProductionController::class, 'cutting'], 'cutting_wastage', 'view');
-$router->post('/m/cutting_wastage/store', [ProductionController::class, 'storeCutting'], 'cutting_wastage', 'add');
+// Cutting & Wastage Flow (Matching UI Images 1, 2, 3)
+$router->get('/production/cutting', [ProductionController::class, 'cuttingIndex'], 'cutting_wastage', 'view');
+$router->get('/m/cutting_wastage', [ProductionController::class, 'cuttingIndex'], 'cutting_wastage', 'view');
+$router->get('/production/cutting/create', [ProductionController::class, 'createCutting'], 'cutting_wastage', 'add');
+$router->post('/production/cutting/store', [ProductionController::class, 'storeCuttingBatch'], 'cutting_wastage', 'add');
+$router->get('/production/cutting/view', [ProductionController::class, 'viewCuttingBatch'], 'cutting_wastage', 'view');
+$router->post('/production/cutting/delete', [ProductionController::class, 'deleteCuttingBatch'], 'cutting_wastage', 'delete');
+
+// Cutting API Endpoints
+$router->get('/api/cutting/program-details', [ProductionController::class, 'apiCuttingProgramDetails'], 'cutting_wastage', 'view');
+$router->post('/api/cutting/quick-master', [ProductionController::class, 'apiQuickAddCuttingMaster'], 'cutting_wastage', 'add');
+
+// Wastage Selling (Image 3)
+$router->get('/production/cutting/wastage', [ProductionController::class, 'cuttingWastageIndex'], 'cutting_wastage', 'view');
+$router->get('/production/wastage-selling', [ProductionController::class, 'cuttingWastageIndex'], 'cutting_wastage', 'view');
+$router->post('/production/cutting/wastage/sell', [ProductionController::class, 'storeWastageSale'], 'cutting_wastage', 'add');
+$router->post('/production/wastage-selling/store', [ProductionController::class, 'storeWastageSale'], 'cutting_wastage', 'add');
 $router->get('/m/stitching_wastage', [ProductionController::class, 'stitching'], 'stitching_wastage', 'view');
 $router->post('/m/stitching_wastage/store', [ProductionController::class, 'storeStitching'], 'stitching_wastage', 'add');
 $router->get('/m/qc_stocks', [ProductionController::class, 'qc'], 'qc_stocks', 'view');

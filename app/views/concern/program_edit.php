@@ -179,9 +179,13 @@
                             <span class="small text-secondary">Total Allocated Qty:</span>
                             <span class="fw-bold font-monospace text-primary fs-6" id="summaryTotalQty">0.00 kg</span>
                         </div>
+                        <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                            <span class="small text-secondary">Total Fabric Weight:</span>
+                            <span class="fw-bold font-monospace text-info fs-6" id="summaryTotalWeight">0.00 kg</span>
+                        </div>
                         <div class="d-flex justify-content-between align-items-center py-2">
-                            <span class="small text-secondary">Target Production Pieces:</span>
-                            <span class="fw-bold font-monospace text-success fs-6" id="summaryTotalPieces">0 pcs</span>
+                            <span class="small text-secondary">Estimated Fabric Value:</span>
+                            <span class="fw-bold font-monospace text-success fs-6" id="summaryTotalValue">₹0.00</span>
                         </div>
                     </div>
                 </div>
@@ -216,103 +220,181 @@ function createRollCardHtml(index, rollData = null) {
     const cardId = `rollCard_${index}`;
     const selectedRollId = rollData ? rollData.purchase_bill_item_id : '';
     const allocatedQtyVal = rollData ? parseFloat(rollData.allocated_qty) : '';
+    const rollWeightVal = rollData && rollData.roll_weight ? parseFloat(rollData.roll_weight) : '0.00';
+    const rollPriceVal = rollData && rollData.roll_price ? parseFloat(rollData.roll_price) : '0.00';
     const targetPiecesVal = rollData ? parseInt(rollData.target_pieces) : 0;
     const selectedCatId = rollData ? rollData.category_id : '';
     const selectedSubcatId = rollData ? rollData.subcategory_id : '';
     const selectedSubSubId = rollData ? rollData.sub_sub_category_id : '';
     const selectedCatalogId = rollData ? rollData.catalog_id : '';
 
-    let rollOptionsHtml = '<option value="">-- Select Purchased Fabric Roll --</option>';
+    let rollOptionsHtml = '<option value="">-- Select Fabric Roll --</option>';
     let selectedRollObject = null;
 
+    // Group rolls by specification (Design/Item Name & Color) matching Purchase Stocks Consolidated Registry
+    const specGroups = {};
     AVAILABLE_ROLLS.forEach(r => {
-        const isSelected = selectedRollId && (parseInt(r.id) === parseInt(selectedRollId));
-        if (isSelected) selectedRollObject = r;
-        const colorText = r.color ? ` - ${r.color}` : '';
-        const tagText = r.item_code ? `[${r.item_code}] ` : '';
-        rollOptionsHtml += `<option value="${r.id}" ${isSelected ? 'selected' : ''} data-remaining="${r.remaining_qty}" data-total="${r.total_qty}" data-unit="${r.unit}" data-color="${r.color || ''}" data-name="${r.item_name || ''}">
-            ${tagText}${r.item_name}${colorText} (${r.out_of_label})
-        </option>`;
+        const specName = (r.design_name || r.pattern || r.item_name || 'Fabric Roll').toUpperCase();
+        const specColor = (r.color || 'STANDARD').toUpperCase();
+        const groupKey = `${specName} • ${specColor}`;
+        if (!specGroups[groupKey]) {
+            specGroups[groupKey] = {
+                title: groupKey,
+                totalStock: r.design_accumulated_stock || r.remaining_qty,
+                unit: r.unit || 'kg',
+                unitPrice: r.unit_price || 0,
+                billNo: r.bill_no || '',
+                supplier: r.supplier_display || '',
+                rolls: []
+            };
+        }
+        specGroups[groupKey].rolls.push(r);
     });
+
+    for (const [key, grp] of Object.entries(specGroups)) {
+        const groupBill = grp.billNo ? ` • Bill #${grp.billNo}` : '';
+        const groupSup = grp.supplier ? ` • ${grp.supplier}` : '';
+        const groupRate = grp.unitPrice > 0 ? ` • ₹${grp.unitPrice.toFixed(2)}` : '';
+        const optgroupLabel = `${grp.title} (Accumulated Stock: ${grp.totalStock.toFixed(2)} ${grp.unit}${groupRate}${groupBill}${groupSup})`;
+
+        rollOptionsHtml += `<optgroup label="${optgroupLabel}">`;
+        grp.rolls.forEach((r, bIdx) => {
+            const isSelected = selectedRollId && (String(r.id) === String(selectedRollId));
+            if (isSelected) selectedRollObject = r;
+            const tagText = r.tag_code ? `[${r.tag_code}] ` : (r.item_code ? `[${r.item_code}] ` : `Roll #${r.id} `);
+            const colorText = r.color ? ` - ${r.color}` : '';
+            const priceText = r.unit_price > 0 ? ` • ₹${parseFloat(r.unit_price).toFixed(2)}` : '';
+            const stockStr = ` • Stock: ${parseFloat(r.remaining_qty).toFixed(2)} ${r.unit || 'kg'}`;
+            const billInfo = r.bill_no ? ` • Bill #${r.bill_no}` : '';
+            const supInfo = r.supplier_display ? ` • ${r.supplier_display}` : '';
+            const batchNum = grp.rolls.length > 1 ? ` (Batch #${bIdx + 1} of ${grp.totalStock.toFixed(2)} ${grp.unit})` : '';
+
+            rollOptionsHtml += `<option value="${r.id}" ${isSelected ? 'selected' : ''} 
+                data-remaining="${r.remaining_qty}" 
+                data-stock="${r.remaining_qty}" 
+                data-accumulated="${r.design_accumulated_stock || r.remaining_qty}"
+                data-total="${r.total_qty}" 
+                data-unit="${r.unit || 'kg'}" 
+                data-color="${r.color || ''}" 
+                data-pattern="${r.pattern || ''}" 
+                data-name="${r.item_name || ''}"
+                data-price="${r.unit_price || 0.00}"
+                data-weight="${r.weight || 0.00}"
+                data-catalog-id="${r.catalog_id || ''}"
+                data-catalog-code="${r.catalog_style_code || ''}"
+                data-catalog-name="${r.catalog_name || ''}"
+                data-category-id="${r.category_id || ''}"
+                data-subcategory-id="${r.subcategory_id || ''}"
+                data-subsubcategory-id="${r.sub_sub_category_id || ''}"
+                data-hierarchy="${r.hierarchy_path || ''}">
+                ${tagText}${r.item_name}${colorText}${stockStr}${batchNum}${priceText}${billInfo}${supInfo}
+            </option>`;
+        });
+        rollOptionsHtml += `</optgroup>`;
+    }
 
     let catOptionsHtml = '<option value="">-- Select Main Category --</option>';
     CATEGORIES.forEach(c => {
-        const sel = (selectedCatId && parseInt(c.id) === parseInt(selectedCatId)) ? 'selected' : '';
-        catOptionsHtml += `<option value="${c.id}" ${sel}>${c.name} (${c.code || 'CAT'})</option>`;
+        const sel = (selectedCatId && String(c.id) === String(selectedCatId)) ? 'selected' : '';
+        catOptionsHtml += `<option value="${c.id}" ${sel}>${c.name}</option>`;
     });
 
-    let catalogOptionsHtml = '<option value="">-- Select Catalog Style (Optional) --</option>';
+    let catalogOptionsHtml = '<option value="">-- Select Product Style (Optional) --</option>';
     CATALOGS.forEach(cat => {
-        const sel = (selectedCatalogId && parseInt(cat.id) === parseInt(selectedCatalogId)) ? 'selected' : '';
-        catalogOptionsHtml += `<option value="${cat.id}" ${sel}>[${cat.style_code}] ${cat.name}</option>`;
+        const sel = (selectedCatalogId && String(cat.id) === String(selectedCatalogId)) ? 'selected' : '';
+        catalogOptionsHtml += `<option value="${cat.id}" ${sel}>${cat.style_code ? `[${cat.style_code}] ` : ''}${cat.name}</option>`;
     });
+
+    const initialStock = selectedRollObject ? parseFloat(selectedRollObject.remaining_qty).toFixed(2) + ' ' + (selectedRollObject.unit || 'kg') : '0 pcs';
 
     return `
-    <div class="card border rounded-3 p-3 position-relative roll-card shadow-xs" id="${cardId}" data-index="${index}">
-        <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
-            <div class="d-flex align-items-center gap-2">
-                <span class="badge bg-primary text-white font-monospace px-2 py-1 roll-index-badge">Roll #${index + 1}</span>
-                <span class="badge bg-light text-dark border font-monospace roll-tag-badge" id="tagBadge_${index}">${rollData ? (rollData.roll_piece_tag || 'Purchased Roll') : 'New Roll'}</span>
-            </div>
-            <button type="button" class="btn btn-outline-danger btn-sm py-1 px-2.5 rounded-2 btn-remove-roll" onclick="removeRollCard('${cardId}')">
+    <div class="card border rounded-3 p-3 bg-white roll-card shadow-xs mb-3" id="${cardId}" data-index="${index}">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace px-2.5 py-1 roll-index-badge">Roll #${index + 1}</span>
+            <button type="button" class="btn btn-outline-danger btn-sm py-0.5 px-2 btn-remove-roll" onclick="removeRollCard('${cardId}')" title="Remove this roll">
                 <i class="bi bi-trash me-1"></i> Remove
             </button>
         </div>
 
-        <div class="row g-3">
-            <div class="col-md-7">
-                <label class="form-label small fw-semibold text-dark mb-1">Select Purchased Fabric Roll <span class="text-danger">*</span></label>
-                <select name="rolls[${index}][purchase_bill_item_id]" class="form-select form-select-sm select-roll-item" id="rollSelect_${index}" onchange="handleRollSelectionChange(${index})" required>
-                    ${rollOptionsHtml}
-                </select>
-                <div class="mt-1.5 d-flex align-items-center gap-1.5" id="outOfQtyContainer_${index}">
-                    <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle py-1 px-2 out-of-qty-badge font-monospace" id="outOfQtyBadge_${index}">
-                        ${selectedRollObject ? selectedRollObject.out_of_label + ' available' : 'Select a roll to view out of qty balance'}
-                    </span>
-                </div>
-            </div>
+        <!-- 1. Select Raw Material Roll * -->
+        <div class="mb-3">
+            <label class="form-label small fw-semibold text-dark mb-1">Select Raw Material Roll <span class="text-danger">*</span></label>
+            <select name="rolls[${index}][purchase_bill_item_id]" class="form-select select-roll-item" id="rollSelect_${index}" onchange="handleRollSelectionChange(${index})" required>
+                ${rollOptionsHtml}
+            </select>
+        </div>
 
-            <div class="col-md-3">
-                <label class="form-label small fw-semibold text-dark mb-1">Allocated Qty <span class="text-danger">*</span></label>
+        <!-- 2. Roll Qty, Roll Weight, Roll Price matching Image 1 -->
+        <div class="row g-2 mb-3">
+            <div class="col-md-4">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <label class="form-label small fw-semibold text-dark mb-0">Roll Qty (<span class="roll-unit-label" id="unitLabel_${index}">${selectedRollObject ? selectedRollObject.unit : 'pcs'}</span>) <span class="text-danger">*</span></label>
+                    <span class="roll-stock-badge text-muted small" id="stockBadge_${index}" style="font-size: 0.72rem;">Stock: ${initialStock}</span>
+                </div>
                 <div class="input-group input-group-sm">
-                    <input type="number" step="0.01" min="0.01" name="rolls[${index}][allocated_qty]" id="allocatedQty_${index}" class="form-control font-monospace fw-bold input-allocated-qty" value="${allocatedQtyVal}" placeholder="0.00" oninput="validateRollAllocatedQty(${index})" required>
-                    <span class="input-group-text roll-unit-label" id="unitLabel_${index}">${selectedRollObject ? selectedRollObject.unit : 'kg'}</span>
+                    <span class="input-group-text bg-light text-muted"><i class="bi bi-box-seam"></i></span>
+                    <input type="number" step="0.01" min="0.01" name="rolls[${index}][allocated_qty]" id="allocatedQty_${index}" class="form-control input-allocated-qty" value="${allocatedQtyVal}" placeholder="Select Roll" oninput="validateRollAllocatedQty(${index})" required>
+                    <span class="input-group-text bg-light text-muted roll-unit-text" id="unitText_${index}">${selectedRollObject ? selectedRollObject.unit : 'pcs'}</span>
                 </div>
-                <div class="text-danger small mt-0.5 d-none qty-error-feedback" id="qtyError_${index}"></div>
+                <div class="text-danger small mt-0.5 d-none qty-error-feedback" id="qtyError_${index}" style="font-size: 0.70rem;"></div>
             </div>
 
-            <div class="col-md-2">
-                <label class="form-label small fw-semibold text-dark mb-1">Target Pcs</label>
-                <input type="number" min="0" step="1" name="rolls[${index}][target_pieces]" id="targetPieces_${index}" class="form-control form-control-sm font-monospace input-target-pieces" value="${targetPiecesVal}" oninput="recalcSummary()">
+            <div class="col-md-4">
+                <label class="form-label small fw-semibold text-dark mb-1">Roll Weight (kg)</label>
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text bg-light text-muted"><i class="bi bi-speedometer2"></i></span>
+                    <input type="number" step="0.01" min="0.00" name="rolls[${index}][roll_weight]" id="rollWeight_${index}" class="form-control input-roll-weight bg-light fw-semibold" value="${rollWeightVal}" readonly tabindex="-1" title="Calculated dynamically based on Roll Qty">
+                    <span class="input-group-text bg-light text-muted">kg</span>
+                </div>
             </div>
 
-            <!-- 3-TIER CATEGORY HIERARCHY -->
-            <div class="col-12 mt-2 pt-2 border-top">
-                <div class="small fw-semibold text-secondary mb-2 d-flex align-items-center gap-1">
-                    <i class="bi bi-diagram-3 text-primary"></i> 3-Tier Catalog Category Configuration (This Roll)
+            <div class="col-md-4">
+                <label class="form-label small fw-semibold text-dark mb-1">Roll Price (₹)</label>
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text bg-light text-muted">₹</span>
+                    <input type="number" step="0.01" min="0.00" name="rolls[${index}][roll_price]" id="rollPrice_${index}" class="form-control input-roll-price font-monospace bg-light fw-bold" value="${rollPriceVal}" readonly tabindex="-1" title="Calculated dynamically based on Roll Qty">
                 </div>
-                <div class="row g-2">
-                    <div class="col-md-3">
-                        <select name="rolls[${index}][category_id]" id="catSelect_${index}" class="form-select form-select-sm select-category" onchange="loadSubcategoriesForRoll(${index})">
-                            ${catOptionsHtml}
-                        </select>
-                    </div>
-                    <div class="col-md-3">
-                        <select name="rolls[${index}][subcategory_id]" id="subcatSelect_${index}" class="form-select form-select-sm select-subcategory" onchange="loadSubSubcategoriesForRoll(${index})">
-                            <option value="">-- Subcategory --</option>
-                        </select>
-                    </div>
-                    <div class="col-md-3">
-                        <select name="rolls[${index}][sub_sub_category_id]" id="subsubSelect_${index}" class="form-select form-select-sm select-subsubcategory">
-                            <option value="">-- Sub-Subcategory --</option>
-                        </select>
-                    </div>
-                    <div class="col-md-3">
-                        <select name="rolls[${index}][catalog_id]" id="catalogSelect_${index}" class="form-select form-select-sm select-catalog">
-                            ${catalogOptionsHtml}
-                        </select>
-                    </div>
+            </div>
+        </div>
+
+        <input type="hidden" name="rolls[${index}][target_pieces]" class="input-target-pieces" value="${targetPiecesVal}">
+
+        <!-- 3. Catalog Hierarchy for this Roll matching Image 1 -->
+        <div class="card border rounded-3 p-3 bg-light">
+            <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
+                <div class="d-flex align-items-center gap-1.5 small fw-bold text-primary">
+                    <i class="bi bi-diagram-3"></i>
+                    <span>Catalog Hierarchy for this Roll</span>
                 </div>
+                <span class="badge bg-white text-secondary border roll-catalog-badge" id="catalogBadge_${index}">No Catalog Selected</span>
+            </div>
+
+            <div class="row g-2 mb-2">
+                <div class="col-md-4">
+                    <label class="form-label small text-muted mb-1">Main Category</label>
+                    <select name="rolls[${index}][category_id]" id="catSelect_${index}" class="form-select form-select-sm select-category" onchange="loadSubcategoriesForRoll(${index})">
+                        ${catOptionsHtml}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small text-muted mb-1">Sub Category</label>
+                    <select name="rolls[${index}][subcategory_id]" id="subcatSelect_${index}" class="form-select form-select-sm select-subcategory" onchange="loadSubSubcategoriesForRoll(${index})">
+                        <option value="">-- Select Category First --</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small text-muted mb-1">Sub Sub Category</label>
+                    <select name="rolls[${index}][sub_sub_category_id]" id="subsubSelect_${index}" class="form-select form-select-sm select-subsubcategory" onchange="updateHierarchyBadgeFromCats(${index})">
+                        <option value="">-- Select Sub Category First --</option>
+                    </select>
+                </div>
+            </div>
+
+            <div>
+                <label class="form-label small text-muted mb-1">Product Style / Catalog Style</label>
+                <select name="rolls[${index}][catalog_id]" id="catalogSelect_${index}" class="form-select form-select-sm select-catalog" onchange="handleCatalogSelectChange(${index})">
+                    ${catalogOptionsHtml}
+                </select>
             </div>
         </div>
     </div>
@@ -329,8 +411,61 @@ function addRollCard(rollData = null) {
         loadSubcategoriesForRoll(index, rollData.subcategory_id, rollData.sub_sub_category_id);
     }
     
+    // Auto-update catalog badge if roll had catalog
+    if (rollData && rollData.catalog_id) {
+        const catBadge = document.getElementById(`catalogBadge_${index}`);
+        const catSelect = document.getElementById(`catalogSelect_${index}`);
+        if (catBadge && catSelect && catSelect.selectedIndex > 0) {
+            catBadge.textContent = catSelect.options[catSelect.selectedIndex].text;
+            catBadge.className = 'badge bg-primary text-white border-0 roll-catalog-badge';
+        }
+    }
+    
+    if (rollData && rollData.purchase_bill_item_id) {
+        calculateEditCardWeightAndPrice(index);
+    }
+    
     recalcSummary();
     renumberCards();
+}
+
+function calculateEditCardWeightAndPrice(index) {
+    const select = document.getElementById(`rollSelect_${index}`);
+    const input = document.getElementById(`allocatedQty_${index}`);
+    const weightInput = document.getElementById(`rollWeight_${index}`);
+    const priceInput = document.getElementById(`rollPrice_${index}`);
+
+    if (!select || !weightInput || !priceInput) return;
+    const selectedOption = select.options[select.selectedIndex];
+    if (!selectedOption || !selectedOption.value) {
+        weightInput.value = '0.00';
+        priceInput.value = '0.00';
+        return;
+    }
+
+    const qty = parseFloat(input ? input.value : 0) || 0;
+    const unit = (selectedOption.dataset.unit || 'kg').toLowerCase();
+    const totalQty = parseFloat(selectedOption.dataset.total || 0);
+    const totalWeight = parseFloat(selectedOption.dataset.weight || 0);
+    const unitRate = parseFloat(selectedOption.dataset.price || 0);
+
+    // 1. Dynamic Weight Calculation based on selected Qty
+    let calcWeight = 0;
+    if (unit === 'kg') {
+        calcWeight = qty;
+    } else if (totalQty > 0 && totalWeight > 0) {
+        calcWeight = (qty / totalQty) * totalWeight;
+    } else if (totalWeight > 0) {
+        calcWeight = totalWeight;
+    }
+    weightInput.value = calcWeight.toFixed(2);
+
+    // 2. Dynamic Price Calculation based on selected Qty
+    let calcPrice = 0;
+    if (unitRate > 0 && qty > 0) {
+        calcPrice = qty * unitRate;
+    }
+    priceInput.value = calcPrice.toFixed(2);
 }
 
 function removeRollCard(cardId) {
@@ -357,59 +492,162 @@ function renumberCards() {
 function handleRollSelectionChange(index) {
     const select = document.getElementById(`rollSelect_${index}`);
     const selectedOption = select.options[select.selectedIndex];
-    const badge = document.getElementById(`outOfQtyBadge_${index}`);
+    const stockBadge = document.getElementById(`stockBadge_${index}`);
     const unitLabel = document.getElementById(`unitLabel_${index}`);
-    const tagBadge = document.getElementById(`tagBadge_${index}`);
+    const unitText = document.getElementById(`unitText_${index}`);
     const input = document.getElementById(`allocatedQty_${index}`);
+    const weightInput = document.getElementById(`rollWeight_${index}`);
+    const priceInput = document.getElementById(`rollPrice_${index}`);
+    const catalogBadge = document.getElementById(`catalogBadge_${index}`);
+    const catSelect = document.getElementById(`catSelect_${index}`);
+    const subcatSelect = document.getElementById(`subcatSelect_${index}`);
+    const subsubSelect = document.getElementById(`subsubSelect_${index}`);
+    const catalogSelect = document.getElementById(`catalogSelect_${index}`);
 
     if (!selectedOption || !selectedOption.value) {
-        badge.textContent = 'Select a roll to view out of qty balance';
-        badge.className = 'badge bg-secondary-subtle text-secondary border py-1 px-2 font-monospace';
-        tagBadge.textContent = 'Purchased Roll';
-        unitLabel.textContent = 'kg';
-        input.removeAttribute('max');
+        if (stockBadge) stockBadge.textContent = 'Stock: 0 pcs';
+        if (unitLabel) unitLabel.textContent = 'pcs';
+        if (unitText) unitText.textContent = 'pcs';
+        if (input) input.value = '';
+        if (weightInput) weightInput.value = '0.00';
+        if (priceInput) priceInput.value = '0.00';
+        if (catalogBadge) {
+            catalogBadge.textContent = 'No Catalog Selected';
+            catalogBadge.className = 'badge bg-white text-secondary border roll-catalog-badge';
+        }
+        recalcSummary();
         return;
     }
 
     const remaining = parseFloat(selectedOption.dataset.remaining || 0);
     const total = parseFloat(selectedOption.dataset.total || 0);
     const unit = selectedOption.dataset.unit || 'kg';
-    const tag = selectedOption.textContent.match(/\[(.*?)\]/);
+    const weight = parseFloat(selectedOption.dataset.weight || 0);
+    const price = parseFloat(selectedOption.dataset.price || 0);
 
-    tagBadge.textContent = tag ? tag[1] : `Roll #${selectedOption.value}`;
-    unitLabel.textContent = unit;
-    badge.textContent = `${remaining.toFixed(2)} ${unit} available out of ${total.toFixed(2)} ${unit} total`;
-    badge.className = 'badge bg-success-subtle text-success border border-success-subtle py-1 px-2 font-monospace';
+    if (unitLabel) unitLabel.textContent = unit;
+    if (unitText) unitText.textContent = unit;
 
-    input.setAttribute('max', remaining);
+    if (stockBadge) {
+        if (remaining > 0) {
+            stockBadge.innerHTML = `Stock: <strong class="text-success">${remaining.toFixed(2)} ${unit}</strong>`;
+        } else {
+            stockBadge.innerHTML = `Stock: <strong class="text-danger">0 ${unit} (Out of Stock)</strong>`;
+        }
+    }
+
+    if (input) {
+        if (!input.value || parseFloat(input.value) <= 0) {
+            input.value = remaining > 0 ? remaining.toFixed(2) : '0.00';
+        }
+        input.setAttribute('max', remaining);
+    }
+
+    calculateEditCardWeightAndPrice(index);
+
+    // Catalog auto-sync
+    const catId = selectedOption.dataset.categoryId;
+    const subcatId = selectedOption.dataset.subcategoryId;
+    const subsubcatId = selectedOption.dataset.subsubcategoryId;
+    const catalogId = selectedOption.dataset.catalogId;
+    const hierarchy = selectedOption.dataset.hierarchy;
+    const catCode = selectedOption.dataset.catalogCode;
+    const catName = selectedOption.dataset.catalogName;
+
+    if (catalogId && catalogSelect) {
+        catalogSelect.value = catalogId;
+        if (catalogBadge) {
+            catalogBadge.textContent = catCode ? `[${catCode}] ${catName}` : (catName || 'Mapped Catalog');
+            catalogBadge.className = 'badge bg-primary text-white border-0 roll-catalog-badge';
+        }
+    } else if (hierarchy && catalogBadge) {
+        catalogBadge.textContent = hierarchy;
+        catalogBadge.className = 'badge bg-info-subtle text-info-emphasis border border-info-subtle roll-catalog-badge';
+    } else if (catalogBadge) {
+        catalogBadge.textContent = 'No Catalog Selected';
+        catalogBadge.className = 'badge bg-white text-secondary border roll-catalog-badge';
+    }
+
+    if (catId && catSelect) {
+        catSelect.value = catId;
+        loadSubcategoriesForRoll(index, subcatId, subsubcatId);
+    }
+
     validateRollAllocatedQty(index);
+    recalcSummary();
+}
+
+function handleCatalogSelectChange(index) {
+    const catalogSelect = document.getElementById(`catalogSelect_${index}`);
+    const catalogBadge = document.getElementById(`catalogBadge_${index}`);
+    const opt = catalogSelect ? catalogSelect.selectedOptions[0] : null;
+
+    if (opt && opt.value) {
+        if (catalogBadge) {
+            catalogBadge.textContent = opt.textContent.trim();
+            catalogBadge.className = 'badge bg-primary text-white border-0 roll-catalog-badge';
+        }
+    } else {
+        updateHierarchyBadgeFromCats(index);
+    }
+}
+
+function updateHierarchyBadgeFromCats(index) {
+    const catalogSelect = document.getElementById(`catalogSelect_${index}`);
+    const catalogBadge = document.getElementById(`catalogBadge_${index}`);
+    if (catalogSelect && catalogSelect.value) return;
+
+    const catSelect = document.getElementById(`catSelect_${index}`);
+    const subcatSelect = document.getElementById(`subcatSelect_${index}`);
+    const subsubSelect = document.getElementById(`subsubSelect_${index}`);
+
+    const c1 = catSelect && catSelect.selectedIndex > 0 ? catSelect.options[catSelect.selectedIndex].text : '';
+    const c2 = subcatSelect && subcatSelect.selectedIndex > 0 ? subcatSelect.options[subcatSelect.selectedIndex].text : '';
+    const c3 = subsubSelect && subsubSelect.selectedIndex > 0 ? subsubSelect.options[subsubSelect.selectedIndex].text : '';
+
+    const parts = [c1, c2, c3].filter(p => Boolean(p) && !p.startsWith('--'));
+    if (catalogBadge) {
+        if (parts.length > 0) {
+            catalogBadge.textContent = parts.join(' > ');
+            catalogBadge.className = 'badge bg-info-subtle text-info-emphasis border border-info-subtle roll-catalog-badge';
+        } else {
+            catalogBadge.textContent = 'No Catalog Selected';
+            catalogBadge.className = 'badge bg-white text-secondary border roll-catalog-badge';
+        }
+    }
 }
 
 function validateRollAllocatedQty(index) {
     const input = document.getElementById(`allocatedQty_${index}`);
     const select = document.getElementById(`rollSelect_${index}`);
     const errorDiv = document.getElementById(`qtyError_${index}`);
-    const badge = document.getElementById(`outOfQtyBadge_${index}`);
 
     if (!input || !select) return;
+
+    calculateEditCardWeightAndPrice(index);
 
     const val = parseFloat(input.value) || 0;
     const selectedOption = select.options[select.selectedIndex];
     if (!selectedOption || !selectedOption.value) return;
 
     const remaining = parseFloat(selectedOption.dataset.remaining || 0);
-    const total = parseFloat(selectedOption.dataset.total || 0);
     const unit = selectedOption.dataset.unit || 'kg';
 
-    if (val > remaining) {
+    if (val <= 0) {
         input.classList.add('is-invalid');
-        errorDiv.classList.remove('d-none');
-        errorDiv.textContent = `Allocated qty (${val} ${unit}) exceeds available balance (${remaining.toFixed(2)} ${unit} out of ${total.toFixed(2)} ${unit})!`;
-        badge.className = 'badge bg-danger-subtle text-danger border border-danger-subtle py-1 px-2 font-monospace';
+        if (errorDiv) {
+            errorDiv.classList.remove('d-none');
+            errorDiv.textContent = 'Allocated quantity must be greater than zero.';
+        }
+    } else if (val > (remaining + 0.001)) {
+        input.classList.add('is-invalid');
+        if (errorDiv) {
+            errorDiv.classList.remove('d-none');
+            errorDiv.textContent = `Allocated qty (${val} ${unit}) exceeds available stock balance (${remaining.toFixed(2)} ${unit})!`;
+        }
     } else {
         input.classList.remove('is-invalid');
-        errorDiv.classList.add('d-none');
-        badge.className = 'badge bg-success-subtle text-success border border-success-subtle py-1 px-2 font-monospace';
+        if (errorDiv) errorDiv.classList.add('d-none');
     }
 
     recalcSummary();
@@ -418,21 +656,30 @@ function validateRollAllocatedQty(index) {
 function recalcSummary() {
     let totalRolls = 0;
     let totalQty = 0;
-    let totalPieces = 0;
+    let totalWeight = 0;
+    let totalValue = 0;
 
     const cards = document.querySelectorAll('.roll-card');
     cards.forEach(card => {
         totalRolls++;
         const qtyInput = card.querySelector('.input-allocated-qty');
-        const pcsInput = card.querySelector('.input-target-pieces');
+        const weightInput = card.querySelector('.input-roll-weight');
+        const priceInput = card.querySelector('.input-roll-price');
 
         if (qtyInput) totalQty += parseFloat(qtyInput.value) || 0;
-        if (pcsInput) totalPieces += parseInt(pcsInput.value) || 0;
+        if (weightInput) totalWeight += parseFloat(weightInput.value) || 0;
+        if (priceInput) totalValue += parseFloat(priceInput.value) || 0;
     });
 
-    document.getElementById('summaryTotalRolls').textContent = totalRolls;
-    document.getElementById('summaryTotalQty').textContent = `${totalQty.toFixed(2)} kg`;
-    document.getElementById('summaryTotalPieces').textContent = `${totalPieces} pcs`;
+    const elRolls = document.getElementById('summaryTotalRolls');
+    const elQty = document.getElementById('summaryTotalQty');
+    const elWeight = document.getElementById('summaryTotalWeight');
+    const elValue = document.getElementById('summaryTotalValue');
+
+    if (elRolls) elRolls.textContent = totalRolls;
+    if (elQty) elQty.textContent = `${totalQty.toFixed(2)} units`;
+    if (elWeight) elWeight.textContent = `${totalWeight.toFixed(2)} kg`;
+    if (elValue) elValue.textContent = `₹${totalValue.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
 }
 
 function loadSubcategoriesForRoll(index, preselectedSubId = null, preselectedSubSubId = null) {
@@ -449,10 +696,11 @@ function loadSubcategoriesForRoll(index, preselectedSubId = null, preselectedSub
     fetch(`<?= \App\Core\Controller::url('/api/categories/subcategories?category_id=') ?>${catId}`)
         .then(r => r.json())
         .then(data => {
-            if (Array.isArray(data)) {
-                data.forEach(item => {
-                    const sel = (preselectedSubId && parseInt(item.id) === parseInt(preselectedSubId)) ? 'selected' : '';
-                    subSelect.innerHTML += `<option value="${item.id}" ${sel}>${item.name} (${item.code || ''})</option>`;
+            const items = Array.isArray(data) ? data : (data.data || []);
+            if (items.length > 0) {
+                items.forEach(item => {
+                    const sel = (preselectedSubId && String(item.id) === String(preselectedSubId)) ? 'selected' : '';
+                    subSelect.innerHTML += `<option value="${item.id}" ${sel}>${item.name}</option>`;
                 });
                 if (preselectedSubId) {
                     loadSubSubcategoriesForRoll(index, preselectedSubSubId);
@@ -472,9 +720,10 @@ function loadSubSubcategoriesForRoll(index, preselectedSubSubId = null) {
     fetch(`<?= \App\Core\Controller::url('/api/categories/subsubcategories?subcategory_id=') ?>${subId}`)
         .then(r => r.json())
         .then(data => {
-            if (Array.isArray(data)) {
-                data.forEach(item => {
-                    const sel = (preselectedSubSubId && parseInt(item.id) === parseInt(preselectedSubSubId)) ? 'selected' : '';
+            const items = Array.isArray(data) ? data : (data.data || []);
+            if (items.length > 0) {
+                items.forEach(item => {
+                    const sel = (preselectedSubSubId && String(item.id) === String(preselectedSubSubId)) ? 'selected' : '';
                     subSubSelect.innerHTML += `<option value="${item.id}" ${sel}>${item.name}</option>`;
                 });
             }

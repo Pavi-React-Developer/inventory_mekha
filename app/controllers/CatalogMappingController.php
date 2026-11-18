@@ -114,9 +114,9 @@ class CatalogMappingController extends Controller {
         }
 
         if ($statusFilter === 'unmapped') {
-            $sql .= " AND (cm.id IS NULL OR cm.status = 'unmapped' OR (pbi.catalog_id IS NULL AND pbi.variant_id IS NULL))";
+            $sql .= " AND (cm.id IS NULL OR cm.status = 'unmapped') AND (pbi.catalog_id IS NULL AND pbi.variant_id IS NULL)";
         } elseif ($statusFilter === 'mapped') {
-            $sql .= " AND (cm.id IS NOT NULL AND cm.status = 'mapped' OR (pbi.catalog_id IS NOT NULL OR pbi.variant_id IS NOT NULL))";
+            $sql .= " AND ((cm.id IS NOT NULL AND cm.status = 'mapped') OR (pbi.catalog_id IS NOT NULL OR pbi.variant_id IS NOT NULL))";
         }
 
         if (!empty($search)) {
@@ -141,7 +141,14 @@ class CatalogMappingController extends Controller {
         $totalPieces = 0;
 
         foreach ($items as &$it) {
-            $isMapped = (!empty($it['mapping_id']) && $it['mapping_status'] === 'mapped') || (!empty($it['catalog_name']) || !empty($it['variant_id']));
+            $isMapped = (!empty($it['mapping_id']) && $it['mapping_status'] === 'mapped') 
+                        || (!empty($it['catalog_id']) && !empty($it['variant_id']));
+            
+            // If item has no mapping record and no catalog_id, it is unmapped
+            if (empty($it['mapping_id']) && empty($it['catalog_id'])) {
+                $isMapped = false;
+            }
+
             $it['is_mapped'] = $isMapped;
             if ($isMapped) {
                 $mappedCount++;
@@ -525,7 +532,7 @@ class CatalogMappingController extends Controller {
         DB::beginTransaction();
         try {
             DB::query("DELETE FROM catalog_mappings WHERE purchase_bill_item_id = ?", [$itemId]);
-            DB::query("UPDATE purchase_bill_items SET catalog_id = NULL WHERE id = ?", [$itemId]);
+            DB::query("UPDATE purchase_bill_items SET catalog_id = NULL, variant_id = NULL WHERE id = ?", [$itemId]);
             AuditLog::log('DELETE', 'catalog_mappings', $itemId, null, ['action' => 'unmap']);
             DB::commit();
             $this->flash('success', "Item '{$item['item_name']}' unmapped successfully.");
