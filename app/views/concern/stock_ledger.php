@@ -9,6 +9,15 @@
         </a>
     </div>
 
+    <!-- Export Intelligence Toolbar -->
+    <?php
+    $exportTitle = 'Export Stock Movement Ledger (Excel & PDF)';
+    $exportSubtitle = 'Download immutable stock movements, transaction types, reference documents & audit journals';
+    $exportUrl = \App\Core\Controller::url('/m/stock_ledger/export');
+    $prefix = 'ledger_exp';
+    include __DIR__ . '/../partials/export_card.php';
+    ?>
+
     <div class="card border-0 shadow-sm rounded-3">
         <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
             <h6 class="mb-0 fw-bold text-dark"><i class="bi bi-journal-text me-2 text-primary"></i> Complete Movement Audit Trail</h6>

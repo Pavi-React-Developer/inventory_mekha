@@ -9,6 +9,15 @@
         </button>
     </div>
 
+    <!-- Export Intelligence Toolbar -->
+    <?php
+    $exportTitle = 'Export Batch Lots (Excel & PDF)';
+    $exportSubtitle = 'Download manufacturing lots, expiry schedules, variant quantities & batch lifecycle tracking';
+    $exportUrl = \App\Core\Controller::url('/m/batch/export');
+    $prefix = 'batch_exp';
+    include __DIR__ . '/../partials/export_card.php';
+    ?>
+
     <div class="card border-0 shadow-sm rounded-3">
         <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
             <h6 class="mb-0 fw-bold text-dark"><i class="bi bi-collection me-2 text-primary"></i> Active Batches</h6>
@@ -24,11 +33,12 @@
                         <th>Manufacturing Date</th>
                         <th>Expiry Date</th>
                         <th>Status</th>
+                        <th class="text-end">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php if (empty($batches)): ?>
-                        <tr><td colspan="6" class="text-center py-4 text-muted">No batches registered.</td></tr>
+                        <tr><td colspan="7" class="text-center py-4 text-muted">No batches registered.</td></tr>
                     <?php else: ?>
                         <?php foreach ($batches as $b): ?>
                             <tr>
@@ -41,6 +51,23 @@
                                 <td><?= date('d M Y', strtotime($b['mfg_date'])) ?></td>
                                 <td><?= $b['exp_date'] ? date('d M Y', strtotime($b['exp_date'])) : '<span class="text-muted">None</span>' ?></td>
                                 <td><span class="badge bg-success"><?= ucfirst($b['status']) ?></span></td>
+                                <td class="text-end">
+                                    <div class="d-inline-flex align-items-center gap-1">
+                                        <button type="button" class="btn btn-sm btn-outline-info" onclick='openViewBatchModal(<?= json_encode($b, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>)' title="View Batch Details">
+                                            <i class="bi bi-eye"></i>
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-outline-primary" onclick='openEditBatchModal(<?= json_encode($b, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>)' title="Edit Batch">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                        <form action="<?= \App\Core\Controller::url('/m/batch/delete') ?>" method="POST" class="d-inline" onsubmit="return confirm('Delete batch <?= htmlspecialchars($b['batch_no']) ?>?');">
+                                            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
+                                            <input type="hidden" name="id" value="<?= $b['id'] ?>">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete Batch">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
                             </tr>
                         <?php endforeach; ?>
                     <?php endif; ?>
@@ -90,3 +117,143 @@
         </form>
     </div>
 </div>
+
+<!-- Modal Edit Batch -->
+<div class="modal fade" id="modalEditBatch" tabindex="-1">
+    <div class="modal-dialog">
+        <form action="<?= \App\Core\Controller::url('/m/batch/update') ?>" method="POST" class="modal-content">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
+            <input type="hidden" name="id" id="edit_batch_id" value="">
+
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold"><i class="bi bi-pencil-square me-1 text-primary"></i> Edit Production Batch</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Batch No</label>
+                    <input type="text" id="edit_batch_no" class="form-control font-monospace" readonly>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Batch Size / Qty *</label>
+                    <input type="number" step="0.01" name="batch_qty" id="edit_batch_qty" class="form-control" required>
+                </div>
+                <div class="row g-2 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold">Mfg Date</label>
+                        <input type="date" name="mfg_date" id="edit_mfg_date" class="form-control">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold">Exp Date</label>
+                        <input type="date" name="exp_date" id="edit_exp_date" class="form-control">
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Status *</label>
+                    <select name="status" id="edit_batch_status" class="form-select" required>
+                        <option value="active">Active</option>
+                        <option value="completed">Completed</option>
+                        <option value="closed">Closed</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-primary">Update Batch</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal View Batch -->
+<div class="modal fade" id="modalViewBatch" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
+            <div class="modal-header border-bottom px-4 py-3 bg-light">
+                <div class="d-flex align-items-center gap-2">
+                    <span style="width: 36px; height: 36px; background: #e0f2fe; color: #0284c7; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1.15rem;">
+                        <i class="bi bi-box-seam"></i>
+                    </span>
+                    <div>
+                        <h6 class="modal-title fw-bold text-dark mb-0">Production Batch Details</h6>
+                        <small class="badge bg-dark font-monospace" id="view_batch_no"></small>
+                    </div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="d-flex justify-content-between align-items-center p-3 rounded-3 mb-3" style="background: #f8fafc; border: 1px solid #e2e8f0;">
+                    <div>
+                        <span class="text-secondary small d-block">Batch Planned Size</span>
+                        <span class="fw-bold fs-5 text-primary font-monospace" id="view_batch_qty">0</span>
+                    </div>
+                    <div class="text-end">
+                        <span class="text-secondary small d-block">Batch Status</span>
+                        <span class="badge" id="view_batch_status_badge">Active</span>
+                    </div>
+                </div>
+
+                <ul class="list-group list-group-flush small">
+                    <li class="list-group-item px-0 d-flex justify-content-between">
+                        <span class="text-muted"><i class="bi bi-tag text-primary me-2"></i>Variant Style:</span>
+                        <strong class="text-dark" id="view_batch_variant">-</strong>
+                    </li>
+                    <li class="list-group-item px-0 d-flex justify-content-between">
+                        <span class="text-muted"><i class="bi bi-upc-scan text-primary me-2"></i>SKU Code:</span>
+                        <span class="badge bg-light text-dark border font-monospace" id="view_batch_sku">-</span>
+                    </li>
+                    <li class="list-group-item px-0 d-flex justify-content-between">
+                        <span class="text-muted"><i class="bi bi-calendar-check text-primary me-2"></i>Mfg Date:</span>
+                        <span class="font-monospace text-dark" id="view_batch_mfg">-</span>
+                    </li>
+                    <li class="list-group-item px-0 d-flex justify-content-between">
+                        <span class="text-muted"><i class="bi bi-calendar-x text-primary me-2"></i>Expiry Date:</span>
+                        <span class="font-monospace text-dark" id="view_batch_exp">None</span>
+                    </li>
+                </ul>
+            </div>
+            <div class="modal-footer border-top px-4 py-2 bg-light">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function openViewBatchModal(b) {
+    if (!b) return;
+    document.getElementById('view_batch_no').innerText = b.batch_no || '';
+    document.getElementById('view_batch_variant').innerText = b.variant_name || '-';
+    document.getElementById('view_batch_sku').innerText = b.sku_code || '-';
+    document.getElementById('view_batch_qty').innerText = parseFloat(b.batch_qty || 0).toLocaleString('en-IN') + ' ' + (b.weight_unit || 'pcs');
+    document.getElementById('view_batch_mfg').innerText = b.mfg_date || '-';
+    document.getElementById('view_batch_exp').innerText = b.exp_date || 'None';
+
+    const statusBadge = document.getElementById('view_batch_status_badge');
+    if (b.status === 'completed') {
+        statusBadge.className = 'badge bg-success';
+        statusBadge.innerText = 'Completed';
+    } else if (b.status === 'active') {
+        statusBadge.className = 'badge bg-primary';
+        statusBadge.innerText = 'Active';
+    } else {
+        statusBadge.className = 'badge bg-secondary';
+        statusBadge.innerText = 'Closed';
+    }
+
+    const modal = new bootstrap.Modal(document.getElementById('modalViewBatch'));
+    modal.show();
+}
+function openEditBatchModal(b) {
+    if (!b) return;
+    document.getElementById('edit_batch_id').value = b.id || '';
+    document.getElementById('edit_batch_no').value = b.batch_no || '';
+    document.getElementById('edit_batch_qty').value = parseFloat(b.batch_qty || 0).toFixed(2);
+    document.getElementById('edit_mfg_date').value = b.mfg_date ? b.mfg_date.substring(0, 10) : '';
+    document.getElementById('edit_exp_date').value = b.exp_date ? b.exp_date.substring(0, 10) : '';
+    document.getElementById('edit_batch_status').value = b.status || 'scheduled';
+
+    const modal = new bootstrap.Modal(document.getElementById('modalEditBatch'));
+    modal.show();
+}
+</script>

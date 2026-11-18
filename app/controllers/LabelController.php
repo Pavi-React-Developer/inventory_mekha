@@ -128,4 +128,79 @@ class LabelController extends Controller {
             'data'    => $variant,
         ]);
     }
+
+    public function exportJobs(): void {
+        $cid = Auth::concernId();
+        $format = strtolower($_GET['format'] ?? 'excel');
+        $period = $_GET['period'] ?? 'all';
+        $singleDate = $_GET['single_date'] ?? null;
+        $fromDate = $_GET['from_date'] ?? null;
+        $toDate = $_GET['to_date'] ?? null;
+
+        $dateScope = \App\Services\ExportService::resolveDateRange($period, $singleDate, $fromDate, $toDate);
+
+        $sql = "SELECT lj.*, v.name AS variant_name, v.sku_code, u.name AS user_name,
+                       con.name AS concern_name, con.code AS concern_code
+                FROM label_jobs lj
+                JOIN variants v ON lj.variant_id = v.id
+                LEFT JOIN concerns con ON lj.concern_id = con.id
+                LEFT JOIN users u ON lj.printed_by = u.id";
+        $params = [];
+        $where = [];
+        if ($cid) {
+            $where[] = "lj.concern_id = ?";
+            $params[] = $cid;
+        }
+        if ($dateScope['start_date'] && $dateScope['end_date']) {
+            $where[] = "DATE(lj.created_at) BETWEEN ? AND ?";
+            $params[] = $dateScope['start_date'];
+            $params[] = $dateScope['end_date'];
+        }
+        if (!empty($where)) {
+            $sql .= " WHERE " . implode(" AND ", $where);
+        }
+        $sql .= " ORDER BY lj.id DESC";
+        $jobs = DB::fetchAll($sql, $params);
+
+        $headers = [
+            'Job ID', 'Date & Time', 'SKU Code', 'Variant Name', 'Quantity', 
+            'Barcode Type', 'Printed By', 'Concern'
+        ];
+
+        $rows = [];
+        $totQty = 0;
+        foreach ($jobs as $j) {
+            $qty = (int)$j['quantity'];
+            $totQty += $qty;
+            $rows[] = [
+                '#JOB-' . str_pad($j['id'], 4, '0', STR_PAD_LEFT),
+                date('d M Y, h:i A', strtotime($j['created_at'])),
+                $j['sku_code'],
+                $j['variant_name'],
+                $qty,
+                strtoupper($j['barcode_type'] ?? 'QR CODE'),
+                $j['user_name'] ?? 'System',
+                $j['concern_name'] ?? 'Consolidated'
+            ];
+        }
+
+        $totals = ['Total Jobs: ' . count($jobs), '', '', '', $totQty, '', '', ''];
+        $metadata = [
+            'Report Title' => 'QR Label & Barcode Generation Batch History',
+            'Scope / Period' => $dateScope['label'],
+            'Generated At' => date('d M Y, h:i A'),
+            'Total Jobs' => count($jobs),
+            'Total Labels Printed' => number_format($totQty)
+        ];
+
+        $filename = 'label_jobs_' . date('Ymd_His');
+
+        if ($format === 'pdf') {
+            \App\Services\ExportService::renderPdfView('Barcode & Label Print Jobs Report', $metadata, $headers, $rows, $totals);
+        } elseif ($format === 'csv') {
+            \App\Services\ExportService::downloadCsv($filename, $headers, $rows, $totals);
+        } else {
+            \App\Services\ExportService::downloadExcel($filename, 'Barcode & Label Print Jobs Report', $metadata, $headers, $rows, $totals);
+        }
+    }
 }

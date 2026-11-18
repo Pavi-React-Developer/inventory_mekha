@@ -14,6 +14,15 @@
         </div>
     </div>
 
+    <!-- Export Intelligence Toolbar -->
+    <?php
+    $exportTitle = 'Export Live Inventory Stocks (Excel & PDF)';
+    $exportSubtitle = 'Download warehouse stock quantities, valuations, SKU balances & location storage breakdown';
+    $exportUrl = \App\Core\Controller::url('/m/stocks/export');
+    $prefix = 'stock_exp';
+    include __DIR__ . '/../partials/export_card.php';
+    ?>
+
     <!-- Summary Statistics -->
     <div class="row g-3 mb-4">
         <div class="col-md-6">

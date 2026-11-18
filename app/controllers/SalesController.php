@@ -169,6 +169,32 @@ class SalesController extends Controller {
         $this->redirect('/m/customers');
     }
 
+    public function deleteCustomer(): void {
+        $this->validateCsrf();
+        $id = (int)($_POST['id'] ?? 0);
+        $cid = Auth::concernId();
+
+        $customer = DB::fetch("SELECT * FROM customers WHERE id = ?", [$id]);
+        if (!$customer) {
+            $this->flash('error', 'Customer not found.');
+            $this->redirect('/m/customers');
+        }
+
+        // Check if there are sales invoices or requests linked to this customer
+        $invCount = (int)DB::fetchValue("SELECT COUNT(*) FROM sales_invoices WHERE customer_id = ?", [$id]);
+        $reqCount = (int)DB::fetchValue("SELECT COUNT(*) FROM customer_requests WHERE customer_id = ?", [$id]);
+
+        if ($invCount > 0 || $reqCount > 0) {
+            DB::query("UPDATE customers SET status = 'inactive' WHERE id = ?", [$id]);
+            $this->flash('warning', "Customer '{$customer['name']}' has {$invCount} sales invoices and {$reqCount} requests, so status was changed to Inactive instead of deleting.");
+        } else {
+            DB::query("DELETE FROM customers WHERE id = ?", [$id]);
+            $this->flash('success', "Customer '{$customer['name']}' deleted successfully.");
+        }
+
+        $this->redirect('/m/customers');
+    }
+
     public function customerProfile(): void {
         $id = (int)($_GET['id'] ?? 0);
         $cid = Auth::concernId();
@@ -416,6 +442,52 @@ class SalesController extends Controller {
         $this->redirect('/m/request');
     }
 
+    public function updateRequest(): void {
+        $this->validateCsrf();
+        $id = (int)($_POST['id'] ?? 0);
+        $req = DB::fetch("SELECT * FROM customer_requests WHERE id = ?", [$id]);
+        if (!$req) {
+            $this->flash('error', 'Order request not found.');
+            $this->redirect('/m/request');
+        }
+
+        $requestedQty = (float)($_POST['requested_qty'] ?? $req['requested_qty']);
+        $expectedDate = $_POST['expected_date'] ?: $req['expected_date'];
+        $status       = trim($_POST['status'] ?? $req['status']);
+        $notes        = trim($_POST['notes'] ?? $req['notes']);
+
+        try {
+            DB::query(
+                "UPDATE customer_requests SET requested_qty = ?, expected_date = ?, status = ?, notes = ? WHERE id = ?",
+                [$requestedQty, $expectedDate, $status, $notes, $id]
+            );
+            $this->flash('success', "Order Request '{$req['request_no']}' updated successfully.");
+        } catch (Exception $e) {
+            $this->flash('error', 'Failed to update request: ' . $e->getMessage());
+        }
+
+        $this->redirect('/m/request');
+    }
+
+    public function deleteRequest(): void {
+        $this->validateCsrf();
+        $id = (int)($_POST['id'] ?? 0);
+        $req = DB::fetch("SELECT * FROM customer_requests WHERE id = ?", [$id]);
+        if (!$req) {
+            $this->flash('error', 'Order request not found.');
+            $this->redirect('/m/request');
+        }
+
+        try {
+            DB::query("DELETE FROM customer_requests WHERE id = ?", [$id]);
+            $this->flash('success', "Order Request '{$req['request_no']}' deleted successfully.");
+        } catch (Exception $e) {
+            $this->flash('error', 'Failed to delete request: ' . $e->getMessage());
+        }
+
+        $this->redirect('/m/request');
+    }
+
     // 3. BATCH
     public function batch(): void {
         $cid = Auth::concernId();
@@ -476,6 +548,52 @@ class SalesController extends Controller {
         );
 
         $this->flash('success', "Batch lot '{$batchNo}' initialized.");
+        $this->redirect('/m/batch');
+    }
+
+    public function updateBatch(): void {
+        $this->validateCsrf();
+        $id = (int)($_POST['id'] ?? 0);
+        $batch = DB::fetch("SELECT * FROM batches WHERE id = ?", [$id]);
+        if (!$batch) {
+            $this->flash('error', 'Batch not found.');
+            $this->redirect('/m/batch');
+        }
+
+        $qty     = (float)($_POST['batch_qty'] ?? $batch['batch_qty']);
+        $mfgDate = $_POST['mfg_date'] ?: $batch['mfg_date'];
+        $expDate = !empty($_POST['exp_date']) ? $_POST['exp_date'] : $batch['exp_date'];
+        $status  = trim($_POST['status'] ?? $batch['status']);
+
+        try {
+            DB::query(
+                "UPDATE batches SET batch_qty = ?, mfg_date = ?, exp_date = ?, status = ? WHERE id = ?",
+                [$qty, $mfgDate, $expDate, $status, $id]
+            );
+            $this->flash('success', "Batch lot '{$batch['batch_no']}' updated successfully.");
+        } catch (Exception $e) {
+            $this->flash('error', 'Failed to update batch: ' . $e->getMessage());
+        }
+
+        $this->redirect('/m/batch');
+    }
+
+    public function deleteBatch(): void {
+        $this->validateCsrf();
+        $id = (int)($_POST['id'] ?? 0);
+        $batch = DB::fetch("SELECT * FROM batches WHERE id = ?", [$id]);
+        if (!$batch) {
+            $this->flash('error', 'Batch not found.');
+            $this->redirect('/m/batch');
+        }
+
+        try {
+            DB::query("DELETE FROM batches WHERE id = ?", [$id]);
+            $this->flash('success', "Batch lot '{$batch['batch_no']}' deleted successfully.");
+        } catch (Exception $e) {
+            $this->flash('error', 'Failed to delete batch: ' . $e->getMessage());
+        }
+
         $this->redirect('/m/batch');
     }
 
@@ -923,6 +1041,75 @@ class SalesController extends Controller {
         $this->redirect('/m/outward');
     }
 
+    public function updateOutward(): void {
+        $this->validateCsrf();
+        $id = (int)($_POST['id'] ?? 0);
+        $out = DB::fetch("SELECT * FROM outwards WHERE id = ?", [$id]);
+        if (!$out) {
+            $this->flash('error', 'Outward record not found.');
+            $this->redirect('/m/outward');
+        }
+
+        $location = trim($_POST['location'] ?? $out['location']);
+        $outwDate = $_POST['outward_date'] ?: $out['outward_date'];
+        $status   = trim($_POST['status'] ?? $out['status']);
+
+        try {
+            DB::query(
+                "UPDATE outwards SET location = ?, outward_date = ?, status = ? WHERE id = ?",
+                [$location, $outwDate, $status, $id]
+            );
+            $this->flash('success', "Outward '{$out['outward_no']}' updated successfully.");
+        } catch (Exception $e) {
+            $this->flash('error', 'Failed to update outward: ' . $e->getMessage());
+        }
+
+        $this->redirect('/m/outward');
+    }
+
+    public function deleteOutward(): void {
+        $this->validateCsrf();
+        $id = (int)($_POST['id'] ?? 0);
+        $out = DB::fetch("SELECT * FROM outwards WHERE id = ?", [$id]);
+        if (!$out) {
+            $this->flash('error', 'Outward record not found.');
+            $this->redirect('/m/outward');
+        }
+
+        $items = DB::fetchAll("SELECT * FROM outward_items WHERE outward_id = ?", [$id]);
+
+        DB::beginTransaction();
+        try {
+            // Restore deducted stock
+            foreach ($items as $item) {
+                StockService::move(
+                    $out['concern_id'],
+                    $item['variant_id'],
+                    $out['location'],
+                    (float)$item['qty'],
+                    0.00,
+                    'Outward',
+                    $id,
+                    "Reversal of deleted Outward [{$out['outward_no']}]",
+                    Auth::id()
+                );
+            }
+
+            // Delete associated dispatches if any
+            DB::query("DELETE FROM dispatches WHERE outward_id = ?", [$id]);
+            DB::query("DELETE FROM outward_items WHERE outward_id = ?", [$id]);
+            DB::query("DELETE FROM outwards WHERE id = ?", [$id]);
+
+            DB::commit();
+            $this->flash('success', "Outward consignment '{$out['outward_no']}' deleted and stock reversed.");
+        } catch (Exception $e) {
+            DB::rollBack();
+            $this->flash('error', 'Failed to delete outward: ' . $e->getMessage());
+        }
+
+        $this->redirect('/m/outward');
+    }
+
     // 6. DISPATCH
     public function dispatch(): void {
         $cid = Auth::concernId();
@@ -1109,5 +1296,672 @@ class SalesController extends Controller {
         }
 
         $this->redirect('/m/return_exchange');
+    }
+
+    public function updateDispatch(): void {
+        $this->validateCsrf();
+        $id = (int)($_POST['id'] ?? 0);
+        $cid = Auth::concernId();
+
+        $sql = "SELECT * FROM dispatches WHERE id = ?";
+        $params = [$id];
+        if ($cid) {
+            $sql .= " AND concern_id = ?";
+            $params[] = $cid;
+        }
+        $dispatch = DB::fetch($sql, $params);
+        if (!$dispatch) {
+            $this->flash('error', 'Dispatch record not found.');
+            $this->redirect('/m/dispatch');
+        }
+
+        $transporter  = trim($_POST['transporter_name'] ?? '');
+        $vehicleNo    = trim($_POST['vehicle_no'] ?? '');
+        $trackingNo   = trim($_POST['tracking_no'] ?? '');
+        $dispatchDate = $_POST['dispatch_date'] ?: $dispatch['dispatch_date'];
+        $status       = trim($_POST['status'] ?? $dispatch['status']);
+        $notes        = trim($_POST['notes'] ?? '');
+
+        try {
+            DB::query(
+                "UPDATE dispatches SET transporter_name = ?, vehicle_no = ?, tracking_no = ?, dispatch_date = ?, status = ?, notes = ? WHERE id = ?",
+                [$transporter, $vehicleNo, $trackingNo, $dispatchDate, $status, $notes, $id]
+            );
+
+            // If status is 'delivered', we can also update outward status
+            if ($status === 'delivered') {
+                DB::query("UPDATE outwards SET status = 'delivered' WHERE id = ?", [$dispatch['outward_id']]);
+            }
+
+            $this->flash('success', "Dispatch record '{$dispatch['dispatch_no']}' updated successfully.");
+        } catch (Exception $e) {
+            $this->flash('error', 'Failed to update dispatch: ' . $e->getMessage());
+        }
+
+        $this->redirect('/m/dispatch');
+    }
+
+    public function deleteDispatch(): void {
+        $this->validateCsrf();
+        $id = (int)($_POST['id'] ?? 0);
+        $cid = Auth::concernId();
+
+        $sql = "SELECT * FROM dispatches WHERE id = ?";
+        $params = [$id];
+        if ($cid) {
+            $sql .= " AND concern_id = ?";
+            $params[] = $cid;
+        }
+        $dispatch = DB::fetch($sql, $params);
+        if (!$dispatch) {
+            $this->flash('error', 'Dispatch record not found.');
+            $this->redirect('/m/dispatch');
+        }
+
+        DB::beginTransaction();
+        try {
+            DB::query("DELETE FROM dispatches WHERE id = ?", [$id]);
+
+            // Revert outward status to 'prepared'
+            DB::query("UPDATE outwards SET status = 'prepared' WHERE id = ?", [$dispatch['outward_id']]);
+
+            DB::commit();
+            $this->flash('success', "Dispatch record '{$dispatch['dispatch_no']}' deleted and Outward Gate Pass reverted to Prepared.");
+        } catch (Exception $e) {
+            DB::rollBack();
+            $this->flash('error', 'Failed to delete dispatch: ' . $e->getMessage());
+        }
+
+        $this->redirect('/m/dispatch');
+    }
+
+    public function updateReturn(): void {
+        $this->validateCsrf();
+        $id = (int)($_POST['id'] ?? 0);
+        $cid = Auth::concernId();
+
+        $sql = "SELECT * FROM returns_exchanges WHERE id = ?";
+        $params = [$id];
+        if ($cid) {
+            $sql .= " AND concern_id = ?";
+            $params[] = $cid;
+        }
+        $return = DB::fetch($sql, $params);
+        if (!$return) {
+            $this->flash('error', 'Return/Exchange record not found.');
+            $this->redirect('/m/return_exchange');
+        }
+
+        $returnDate = $_POST['return_date'] ?: $return['return_date'];
+        $reason     = trim($_POST['reason'] ?? '');
+
+        try {
+            DB::query(
+                "UPDATE returns_exchanges SET return_date = ?, reason = ? WHERE id = ?",
+                [$returnDate, $reason, $id]
+            );
+            $this->flash('success', "Return/Exchange '{$return['return_no']}' updated successfully.");
+        } catch (Exception $e) {
+            $this->flash('error', 'Failed to update return: ' . $e->getMessage());
+        }
+
+        $this->redirect('/m/return_exchange');
+    }
+
+    public function deleteReturn(): void {
+        $this->validateCsrf();
+        $id = (int)($_POST['id'] ?? 0);
+        $cid = Auth::concernId();
+
+        $sql = "SELECT * FROM returns_exchanges WHERE id = ?";
+        $params = [$id];
+        if ($cid) {
+            $sql .= " AND concern_id = ?";
+            $params[] = $cid;
+        }
+        $return = DB::fetch($sql, $params);
+        if (!$return) {
+            $this->flash('error', 'Return/Exchange record not found.');
+            $this->redirect('/m/return_exchange');
+        }
+
+        DB::beginTransaction();
+        try {
+            $cId = (int)$return['concern_id'];
+            $retVarId = (int)$return['returned_variant_id'];
+            $retQty = (float)$return['returned_qty'];
+
+            // Reverse returned stock: originally was qtyIn, now qtyOut
+            if ($retQty > 0) {
+                StockService::move(
+                    $cId,
+                    $retVarId,
+                    'Main Store',
+                    0.00,
+                    $retQty,
+                    'Return & Exchange',
+                    $id,
+                    "Reversal of deleted return #{$return['return_no']}",
+                    Auth::id()
+                );
+            }
+
+            // Reverse exchange stock: originally was qtyOut, now qtyIn
+            if ($return['type'] === 'exchange' && !empty($return['exchange_variant_id']) && (float)$return['exchange_qty'] > 0) {
+                StockService::move(
+                    $cId,
+                    (int)$return['exchange_variant_id'],
+                    'Main Store',
+                    (float)$return['exchange_qty'],
+                    0.00,
+                    'Return & Exchange',
+                    $id,
+                    "Reversal of deleted exchange #{$return['return_no']}",
+                    Auth::id()
+                );
+            }
+
+            DB::query("DELETE FROM returns_exchanges WHERE id = ?", [$id]);
+
+            DB::commit();
+            $this->flash('success', "Return/Exchange '{$return['return_no']}' deleted and inventory movements reversed.");
+        } catch (Exception $e) {
+            DB::rollBack();
+            $this->flash('error', 'Failed to delete return record: ' . $e->getMessage());
+        }
+
+        $this->redirect('/m/return_exchange');
+    }
+
+    public function exportRequests(): void {
+        $cid = Auth::concernId();
+        $format = strtolower($_GET['format'] ?? 'excel');
+        $period = $_GET['period'] ?? 'all';
+        $singleDate = $_GET['single_date'] ?? null;
+        $fromDate = $_GET['from_date'] ?? null;
+        $toDate = $_GET['to_date'] ?? null;
+
+        $dateScope = \App\Services\ExportService::resolveDateRange($period, $singleDate, $fromDate, $toDate);
+
+        $sql = "SELECT cr.*, c.name AS customer_name, v.name AS variant_name, v.sku_code, v.price,
+                       con.name AS concern_name, con.code AS concern_code
+                FROM customer_requests cr
+                JOIN customers c ON cr.customer_id = c.id
+                JOIN variants v ON cr.variant_id = v.id
+                LEFT JOIN concerns con ON cr.concern_id = con.id";
+        $params = [];
+        $where = [];
+        if ($cid) {
+            $where[] = "cr.concern_id = ?";
+            $params[] = $cid;
+        }
+        if ($dateScope['start_date'] && $dateScope['end_date']) {
+            $where[] = "DATE(cr.created_at) BETWEEN ? AND ?";
+            $params[] = $dateScope['start_date'];
+            $params[] = $dateScope['end_date'];
+        }
+        if (!empty($where)) {
+            $sql .= " WHERE " . implode(" AND ", $where);
+        }
+        $sql .= " ORDER BY cr.id DESC";
+        $requests = DB::fetchAll($sql, $params);
+
+        $headers = [
+            'Request No', 'Date', 'Customer Name', 'SKU Code', 'Variant / Style', 
+            'Requested Qty', 'Est. Price (₹)', 'Est. Total (₹)', 'Priority', 'Status', 'Notes', 'Concern'
+        ];
+
+        $rows = [];
+        $totQty = 0; $totAmt = 0;
+        foreach ($requests as $r) {
+            $qty = (float)($r['qty'] ?? $r['quantity'] ?? 0);
+            $prc = (float)($r['price'] ?? 0);
+            $amt = $qty * $prc;
+            $totQty += $qty; $totAmt += $amt;
+
+            $rows[] = [
+                $r['request_no'],
+                date('d M Y, h:i A', strtotime($r['created_at'])),
+                $r['customer_name'],
+                $r['sku_code'],
+                $r['variant_name'],
+                $qty,
+                '₹' . number_format($prc, 2),
+                '₹' . number_format($amt, 2),
+                strtoupper($r['priority'] ?? 'MEDIUM'),
+                strtoupper($r['status'] ?? 'PENDING'),
+                $r['notes'] ?: '-',
+                $r['concern_name'] ?? 'Consolidated'
+            ];
+        }
+
+        $totals = ['Total Requests: ' . count($requests), '', '', '', '', $totQty, '', '₹' . number_format($totAmt, 2), '', '', '', ''];
+        $metadata = [
+            'Report Title' => 'Customer Product Booking & Inquiries Register',
+            'Scope / Period' => $dateScope['label'],
+            'Generated At' => date('d M Y, h:i A'),
+            'Total Requests' => count($requests),
+            'Total Requested Units' => number_format($totQty, 2),
+            'Estimated Pipeline' => '₹' . number_format($totAmt, 2)
+        ];
+
+        $filename = 'customer_requests_' . date('Ymd_His');
+
+        if ($format === 'pdf') {
+            \App\Services\ExportService::renderPdfView('Customer Requests & Booking Inquiries Report', $metadata, $headers, $rows, $totals);
+        } elseif ($format === 'csv') {
+            \App\Services\ExportService::downloadCsv($filename, $headers, $rows, $totals);
+        } else {
+            \App\Services\ExportService::downloadExcel($filename, 'Customer Requests & Booking Inquiries Report', $metadata, $headers, $rows, $totals);
+        }
+    }
+
+    public function exportBatches(): void {
+        $cid = Auth::concernId();
+        $format = strtolower($_GET['format'] ?? 'excel');
+        $period = $_GET['period'] ?? 'all';
+        $singleDate = $_GET['single_date'] ?? null;
+        $fromDate = $_GET['from_date'] ?? null;
+        $toDate = $_GET['to_date'] ?? null;
+
+        $dateScope = \App\Services\ExportService::resolveDateRange($period, $singleDate, $fromDate, $toDate);
+
+        $sql = "SELECT b.*, v.name AS variant_name, v.sku_code, v.size, v.weight_unit,
+                       con.name AS concern_name, con.code AS concern_code
+                FROM batches b
+                JOIN variants v ON b.variant_id = v.id
+                LEFT JOIN concerns con ON b.concern_id = con.id";
+        $params = [];
+        $where = [];
+        if ($cid) {
+            $where[] = "b.concern_id = ?";
+            $params[] = $cid;
+        }
+        if ($dateScope['start_date'] && $dateScope['end_date']) {
+            $where[] = "DATE(b.created_at) BETWEEN ? AND ?";
+            $params[] = $dateScope['start_date'];
+            $params[] = $dateScope['end_date'];
+        }
+        if (!empty($where)) {
+            $sql .= " WHERE " . implode(" AND ", $where);
+        }
+        $sql .= " ORDER BY b.id DESC";
+        $batches = DB::fetchAll($sql, $params);
+
+        $headers = [
+            'Batch No', 'Creation Date', 'SKU Code', 'Variant Name', 'Size', 
+            'Batch Qty', 'Mfg Date', 'Expiry Date', 'Status', 'Concern'
+        ];
+
+        $rows = [];
+        $totQty = 0;
+        foreach ($batches as $b) {
+            $qty = (float)$b['batch_qty'];
+            $totQty += $qty;
+
+            $rows[] = [
+                $b['batch_no'],
+                date('d M Y', strtotime($b['created_at'])),
+                $b['sku_code'],
+                $b['variant_name'],
+                $b['size'] ?? '-',
+                $qty,
+                $b['mfg_date'] ? date('d M Y', strtotime($b['mfg_date'])) : '-',
+                $b['exp_date'] ? date('d M Y', strtotime($b['exp_date'])) : 'N/A',
+                strtoupper($b['status'] ?? 'ACTIVE'),
+                $b['concern_name'] ?? 'Consolidated'
+            ];
+        }
+
+        $totals = ['Total Batches: ' . count($batches), '', '', '', '', $totQty, '', '', '', ''];
+        $metadata = [
+            'Report Title' => 'Production Batch Lots & Stock Traceability',
+            'Scope / Period' => $dateScope['label'],
+            'Generated At' => date('d M Y, h:i A'),
+            'Total Lots' => count($batches),
+            'Total Lot Units' => number_format($totQty, 2)
+        ];
+
+        $filename = 'batch_lots_' . date('Ymd_His');
+
+        if ($format === 'pdf') {
+            \App\Services\ExportService::renderPdfView('Batch Lots & Allocation Report', $metadata, $headers, $rows, $totals);
+        } elseif ($format === 'csv') {
+            \App\Services\ExportService::downloadCsv($filename, $headers, $rows, $totals);
+        } else {
+            \App\Services\ExportService::downloadExcel($filename, 'Batch Lots & Allocation Report', $metadata, $headers, $rows, $totals);
+        }
+    }
+
+    public function exportBilling(): void {
+        $cid = Auth::concernId();
+        $format = strtolower($_GET['format'] ?? 'excel');
+        $period = $_GET['period'] ?? 'all';
+        $singleDate = $_GET['single_date'] ?? null;
+        $fromDate = $_GET['from_date'] ?? null;
+        $toDate = $_GET['to_date'] ?? null;
+
+        $dateScope = \App\Services\ExportService::resolveDateRange($period, $singleDate, $fromDate, $toDate);
+
+        $sql = "SELECT si.*, c.name AS customer_name, c.phone AS customer_phone, con.name AS concern_name, con.code AS concern_code,
+                       (SELECT COUNT(*) FROM sales_invoice_items sii WHERE sii.sales_invoice_id = si.id) AS items_count
+                FROM sales_invoices si
+                JOIN customers c ON si.customer_id = c.id
+                LEFT JOIN concerns con ON si.concern_id = con.id";
+        $params = [];
+        $where = [];
+        if ($cid) {
+            $where[] = "si.concern_id = ?";
+            $params[] = $cid;
+        }
+        if ($dateScope['start_date'] && $dateScope['end_date']) {
+            $where[] = "DATE(si.invoice_date) BETWEEN ? AND ?";
+            $params[] = $dateScope['start_date'];
+            $params[] = $dateScope['end_date'];
+        }
+        if (!empty($where)) {
+            $sql .= " WHERE " . implode(" AND ", $where);
+        }
+        $sql .= " ORDER BY si.id DESC";
+        $invoices = DB::fetchAll($sql, $params);
+
+        $headers = [
+            'Invoice No', 'Date & Time', 'Customer Name', 'Phone', 'Pay Mode', 
+            'Items', 'Subtotal (₹)', 'Discount (₹)', 'Tax (₹)', 'Grand Total (₹)', 'Paid (₹)', 'Status', 'Concern'
+        ];
+
+        $rows = [];
+        $totSub = 0; $totDisc = 0; $totTax = 0; $totGrand = 0; $totPaid = 0;
+        foreach ($invoices as $i) {
+            $sub = (float)($i['subtotal'] ?? 0);
+            $dsc = (float)($i['discount_amount'] ?? 0);
+            $tax = (float)($i['tax_amount'] ?? 0);
+            $grd = (float)($i['grand_total'] ?? 0);
+            $pd  = (float)($i['paid_amount'] ?? 0);
+
+            $totSub += $sub; $totDisc += $dsc; $totTax += $tax; $totGrand += $grd; $totPaid += $pd;
+
+            $rows[] = [
+                $i['invoice_no'],
+                date('d M Y, h:i A', strtotime($i['created_at'] ?? $i['invoice_date'])),
+                $i['customer_name'],
+                $i['customer_phone'] ?: '-',
+                strtoupper($i['payment_mode'] ?? 'CASH'),
+                (int)($i['items_count'] ?? 1),
+                '₹' . number_format($sub, 2),
+                '₹' . number_format($dsc, 2),
+                '₹' . number_format($tax, 2),
+                '₹' . number_format($grd, 2),
+                '₹' . number_format($pd, 2),
+                strtoupper($i['status'] ?? 'PAID'),
+                $i['concern_name'] ?? 'Consolidated'
+            ];
+        }
+
+        $totals = [
+            'Total: ' . count($invoices) . ' Invoices', '', '', '', '', '',
+            '₹' . number_format($totSub, 2),
+            '₹' . number_format($totDisc, 2),
+            '₹' . number_format($totTax, 2),
+            '₹' . number_format($totGrand, 2),
+            '₹' . number_format($totPaid, 2),
+            '', ''
+        ];
+
+        $metadata = [
+            'Report Title' => 'Sales POS Invoices & Billing Register',
+            'Scope / Period' => $dateScope['label'],
+            'Generated At' => date('d M Y, h:i A'),
+            'Total Invoices' => count($invoices),
+            'Total Revenue' => '₹' . number_format($totGrand, 2),
+            'Total Collected' => '₹' . number_format($totPaid, 2)
+        ];
+
+        $filename = 'sales_invoices_' . date('Ymd_His');
+
+        if ($format === 'pdf') {
+            \App\Services\ExportService::renderPdfView('POS Sales Invoices & Billing Report', $metadata, $headers, $rows, $totals);
+        } elseif ($format === 'csv') {
+            \App\Services\ExportService::downloadCsv($filename, $headers, $rows, $totals);
+        } else {
+            \App\Services\ExportService::downloadExcel($filename, 'POS Sales Invoices & Billing Report', $metadata, $headers, $rows, $totals);
+        }
+    }
+
+    public function exportOutward(): void {
+        $cid = Auth::concernId();
+        $format = strtolower($_GET['format'] ?? 'excel');
+        $period = $_GET['period'] ?? 'all';
+        $singleDate = $_GET['single_date'] ?? null;
+        $fromDate = $_GET['from_date'] ?? null;
+        $toDate = $_GET['to_date'] ?? null;
+
+        $dateScope = \App\Services\ExportService::resolveDateRange($period, $singleDate, $fromDate, $toDate);
+
+        $sql = "SELECT o.*, c.name AS customer_name, si.invoice_no, con.name AS concern_name, con.code AS concern_code,
+                       (SELECT COUNT(*) FROM outward_items oi WHERE oi.outward_id = o.id) AS items_count,
+                       (SELECT COALESCE(SUM(qty), 0) FROM outward_items oi WHERE oi.outward_id = o.id) AS total_qty
+                FROM outwards o
+                JOIN customers c ON o.customer_id = c.id
+                LEFT JOIN sales_invoices si ON o.sales_invoice_id = si.id
+                LEFT JOIN concerns con ON o.concern_id = con.id";
+        $params = [];
+        $where = [];
+        if ($cid) {
+            $where[] = "o.concern_id = ?";
+            $params[] = $cid;
+        }
+        if ($dateScope['start_date'] && $dateScope['end_date']) {
+            $where[] = "DATE(o.outward_date) BETWEEN ? AND ?";
+            $params[] = $dateScope['start_date'];
+            $params[] = $dateScope['end_date'];
+        }
+        if (!empty($where)) {
+            $sql .= " WHERE " . implode(" AND ", $where);
+        }
+        $sql .= " ORDER BY o.id DESC";
+        $outwards = DB::fetchAll($sql, $params);
+
+        $headers = [
+            'Outward No', 'Date', 'Customer Name', 'Invoice Ref', 'Total Items', 
+            'Total Qty', 'Transport Mode', 'Vehicle No', 'E-Way Bill', 'Status', 'Concern'
+        ];
+
+        $rows = [];
+        $totItems = 0; $totQty = 0;
+        foreach ($outwards as $o) {
+            $itms = (int)($o['items_count'] ?? 0);
+            $qty  = (float)($o['total_qty'] ?? 0);
+            $totItems += $itms; $totQty += $qty;
+
+            $rows[] = [
+                $o['outward_no'],
+                date('d M Y', strtotime($o['outward_date'])),
+                $o['customer_name'],
+                $o['invoice_no'] ?: '-',
+                $itms,
+                $qty,
+                $o['transport_mode'] ?: 'Road Transport',
+                $o['vehicle_no'] ?: '-',
+                $o['eway_bill_no'] ?: '-',
+                strtoupper($o['status'] ?? 'PREPARED'),
+                $o['concern_name'] ?? 'Consolidated'
+            ];
+        }
+
+        $totals = ['Total Outwards: ' . count($outwards), '', '', '', $totItems, $totQty, '', '', '', '', ''];
+        $metadata = [
+            'Report Title' => 'Outward Consignments & Material Deliveries',
+            'Scope / Period' => $dateScope['label'],
+            'Generated At' => date('d M Y, h:i A'),
+            'Total Outwards' => count($outwards),
+            'Total Units Dispatched' => number_format($totQty, 2)
+        ];
+
+        $filename = 'outwards_report_' . date('Ymd_His');
+
+        if ($format === 'pdf') {
+            \App\Services\ExportService::renderPdfView('Outward Deliveries Register Report', $metadata, $headers, $rows, $totals);
+        } elseif ($format === 'csv') {
+            \App\Services\ExportService::downloadCsv($filename, $headers, $rows, $totals);
+        } else {
+            \App\Services\ExportService::downloadExcel($filename, 'Outward Deliveries Register Report', $metadata, $headers, $rows, $totals);
+        }
+    }
+
+    public function exportDispatch(): void {
+        $cid = Auth::concernId();
+        $format = strtolower($_GET['format'] ?? 'excel');
+        $period = $_GET['period'] ?? 'all';
+        $singleDate = $_GET['single_date'] ?? null;
+        $fromDate = $_GET['from_date'] ?? null;
+        $toDate = $_GET['to_date'] ?? null;
+
+        $dateScope = \App\Services\ExportService::resolveDateRange($period, $singleDate, $fromDate, $toDate);
+
+        $sql = "SELECT d.*, o.outward_no, c.name AS customer_name, con.name AS concern_name, con.code AS concern_code
+                FROM dispatches d
+                JOIN outwards o ON d.outward_id = o.id
+                JOIN customers c ON o.customer_id = c.id
+                LEFT JOIN concerns con ON d.concern_id = con.id";
+        $params = [];
+        $where = [];
+        if ($cid) {
+            $where[] = "d.concern_id = ?";
+            $params[] = $cid;
+        }
+        if ($dateScope['start_date'] && $dateScope['end_date']) {
+            $where[] = "DATE(d.created_at) BETWEEN ? AND ?";
+            $params[] = $dateScope['start_date'];
+            $params[] = $dateScope['end_date'];
+        }
+        if (!empty($where)) {
+            $sql .= " WHERE " . implode(" AND ", $where);
+        }
+        $sql .= " ORDER BY d.id DESC";
+        $dispatches = DB::fetchAll($sql, $params);
+
+        $headers = [
+            'Dispatch No', 'Date & Time', 'Outward Ref', 'Customer / Consignee', 
+            'Carrier / Courier', 'Tracking No', 'Delivery Status', 'Notes', 'Concern'
+        ];
+
+        $rows = [];
+        foreach ($dispatches as $d) {
+            $rows[] = [
+                $d['dispatch_no'],
+                date('d M Y, h:i A', strtotime($d['created_at'])),
+                $d['outward_no'],
+                $d['customer_name'],
+                $d['transporter_name'] ?: 'Local Delivery',
+                $d['tracking_number'] ?: '-',
+                strtoupper($d['delivery_status'] ?? 'DISPATCHED'),
+                $d['remarks'] ?: '-',
+                $d['concern_name'] ?? 'Consolidated'
+            ];
+        }
+
+        $totals = ['Total Dispatches: ' . count($dispatches), '', '', '', '', '', '', '', ''];
+        $metadata = [
+            'Report Title' => 'Dispatch Tracking & Courier Logistics Register',
+            'Scope / Period' => $dateScope['label'],
+            'Generated At' => date('d M Y, h:i A'),
+            'Total Dispatches' => count($dispatches)
+        ];
+
+        $filename = 'dispatches_report_' . date('Ymd_His');
+
+        if ($format === 'pdf') {
+            \App\Services\ExportService::renderPdfView('Dispatch & Logistics Audit Report', $metadata, $headers, $rows, $totals);
+        } elseif ($format === 'csv') {
+            \App\Services\ExportService::downloadCsv($filename, $headers, $rows, $totals);
+        } else {
+            \App\Services\ExportService::downloadExcel($filename, 'Dispatch & Logistics Audit Report', $metadata, $headers, $rows, $totals);
+        }
+    }
+
+    public function exportReturnExchange(): void {
+        $cid = Auth::concernId();
+        $format = strtolower($_GET['format'] ?? 'excel');
+        $period = $_GET['period'] ?? 'all';
+        $singleDate = $_GET['single_date'] ?? null;
+        $fromDate = $_GET['from_date'] ?? null;
+        $toDate = $_GET['to_date'] ?? null;
+
+        $dateScope = \App\Services\ExportService::resolveDateRange($period, $singleDate, $fromDate, $toDate);
+
+        $sql = "SELECT re.*, c.name AS customer_name, v1.name AS returned_variant_name, v1.sku_code AS returned_sku,
+                       v2.name AS exchange_variant_name, v2.sku_code AS exchange_sku,
+                       con.name AS concern_name, con.code AS concern_code
+                FROM returns_exchanges re
+                JOIN customers c ON re.customer_id = c.id
+                JOIN variants v1 ON re.returned_variant_id = v1.id
+                LEFT JOIN variants v2 ON re.exchange_variant_id = v2.id
+                LEFT JOIN concerns con ON re.concern_id = con.id";
+        $params = [];
+        $where = [];
+        if ($cid) {
+            $where[] = "re.concern_id = ?";
+            $params[] = $cid;
+        }
+        if ($dateScope['start_date'] && $dateScope['end_date']) {
+            $where[] = "DATE(re.created_at) BETWEEN ? AND ?";
+            $params[] = $dateScope['start_date'];
+            $params[] = $dateScope['end_date'];
+        }
+        if (!empty($where)) {
+            $sql .= " WHERE " . implode(" AND ", $where);
+        }
+        $sql .= " ORDER BY re.id DESC";
+        $returns = DB::fetchAll($sql, $params);
+
+        $headers = [
+            'Return No', 'Date', 'Customer Name', 'Type', 'Returned SKU', 'Returned Item', 
+            'Return Qty', 'Exchange SKU', 'Exchange Item', 'Exchange Qty', 'Refund (₹)', 'Reason', 'Concern'
+        ];
+
+        $rows = [];
+        $totRetQty = 0; $totRefund = 0;
+        foreach ($returns as $r) {
+            $rqty = (float)$r['returned_qty'];
+            $ref = (float)($r['refund_amount'] ?? 0);
+            $totRetQty += $rqty; $totRefund += $ref;
+
+            $rows[] = [
+                $r['return_no'],
+                date('d M Y', strtotime($r['created_at'])),
+                $r['customer_name'],
+                strtoupper($r['type']),
+                $r['returned_sku'],
+                $r['returned_variant_name'],
+                $rqty,
+                $r['exchange_sku'] ?: '-',
+                $r['exchange_variant_name'] ?: '-',
+                (float)($r['exchange_qty'] ?? 0),
+                '₹' . number_format($ref, 2),
+                $r['reason'] ?: '-',
+                $r['concern_name'] ?? 'Consolidated'
+            ];
+        }
+
+        $totals = ['Total Records: ' . count($returns), '', '', '', '', '', $totRetQty, '', '', '', '₹' . number_format($totRefund, 2), '', ''];
+        $metadata = [
+            'Report Title' => 'Customer Returns & Replacement Exchange Register',
+            'Scope / Period' => $dateScope['label'],
+            'Generated At' => date('d M Y, h:i A'),
+            'Total Transactions' => count($returns),
+            'Total Returned Units' => number_format($totRetQty, 2),
+            'Total Refunds' => '₹' . number_format($totRefund, 2)
+        ];
+
+        $filename = 'returns_exchanges_' . date('Ymd_His');
+
+        if ($format === 'pdf') {
+            \App\Services\ExportService::renderPdfView('Returns & Exchanges Register Report', $metadata, $headers, $rows, $totals);
+        } elseif ($format === 'csv') {
+            \App\Services\ExportService::downloadCsv($filename, $headers, $rows, $totals);
+        } else {
+            \App\Services\ExportService::downloadExcel($filename, 'Returns & Exchanges Register Report', $metadata, $headers, $rows, $totals);
+        }
     }
 }

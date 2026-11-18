@@ -16,63 +16,15 @@
         </div>
     </div>
 
-    <!-- Export & Date Range Filter Toolbar -->
-    <div class="card border-0 shadow-sm rounded-4 p-3 bg-white mb-4" style="border: 1px solid #e2e8f0 !important;">
-        <form method="GET" action="<?= \App\Core\Controller::url('/admin/reports') ?>" id="report_filter_form" class="d-flex flex-wrap justify-content-between align-items-center gap-3">
-            <div class="d-flex align-items-center gap-3">
-                <div style="width: 44px; height: 44px; background: #ecfdf5; color: #16a34a; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.35rem; flex-shrink: 0; border: 1px solid #bbf7d0;">
-                    <i class="bi bi-file-earmark-excel"></i>
-                </div>
-                <div>
-                    <h6 class="fw-bold text-dark mb-0">Export & Date Scope Filter</h6>
-                    <small class="text-muted">Generate reports as per single day, monthly, 3/6 months, or custom period</small>
-                </div>
-            </div>
-
-            <div class="d-flex flex-wrap align-items-center gap-2">
-                <!-- Period Dropdown -->
-                <div class="d-flex align-items-center gap-1">
-                    <label class="small text-muted mb-0 fw-semibold" style="font-size: 0.76rem;">Period:</label>
-                    <select name="period" id="admin_report_period" class="form-select form-select-sm" style="width: 170px; border-radius: 8px; font-size: 0.85rem;">
-                        <option value="all" <?= ($period === 'all') ? 'selected' : '' ?>>All Time</option>
-                        <option value="single_day" <?= ($period === 'single_day') ? 'selected' : '' ?>>Single Day</option>
-                        <option value="this_month" <?= ($period === 'this_month') ? 'selected' : '' ?>>This Month</option>
-                        <option value="last_month" <?= ($period === 'last_month') ? 'selected' : '' ?>>Last Month</option>
-                        <option value="3_months" <?= ($period === '3_months') ? 'selected' : '' ?>>Particular 3 Months</option>
-                        <option value="6_months" <?= ($period === '6_months') ? 'selected' : '' ?>>Six Months</option>
-                        <option value="custom" <?= ($period === 'custom') ? 'selected' : '' ?>>Custom Date Range</option>
-                    </select>
-                </div>
-
-                <!-- Single Date Picker -->
-                <div id="admin_single_date_box" class="<?= ($period === 'single_day') ? 'd-flex' : 'd-none' ?> align-items-center gap-1">
-                    <input type="date" name="single_date" id="admin_single_date" class="form-control form-control-sm" value="<?= htmlspecialchars($singleDate ?: date('Y-m-d')) ?>" style="width: 130px; border-radius: 8px; font-size: 0.82rem;">
-                </div>
-
-                <!-- Custom Range Pickers -->
-                <div id="admin_custom_date_box" class="<?= ($period === 'custom') ? 'd-flex' : 'd-none' ?> align-items-center gap-1">
-                    <input type="date" name="from_date" id="admin_from_date" class="form-control form-control-sm" value="<?= htmlspecialchars($fromDate ?: date('Y-m-01')) ?>" style="width: 125px; border-radius: 8px; font-size: 0.82rem;">
-                    <span class="text-muted small">to</span>
-                    <input type="date" name="to_date" id="admin_to_date" class="form-control form-control-sm" value="<?= htmlspecialchars($toDate ?: date('Y-m-d')) ?>" style="width: 125px; border-radius: 8px; font-size: 0.82rem;">
-                </div>
-
-                <!-- Apply Filter Button -->
-                <button type="submit" class="btn btn-outline-primary btn-sm px-3 fw-bold" style="border-radius: 8px; height: 34px;">
-                    <i class="bi bi-funnel"></i> Apply Filter
-                </button>
-
-                <!-- Export Excel Button -->
-                <button type="button" class="btn btn-success btn-sm px-3 fw-bold d-flex align-items-center gap-1 shadow-sm" onclick="triggerAdminExport('excel')" style="border-radius: 8px; height: 34px;">
-                    <i class="bi bi-file-earmark-excel"></i> Export Excel
-                </button>
-
-                <!-- Export PDF Button -->
-                <button type="button" class="btn btn-danger btn-sm px-3 fw-bold d-flex align-items-center gap-1 shadow-sm" onclick="triggerAdminExport('pdf')" style="border-radius: 8px; height: 34px;">
-                    <i class="bi bi-file-earmark-pdf"></i> Export PDF
-                </button>
-            </div>
-        </form>
-    </div>
+    <!-- Export Intelligence Toolbar Card -->
+    <?php
+    $exportTitle = 'Export Enterprise Reports (Excel & PDF)';
+    $exportSubtitle = 'Generate consolidated tenant performance, inventory valuation, purchases & revenue as per date period';
+    $exportUrl = \App\Core\Controller::url('/admin/reports/export');
+    $prefix = 'admin_rep_exp';
+    $defaultPeriod = $period ?? 'all';
+    include __DIR__ . '/../partials/export_card.php';
+    ?>
 
     <!-- Summary Metrics Table -->
     <div class="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden" style="border: 1px solid #e2e8f0 !important;">

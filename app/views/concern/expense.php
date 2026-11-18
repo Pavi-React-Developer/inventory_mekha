@@ -30,41 +30,105 @@
             <button class="btn text-white fw-bold shadow-sm d-flex align-items-center gap-2 px-3 py-2" style="background: #4f46e5; border-radius: 8px; font-size: 0.88rem;" data-bs-toggle="modal" data-bs-target="#modalAddExpense">
                 <i class="bi bi-plus-circle"></i> Record Warehouse Expense
             </button>
+        </div>
+    </div>
 
-            <!-- Reports Dropdown -->
-            <div class="dropdown">
-                <button class="btn btn-outline-secondary shadow-sm fw-semibold d-flex align-items-center gap-2 px-3 py-2 bg-white" data-bs-toggle="dropdown" aria-expanded="false" style="border-radius: 8px; font-size: 0.88rem; border-color: #cbd5e1;">
-                    <i class="bi bi-bar-chart-line text-secondary"></i> Warehouse Reports
+    <!-- Executive Export Intelligence Toolbar (Excel, PDF, Single Day, Monthly, 3 Months, 6 Months) -->
+    <div class="card border-0 shadow-sm rounded-4 p-3 bg-white mb-4" style="border: 1px solid #e2e8f0 !important;">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <div class="d-flex align-items-center gap-3">
+                <div style="width: 44px; height: 44px; background: #ecfdf5; color: #16a34a; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.35rem; flex-shrink: 0; border: 1px solid #bbf7d0;">
+                    <i class="bi bi-file-earmark-excel"></i>
+                </div>
+                <div>
+                    <h6 class="fw-bold text-dark mb-0">Export Enterprise Reports (Excel & PDF)</h6>
+                    <small class="text-muted">Generate consolidated tenant performance, inventory valuation, purchases & revenue as per date period</small>
+                </div>
+            </div>
+
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <!-- Period Selector -->
+                <div class="d-flex align-items-center gap-1">
+                    <label class="small text-muted mb-0 fw-semibold" style="font-size: 0.76rem;">Period:</label>
+                    <select id="expense_export_period" class="form-select form-select-sm" style="width: 175px; border-radius: 8px; font-size: 0.85rem;">
+                        <option value="all" selected>All Time</option>
+                        <option value="single_day">Single Day</option>
+                        <option value="this_month">This Month</option>
+                        <option value="last_month">Last Month</option>
+                        <option value="3_months">Particular 3 Months</option>
+                        <option value="6_months">Six Months</option>
+                        <option value="custom">Custom Date Range</option>
+                    </select>
+                </div>
+
+                <!-- Single Date Picker (Shown for single_day) -->
+                <div id="expense_single_date_box" class="d-none align-items-center gap-1">
+                    <input type="date" id="expense_single_date" class="form-control form-control-sm" value="<?= date('Y-m-d') ?>" style="width: 130px; border-radius: 8px; font-size: 0.82rem;">
+                </div>
+
+                <!-- Custom Range Pickers (Shown for custom) -->
+                <div id="expense_custom_date_box" class="d-none align-items-center gap-1">
+                    <input type="date" id="expense_from_date" class="form-control form-control-sm" value="<?= date('Y-m-01') ?>" style="width: 125px; border-radius: 8px; font-size: 0.82rem;">
+                    <span class="text-muted small">to</span>
+                    <input type="date" id="expense_to_date" class="form-control form-control-sm" value="<?= date('Y-m-d') ?>" style="width: 125px; border-radius: 8px; font-size: 0.82rem;">
+                </div>
+
+                <!-- Export Excel Button -->
+                <button type="button" class="btn btn-success btn-sm px-3 fw-bold d-flex align-items-center gap-2 shadow-sm" onclick="runExpenseToolbarExport('excel')" style="border-radius: 8px; height: 35px; background: #16a34a; border: none;">
+                    <i class="bi bi-file-earmark-excel"></i> Export Excel
                 </button>
-                <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="border-radius: 12px; font-size: 0.85rem; min-width: 230px;">
-                    <li class="dropdown-header text-uppercase small fw-bold text-success">
-                        <i class="bi bi-file-earmark-excel me-1"></i> Excel Spreadsheets
-                    </li>
-                    <li>
-                        <a class="dropdown-item d-flex align-items-center justify-content-between" href="<?= \App\Core\Controller::url('/m/expense/export?format=excel&from_date=' . urlencode($fromDate) . '&to_date=' . urlencode($toDate) . '&category=' . urlencode($category) . '&payment_mode=' . urlencode($payMode) . '&search=' . urlencode($search) . '&concern_id=' . urlencode($filterConcernId ?? '')) ?>">
-                            <span>Export Current Filter</span>
-                            <span class="badge bg-success bg-opacity-10 text-success border">.xls</span>
-                        </a>
-                    </li>
-                    <li><hr class="dropdown-divider"></li>
-                    <li class="dropdown-header text-uppercase small fw-bold text-danger">
-                        <i class="bi bi-file-earmark-pdf me-1"></i> Printable Documents
-                    </li>
-                    <li>
-                        <a class="dropdown-item d-flex align-items-center justify-content-between" target="_blank" href="<?= \App\Core\Controller::url('/m/expense/export?format=pdf&from_date=' . urlencode($fromDate) . '&to_date=' . urlencode($toDate) . '&category=' . urlencode($category) . '&payment_mode=' . urlencode($payMode) . '&search=' . urlencode($search) . '&concern_id=' . urlencode($filterConcernId ?? '')) ?>">
-                            <span>Print Voucher Register</span>
-                            <span class="badge bg-danger bg-opacity-10 text-danger border">.pdf</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a class="dropdown-item d-flex align-items-center justify-content-between" href="<?= \App\Core\Controller::url('/m/expense/export?format=csv&from_date=' . urlencode($fromDate) . '&to_date=' . urlencode($toDate) . '&category=' . urlencode($category) . '&payment_mode=' . urlencode($payMode) . '&search=' . urlencode($search) . '&concern_id=' . urlencode($filterConcernId ?? '')) ?>">
-                            <span>Raw Data CSV</span>
-                            <span class="badge bg-secondary bg-opacity-10 text-secondary border">.csv</span>
-                        </a>
-                    </li>
-                </ul>
+
+                <!-- Export PDF Button -->
+                <button type="button" class="btn btn-danger btn-sm px-3 fw-bold d-flex align-items-center gap-2 shadow-sm" onclick="runExpenseToolbarExport('pdf')" style="border-radius: 8px; height: 35px; background: #dc2626; border: none;">
+                    <i class="bi bi-file-earmark-pdf"></i> Export PDF
+                </button>
+
+                <!-- CSV Button -->
+                <button type="button" class="btn btn-outline-secondary btn-sm px-3 fw-bold d-flex align-items-center gap-1 shadow-sm" onclick="runExpenseToolbarExport('csv')" style="border-radius: 8px; height: 35px;">
+                    <i class="bi bi-download"></i> CSV
+                </button>
             </div>
         </div>
+
+        <!-- 1-Click Fast Track Date Shortcuts -->
+        <div class="d-flex flex-wrap align-items-center gap-2 pt-3 mt-3 border-top" style="font-size: 0.82rem;">
+            <span class="text-secondary fw-semibold"><i class="bi bi-lightning-charge text-warning"></i> 1-Click Fast Export:</span>
+            
+            <a href="javascript:void(0)" onclick="quickExpenseExport('excel', 'single_day')" class="badge text-decoration-none px-2 py-1 fw-semibold d-flex align-items-center gap-1" style="background: #ecfdf5; color: #15803d; border: 1px solid #bbf7d0;">
+                <i class="bi bi-file-earmark-excel"></i> Single Day Excel
+            </a>
+            <a href="javascript:void(0)" onclick="quickExpenseExport('pdf', 'single_day')" class="badge text-decoration-none px-2 py-1 fw-semibold d-flex align-items-center gap-1" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca;">
+                <i class="bi bi-file-earmark-pdf"></i> Single Day PDF
+            </a>
+
+            <span class="text-muted">|</span>
+
+            <a href="javascript:void(0)" onclick="quickExpenseExport('excel', 'this_month')" class="badge text-decoration-none px-2 py-1 fw-semibold d-flex align-items-center gap-1" style="background: #ecfdf5; color: #15803d; border: 1px solid #bbf7d0;">
+                <i class="bi bi-file-earmark-excel"></i> Monthly Excel
+            </a>
+            <a href="javascript:void(0)" onclick="quickExpenseExport('pdf', 'this_month')" class="badge text-decoration-none px-2 py-1 fw-semibold d-flex align-items-center gap-1" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca;">
+                <i class="bi bi-file-earmark-pdf"></i> Monthly PDF
+            </a>
+
+            <span class="text-muted">|</span>
+
+            <a href="javascript:void(0)" onclick="quickExpenseExport('excel', '3_months')" class="badge text-decoration-none px-2 py-1 fw-semibold d-flex align-items-center gap-1" style="background: #ecfdf5; color: #15803d; border: 1px solid #bbf7d0;">
+                <i class="bi bi-file-earmark-excel"></i> 3 Months Excel
+            </a>
+            <a href="javascript:void(0)" onclick="quickExpenseExport('pdf', '3_months')" class="badge text-decoration-none px-2 py-1 fw-semibold d-flex align-items-center gap-1" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca;">
+                <i class="bi bi-file-earmark-pdf"></i> 3 Months PDF
+            </a>
+
+            <span class="text-muted">|</span>
+
+            <a href="javascript:void(0)" onclick="quickExpenseExport('excel', '6_months')" class="badge text-decoration-none px-2 py-1 fw-semibold d-flex align-items-center gap-1" style="background: #ecfdf5; color: #15803d; border: 1px solid #bbf7d0;">
+                <i class="bi bi-file-earmark-excel"></i> 6 Months Excel
+            </a>
+            <a href="javascript:void(0)" onclick="quickExpenseExport('pdf', '6_months')" class="badge text-decoration-none px-2 py-1 fw-semibold d-flex align-items-center gap-1" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca;">
+                <i class="bi bi-file-earmark-pdf"></i> 6 Months PDF
+            </a>
+        </div>
+    </div>
     </div>
 
     <!-- 4 KPI Stat Cards -->
@@ -270,7 +334,6 @@
                         <th class="ps-4">Voucher #</th>
                         <th>Warehouse</th>
                         <th>Category</th>
-                        <th>Particulars / Item</th>
                         <th>Paid To / Vendor</th>
                         <th>Payment Mode</th>
                         <th>Status</th>
@@ -282,7 +345,7 @@
                 <tbody>
                     <?php if (empty($expenses)): ?>
                         <tr>
-                            <td colspan="10" class="text-center py-5">
+                            <td colspan="9" class="text-center py-5">
                                 <div class="mb-3 text-muted" style="opacity: 0.45;">
                                     <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="mx-auto">
                                         <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"></path>
@@ -311,12 +374,6 @@
                                     </span>
                                 </td>
                                 <td>
-                                    <div class="text-dark fw-medium"><?= htmlspecialchars($e['item_particulars'] ?: $e['description'] ?: 'General Expense') ?></div>
-                                    <?php if (!empty($e['description']) && !empty($e['item_particulars'])): ?>
-                                        <small class="text-muted"><?= htmlspecialchars($e['description']) ?></small>
-                                    <?php endif; ?>
-                                </td>
-                                <td>
                                     <div class="text-dark fw-semibold"><?= htmlspecialchars($e['paid_to'] ?: 'Counter Payee') ?></div>
                                 </td>
                                 <td>
@@ -342,9 +399,21 @@
                                     <?= date('d M Y', strtotime($e['expense_date'])) ?>
                                 </td>
                                 <td class="text-center pe-4">
-                                    <button type="button" class="btn btn-sm btn-outline-primary px-2 py-1" onclick='showVoucherDetails(<?= json_encode($e, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>)' title="View Voucher Details" style="border-radius: 6px;">
-                                        <i class="bi bi-eye"></i>
-                                    </button>
+                                    <div class="d-inline-flex align-items-center gap-1">
+                                        <button type="button" class="btn btn-sm btn-outline-info px-2 py-1" onclick='showVoucherDetails(<?= json_encode($e, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>)' title="View Voucher Details" style="border-radius: 6px;">
+                                            <i class="bi bi-eye"></i>
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-outline-primary px-2 py-1" onclick='openEditExpenseModal(<?= json_encode($e, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>)' title="Edit Expense Voucher" style="border-radius: 6px;">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                        <form action="<?= \App\Core\Controller::url('/m/expense/delete') ?>" method="POST" class="d-inline" onsubmit="return confirm('Delete expense voucher #<?= htmlspecialchars($e['expense_no']) ?>? This will reverse any cash register entries.');">
+                                            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
+                                            <input type="hidden" name="id" value="<?= $e['id'] ?>">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger px-2 py-1" title="Delete Voucher" style="border-radius: 6px;">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </form>
+                                    </div>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
@@ -398,24 +467,50 @@
                         <input type="date" name="expense_date" class="form-control form-control-sm" value="<?= date('Y-m-d') ?>" required style="border-radius: 8px;">
                     </div>
 
-                    <!-- Category -->
-                    <div class="col-md-6">
-                        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">
-                            Category <span class="text-danger">*</span>
-                        </label>
-                        <select name="category" class="form-select form-select-sm" required style="border-radius: 8px;">
-                            <?php foreach ($categoriesList as $cat): ?>
-                                <option value="<?= htmlspecialchars($cat) ?>"><?= htmlspecialchars($cat) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
+                    <!-- Category with Live Filtration & Instant Add -->
+                    <div class="col-md-6 position-relative" id="cat_combobox_wrapper">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <label class="form-label small fw-bold text-secondary text-uppercase mb-0">
+                                Category <span class="text-danger">*</span>
+                            </label>
+                            <button type="button" class="btn btn-sm btn-link text-primary text-decoration-none p-0 fw-semibold" style="font-size: 0.8rem;" onclick="triggerAddCategoryFocus()">
+                                <i class="bi bi-plus-circle me-1"></i>+ Add Category
+                            </button>
+                        </div>
+                        
+                        <!-- Searchable & Filterable Combobox Input Group -->
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text bg-white text-muted border-end-0" style="border-radius: 8px 0 0 8px;">
+                                <i class="bi bi-tag"></i>
+                            </span>
+                            <input type="text" 
+                                   id="expense_category_input" 
+                                   name="category" 
+                                   class="form-control form-control-sm border-start-0 border-end-0" 
+                                   placeholder="Type to filter or add category..." 
+                                   autocomplete="off" 
+                                   required 
+                                   onfocus="openCategoryDropdown()" 
+                                   oninput="filterCategoryDropdown(this.value)"
+                                   onkeydown="handleCategoryKeydown(event)"
+                                   style="font-size: 0.84rem;">
+                            <button type="button" 
+                                    class="btn btn-light border border-start-0 text-secondary" 
+                                    id="btn_toggle_cat_dropdown" 
+                                    onclick="toggleCategoryDropdown()" 
+                                    tabindex="-1"
+                                    style="border-radius: 0 8px 8px 0; background: #f8fafc;" 
+                                    title="Show all categories">
+                                <i class="bi bi-chevron-down" id="cat_chevron_icon" style="font-size: 0.75rem;"></i>
+                            </button>
+                        </div>
 
-                    <!-- Particulars / Item -->
-                    <div class="col-md-6">
-                        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">
-                            Particulars / Items <span class="text-danger">*</span>
-                        </label>
-                        <input type="text" name="item_particulars" class="form-control form-control-sm" placeholder="e.g. 100 pcs 5-ply carton boxes" required style="border-radius: 8px;">
+                        <!-- Live Filter & Suggestions Dropdown Box -->
+                        <div id="category_dropdown_menu" 
+                             class="position-absolute w-100 bg-white shadow-lg rounded-3 border d-none" 
+                             style="top: 100%; left: 0; z-index: 1060; margin-top: 3px; max-height: 240px; overflow-y: auto; border-color: #cbd5e1 !important;">
+                            <!-- Populated dynamically via JS -->
+                        </div>
                     </div>
 
                     <!-- Paid To / Vendor -->
@@ -427,7 +522,7 @@
                     </div>
 
                     <!-- Amount -->
-                    <div class="col-md-6">
+                    <div class="col-md-4">
                         <label class="form-label small fw-bold text-secondary text-uppercase mb-1">
                             Amount (₹) <span class="text-danger">*</span>
                         </label>
@@ -449,29 +544,14 @@
                         </select>
                     </div>
 
-                    <!-- Debited Account -->
-                    <div class="col-md-4">
-                        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">
-                            Debited Account (Optional)
-                        </label>
-                        <select name="account_id" class="form-select form-select-sm" style="border-radius: 8px;">
-                            <option value="">-- Direct Physical Cash / None --</option>
-                            <?php foreach ($accounts as $acc): ?>
-                                <option value="<?= $acc['id'] ?>">
-                                    <?= htmlspecialchars($acc['name']) ?> (₹<?= number_format($acc['balance'], 2) ?>)
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-
                     <!-- Voucher Status -->
                     <div class="col-md-4">
                         <label class="form-label small fw-bold text-secondary text-uppercase mb-1">
                             Status <span class="text-danger">*</span>
                         </label>
                         <select name="status" class="form-select form-select-sm" required style="border-radius: 8px;">
-                            <option value="Paid" selected>Paid / Disbursed</option>
-                            <option value="Pending">Pending / Unsettled</option>
+                            <option value="Paid" selected>Paid</option>
+                            <option value="Pending">Pending</option>
                         </select>
                     </div>
 
@@ -531,10 +611,6 @@
                         <span class="badge bg-primary bg-opacity-10 text-primary" id="view_category"></span>
                     </li>
                     <li class="list-group-item px-0 d-flex justify-content-between">
-                        <span class="text-muted">Particulars:</span>
-                        <strong class="text-dark" id="view_particulars"></strong>
-                    </li>
-                    <li class="list-group-item px-0 d-flex justify-content-between">
                         <span class="text-muted">Paid To / Payee:</span>
                         <strong class="text-dark" id="view_paid_to"></strong>
                     </li>
@@ -562,7 +638,290 @@
     </div>
 </div>
 
+<!-- EDIT EXPENSE MODAL -->
+<div class="modal fade" id="modalEditExpense" tabindex="-1" aria-labelledby="modalEditExpenseLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <form action="<?= \App\Core\Controller::url('/m/expense/update') ?>" method="POST" class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
+            <input type="hidden" name="id" id="edit_expense_id" value="">
+
+            <div class="modal-header border-bottom px-4 py-3 bg-light">
+                <div class="d-flex align-items-center gap-2">
+                    <span style="width: 32px; height: 32px; background: #e0e7ff; color: #4338ca; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                        <i class="bi bi-pencil-square"></i>
+                    </span>
+                    <div>
+                        <h6 class="modal-title fw-bold text-dark mb-0">Edit Expense Voucher</h6>
+                        <small class="text-muted" id="edit_expense_voucher_no"></small>
+                    </div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body px-4 py-3">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">Expense Date *</label>
+                        <input type="date" name="expense_date" id="edit_expense_date" class="form-control form-control-sm" required style="border-radius: 8px;">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">Amount (INR) *</label>
+                        <input type="number" step="0.01" min="0.01" name="amount" id="edit_expense_amount" class="form-control form-control-sm font-monospace fw-bold" required style="border-radius: 8px;">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">Category *</label>
+                        <input type="text" name="category" id="edit_expense_category" class="form-control form-control-sm" required style="border-radius: 8px;">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">Status *</label>
+                        <select name="status" id="edit_expense_status" class="form-select form-select-sm" required style="border-radius: 8px;">
+                            <option value="Paid">Paid</option>
+                            <option value="Pending">Pending</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">Paid To / Payee</label>
+                        <input type="text" name="paid_to" id="edit_expense_paid_to" class="form-control form-control-sm" placeholder="e.g. Counter Payee" style="border-radius: 8px;">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">Particulars / Items</label>
+                        <input type="text" name="item_particulars" id="edit_expense_particulars" class="form-control form-control-sm" style="border-radius: 8px;">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">Description / Bill Notes</label>
+                        <textarea name="description" id="edit_expense_description" class="form-control form-control-sm" rows="2" style="border-radius: 8px;"></textarea>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer border-top px-4 py-3 bg-light">
+                <button type="button" class="btn btn-sm btn-outline-secondary px-3" data-bs-dismiss="modal" style="border-radius: 8px;">Cancel</button>
+                <button type="submit" class="btn btn-sm btn-primary px-4 fw-bold shadow-sm" style="border-radius: 8px;">
+                    <i class="bi bi-save me-1"></i> Update Voucher
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <script>
+let expenseCategories = <?= json_encode($categoriesList) ?>;
+
+function escapeHtml(text) {
+    if (!text) return '';
+    return text.toString()
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function escapeJs(text) {
+    if (!text) return '';
+    return text.toString()
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/"/g, '\\"');
+}
+
+function highlightMatch(text, term) {
+    if (!term) return escapeHtml(text);
+    const escapedText = escapeHtml(text);
+    const escapedTerm = escapeHtml(term);
+    const regex = new RegExp('(' + escapedTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi');
+    return escapedText.replace(regex, '<span class="fw-bold text-primary text-decoration-underline">$1</span>');
+}
+
+function renderCategoryDropdown(filterText = '') {
+    const menu = document.getElementById('category_dropdown_menu');
+    if (!menu) return;
+
+    const term = (filterText || '').trim().toLowerCase();
+    
+    // Find matching categories
+    const matches = expenseCategories.filter(cat => cat.toLowerCase().includes(term));
+    const exactMatch = expenseCategories.find(cat => cat.toLowerCase() === term);
+
+    let html = '';
+
+    if (expenseCategories.length === 0 && !term) {
+        html += `<div class="p-3 text-center text-muted small">
+            <i class="bi bi-info-circle me-1 text-primary"></i> No categories created yet.<br>
+            <span class="text-secondary">Type a category name above to create one.</span>
+        </div>`;
+    } else {
+        if (term && matches.length > 0) {
+            html += `<div class="px-3 py-1 bg-light border-bottom text-uppercase fw-bold text-secondary d-flex justify-content-between align-items-center" style="font-size: 0.68rem; letter-spacing: 0.05em;">
+                <span>Matching Categories (${matches.length})</span>
+                <span class="text-muted fw-normal" style="font-size: 0.65rem;">Click to select</span>
+            </div>`;
+        } else if (!term && expenseCategories.length > 0) {
+            html += `<div class="px-3 py-1 bg-light border-bottom text-uppercase fw-bold text-secondary d-flex justify-content-between align-items-center" style="font-size: 0.68rem; letter-spacing: 0.05em;">
+                <span>Available Categories (${expenseCategories.length})</span>
+                <span class="text-muted fw-normal" style="font-size: 0.65rem;">Click to select</span>
+            </div>`;
+        }
+
+        if (matches.length > 0) {
+            matches.forEach(cat => {
+                const isExact = (cat.toLowerCase() === term);
+                html += `<div class="cat-item px-3 py-2 d-flex justify-content-between align-items-center border-bottom" 
+                              style="cursor: pointer; transition: background 0.15s; font-size: 0.84rem; background: white;"
+                              onmouseover="this.style.background='#f1f5f9'" 
+                              onmouseout="this.style.background='white'"
+                              onclick="selectCategoryItem('${escapeJs(cat)}')">
+                    <span class="fw-medium text-dark d-flex align-items-center">
+                        <i class="bi bi-tag me-2 text-primary"></i>
+                        <span>${highlightMatch(cat, term)}</span>
+                    </span>
+                    <span class="badge ${isExact ? 'bg-success-subtle text-success border border-success' : 'bg-secondary-subtle text-secondary'} small fw-normal" style="font-size: 0.72rem;">
+                        <i class="bi bi-check-circle me-1"></i>Already exists
+                    </span>
+                </div>`;
+            });
+        } else if (term) {
+            html += `<div class="px-3 py-2 text-muted small bg-white border-bottom">
+                <i class="bi bi-search me-1 text-secondary"></i> No existing category matches "<strong>${escapeHtml(filterText.trim())}</strong>"
+            </div>`;
+        }
+
+        // If user typed something and it does not exactly match an existing category, offer "+ Add as new category"
+        if (term && !exactMatch) {
+            html += `<div class="p-2 bg-light border-top">
+                <button type="button" class="btn btn-sm btn-success w-100 d-flex align-items-center justify-content-center gap-1 fw-bold shadow-sm" 
+                        onclick="saveCategoryFromInput('${escapeJs(filterText.trim())}')" style="font-size: 0.8rem; border-radius: 6px;">
+                    <i class="bi bi-plus-circle me-1"></i>+ Add "${escapeHtml(filterText.trim())}" as New Category
+                </button>
+            </div>`;
+        }
+    }
+
+    menu.innerHTML = html;
+}
+
+function openCategoryDropdown() {
+    const menu = document.getElementById('category_dropdown_menu');
+    const input = document.getElementById('expense_category_input');
+    const chevron = document.getElementById('cat_chevron_icon');
+    if (!menu) return;
+    renderCategoryDropdown(input ? input.value : '');
+    menu.classList.remove('d-none');
+    if (chevron) { chevron.classList.remove('bi-chevron-down'); chevron.classList.add('bi-chevron-up'); }
+}
+
+function closeCategoryDropdown() {
+    const menu = document.getElementById('category_dropdown_menu');
+    const chevron = document.getElementById('cat_chevron_icon');
+    if (menu) menu.classList.add('d-none');
+    if (chevron) { chevron.classList.remove('bi-chevron-up'); chevron.classList.add('bi-chevron-down'); }
+}
+
+function toggleCategoryDropdown() {
+    const menu = document.getElementById('category_dropdown_menu');
+    if (!menu) return;
+    if (menu.classList.contains('d-none')) {
+        openCategoryDropdown();
+        const input = document.getElementById('expense_category_input');
+        if (input) input.focus();
+    } else {
+        closeCategoryDropdown();
+    }
+}
+
+function filterCategoryDropdown(val) {
+    openCategoryDropdown();
+    renderCategoryDropdown(val);
+}
+
+function selectCategoryItem(name) {
+    const input = document.getElementById('expense_category_input');
+    if (input) {
+        input.value = name;
+        input.classList.remove('is-invalid');
+    }
+    closeCategoryDropdown();
+}
+
+function triggerAddCategoryFocus() {
+    const input = document.getElementById('expense_category_input');
+    if (input) {
+        input.value = '';
+        input.focus();
+        openCategoryDropdown();
+    }
+}
+
+function handleCategoryKeydown(e) {
+    if (e.key === 'Enter') {
+        const input = document.getElementById('expense_category_input');
+        const term = input ? input.value.trim() : '';
+        if (!term) return;
+
+        // Check if exact match exists
+        const exact = expenseCategories.find(c => c.toLowerCase() === term.toLowerCase());
+        if (exact) {
+            e.preventDefault();
+            selectCategoryItem(exact);
+        } else {
+            // New category, save it
+            e.preventDefault();
+            saveCategoryFromInput(term);
+        }
+    } else if (e.key === 'Escape') {
+        closeCategoryDropdown();
+    }
+}
+
+function saveCategoryFromInput(name) {
+    if (!name) return;
+    const csrfToken = document.querySelector('input[name="csrf_token"]') ? document.querySelector('input[name="csrf_token"]').value : '';
+    const formData = new URLSearchParams();
+    formData.append('csrf_token', csrfToken);
+    formData.append('name', name);
+
+    fetch('<?= \App\Core\Controller::url('/m/expense/category/store') ?>', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: formData.toString()
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            const newCat = data.name;
+            if (!expenseCategories.some(c => c.toLowerCase() === newCat.toLowerCase())) {
+                expenseCategories.push(newCat);
+                expenseCategories.sort();
+            }
+            selectCategoryItem(newCat);
+
+            // Also update top filter dropdown if present
+            const filterSelect = document.querySelector('select[name="category"]');
+            if (filterSelect) {
+                let exists = false;
+                for (let opt of filterSelect.options) {
+                    if (opt.value.toLowerCase() === newCat.toLowerCase()) { exists = true; break; }
+                }
+                if (!exists) {
+                    const opt = document.createElement('option');
+                    opt.value = newCat;
+                    opt.textContent = newCat;
+                    filterSelect.appendChild(opt);
+                }
+            }
+        }
+    })
+    .catch(console.error);
+}
+
+// Close category suggestions when clicking outside
+document.addEventListener('click', function(e) {
+    const wrapper = document.getElementById('cat_combobox_wrapper');
+    if (wrapper && !wrapper.contains(e.target)) {
+        closeCategoryDropdown();
+    }
+});
+
 function showVoucherDetails(voucher) {
     if (!voucher) return;
     document.getElementById('view_voucher_title').innerText = voucher.category || 'Operational Expense';
@@ -579,5 +938,92 @@ function showVoucherDetails(voucher) {
 
     const modal = new bootstrap.Modal(document.getElementById('modalViewVoucher'));
     modal.show();
+}
+
+function openEditExpenseModal(exp) {
+    if (!exp) return;
+    document.getElementById('edit_expense_id').value = exp.id || '';
+    document.getElementById('edit_expense_voucher_no').innerText = exp.expense_no || '';
+    document.getElementById('edit_expense_date').value = exp.expense_date || '';
+    document.getElementById('edit_expense_amount').value = parseFloat(exp.amount || 0).toFixed(2);
+    document.getElementById('edit_expense_category').value = exp.category || '';
+    document.getElementById('edit_expense_status').value = exp.status === 'Pending' ? 'Pending' : 'Paid';
+    document.getElementById('edit_expense_paid_to').value = exp.paid_to || '';
+    document.getElementById('edit_expense_particulars').value = exp.item_particulars || '';
+    document.getElementById('edit_expense_description').value = exp.description || '';
+
+    const modal = new bootstrap.Modal(document.getElementById('modalEditExpense'));
+    modal.show();
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const periodSelect = document.getElementById('expense_export_period');
+    const singleBox = document.getElementById('expense_single_date_box');
+    const customBox = document.getElementById('expense_custom_date_box');
+
+    if (periodSelect) {
+        periodSelect.addEventListener('change', function() {
+            const val = this.value;
+            if (val === 'single_day') {
+                if (singleBox) { singleBox.classList.remove('d-none'); singleBox.classList.add('d-flex'); }
+                if (customBox) { customBox.classList.add('d-none'); customBox.classList.remove('d-flex'); }
+            } else if (val === 'custom') {
+                if (customBox) { customBox.classList.remove('d-none'); customBox.classList.add('d-flex'); }
+                if (singleBox) { singleBox.classList.add('d-none'); singleBox.classList.remove('d-flex'); }
+            } else {
+                if (singleBox) { singleBox.classList.add('d-none'); singleBox.classList.remove('d-flex'); }
+                if (customBox) { customBox.classList.add('d-none'); customBox.classList.remove('d-flex'); }
+            }
+        });
+    }
+});
+
+function runExpenseToolbarExport(format) {
+    const period = document.getElementById('expense_export_period') ? document.getElementById('expense_export_period').value : 'all';
+    const singleDate = document.getElementById('expense_single_date') ? document.getElementById('expense_single_date').value : '';
+    const fromDate = document.getElementById('expense_from_date') ? document.getElementById('expense_from_date').value : '';
+    const toDate = document.getElementById('expense_to_date') ? document.getElementById('expense_to_date').value : '';
+    const concernId = '<?= urlencode($filterConcernId ?? '') ?>';
+    const category = '<?= urlencode($category ?? '') ?>';
+    const payMode = '<?= urlencode($payMode ?? '') ?>';
+    const search = '<?= urlencode($search ?? '') ?>';
+
+    const url = '<?= \App\Core\Controller::url('/m/expense/export') ?>' +
+                '?format=' + encodeURIComponent(format) +
+                '&period=' + encodeURIComponent(period) +
+                '&single_date=' + encodeURIComponent(singleDate) +
+                '&from_date=' + encodeURIComponent(fromDate) +
+                '&to_date=' + encodeURIComponent(toDate) +
+                '&concern_id=' + concernId +
+                '&category=' + category +
+                '&payment_mode=' + payMode +
+                '&search=' + search;
+
+    if (format === 'pdf') {
+        window.open(url, '_blank');
+    } else {
+        window.location.href = url;
+    }
+}
+
+function quickExpenseExport(format, period) {
+    const concernId = '<?= urlencode($filterConcernId ?? '') ?>';
+    const category = '<?= urlencode($category ?? '') ?>';
+    const payMode = '<?= urlencode($payMode ?? '') ?>';
+    const search = '<?= urlencode($search ?? '') ?>';
+
+    const url = '<?= \App\Core\Controller::url('/m/expense/export') ?>' +
+                '?format=' + encodeURIComponent(format) +
+                '&period=' + encodeURIComponent(period) +
+                '&concern_id=' + concernId +
+                '&category=' + category +
+                '&payment_mode=' + payMode +
+                '&search=' + search;
+
+    if (format === 'pdf') {
+        window.open(url, '_blank');
+    } else {
+        window.location.href = url;
+    }
 }
 </script>

@@ -10,6 +10,15 @@
         </button>
     </div>
 
+    <!-- Export Intelligence Toolbar -->
+    <?php
+    $exportTitle = 'Export Supplier Directory (Excel & PDF)';
+    $exportSubtitle = 'Download registered vendors, spinning mills, contact directory, GSTIN & ledger balances';
+    $exportUrl = \App\Core\Controller::url('/m/suppliers/export');
+    $prefix = 'sup_exp';
+    include __DIR__ . '/../partials/export_card.php';
+    ?>
+
     <!-- Quick Stats Summary Cards -->
     <?php
     $totalCount = count($suppliers);
@@ -182,6 +191,11 @@
                                 <!-- CRUD Action Buttons -->
                                 <td class="text-end pe-3">
                                     <div class="btn-group btn-group-sm">
+                                        <button type="button" class="btn btn-outline-info py-1 px-2"
+                                                title="View Supplier Profile"
+                                                onclick="openViewSupplierModal(<?= htmlspecialchars(json_encode($sup)) ?>)">
+                                            <i class="bi bi-eye"></i>
+                                        </button>
                                         <button type="button" class="btn btn-outline-primary py-1 px-2"
                                                 title="Edit Supplier"
                                                 onclick="openEditSupplierModal(<?= htmlspecialchars(json_encode($sup)) ?>)">
@@ -430,7 +444,88 @@
     </div>
 </div>
 
+<!-- Modal 4: View Supplier Profile -->
+<div class="modal fade" id="modalViewSupplier" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
+            <div class="modal-header border-bottom px-4 py-3 bg-light">
+                <div class="d-flex align-items-center gap-2">
+                    <span style="width: 36px; height: 36px; background: #e0f2fe; color: #0284c7; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1.15rem;">
+                        <i class="bi bi-building"></i>
+                    </span>
+                    <div>
+                        <h6 class="modal-title fw-bold text-dark mb-0" id="view_supplier_name">Supplier Details</h6>
+                        <small class="badge bg-dark font-monospace" id="view_supplier_code"></small>
+                    </div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="d-flex justify-content-between align-items-center p-3 rounded-3 mb-3" style="background: #f8fafc; border: 1px solid #e2e8f0;">
+                    <div>
+                        <span class="text-secondary small d-block">Company / Entity</span>
+                        <strong class="text-dark fs-6" id="view_supplier_company">-</strong>
+                    </div>
+                    <div class="text-end">
+                        <span class="text-secondary small d-block">Status</span>
+                        <span class="badge" id="view_supplier_status">Active</span>
+                    </div>
+                </div>
+
+                <ul class="list-group list-group-flush small">
+                    <li class="list-group-item px-0 d-flex justify-content-between">
+                        <span class="text-muted"><i class="bi bi-telephone text-primary me-2"></i>Phone:</span>
+                        <strong class="text-dark" id="view_supplier_phone">-</strong>
+                    </li>
+                    <li class="list-group-item px-0 d-flex justify-content-between">
+                        <span class="text-muted"><i class="bi bi-envelope text-primary me-2"></i>Email:</span>
+                        <strong class="text-dark" id="view_supplier_email">-</strong>
+                    </li>
+                    <li class="list-group-item px-0 d-flex justify-content-between">
+                        <span class="text-muted"><i class="bi bi-receipt text-primary me-2"></i>GSTIN:</span>
+                        <span class="badge bg-light text-dark border font-monospace" id="view_supplier_gstin">Unregistered</span>
+                    </li>
+                    <li class="list-group-item px-0 d-flex justify-content-between">
+                        <span class="text-muted"><i class="bi bi-geo text-primary me-2"></i>Location:</span>
+                        <span class="text-dark fw-semibold" id="view_supplier_location">-</span>
+                    </li>
+                    <li class="list-group-item px-0">
+                        <span class="text-muted d-block mb-1"><i class="bi bi-geo-alt text-primary me-2"></i>Address:</span>
+                        <div class="text-dark p-2 bg-light rounded" id="view_supplier_address">-</div>
+                    </li>
+                </ul>
+            </div>
+            <div class="modal-footer border-top px-4 py-2 bg-light">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
+function openViewSupplierModal(sup) {
+    if (!sup) return;
+    document.getElementById('view_supplier_name').innerText = sup.name || 'Supplier';
+    document.getElementById('view_supplier_code').innerText = sup.code || 'SUP';
+    document.getElementById('view_supplier_company').innerText = sup.company_name || 'Individual Vendor';
+    document.getElementById('view_supplier_phone').innerText = sup.phone || '-';
+    document.getElementById('view_supplier_email').innerText = sup.email || '-';
+    document.getElementById('view_supplier_gstin').innerText = sup.gstin || 'Unregistered';
+    document.getElementById('view_supplier_location').innerText = (sup.district || sup.city || '-') + ', ' + (sup.state || 'Tamil Nadu');
+    document.getElementById('view_supplier_address').innerText = sup.address || 'No street address specified';
+
+    const statusBadge = document.getElementById('view_supplier_status');
+    if (sup.status === 'active') {
+        statusBadge.className = 'badge bg-success';
+        statusBadge.innerText = 'Active';
+    } else {
+        statusBadge.className = 'badge bg-secondary';
+        statusBadge.innerText = 'Inactive';
+    }
+
+    const modal = new bootstrap.Modal(document.getElementById('modalViewSupplier'));
+    modal.show();
+}
 // Filter Suppliers Table
 document.addEventListener('DOMContentLoaded', function () {
     const searchInput = document.getElementById('supplierSearchInput');

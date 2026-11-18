@@ -93,29 +93,45 @@
             position: sticky;
             top: 0;
             z-index: 999;
-            gap: 0.75rem;
+            gap: 1rem;
         }
         .navbar-left {
             display: flex;
             align-items: center;
             gap: 0.75rem;
             min-width: 0;
-            flex-shrink: 1;
+            flex: 0 1 auto;
+            overflow: hidden;
         }
         .navbar-page-title {
             font-size: 1.12rem;
             font-weight: 700;
             color: #0f172a;
             white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 250px;
             margin: 0;
             line-height: 1.2;
             letter-spacing: -0.01em;
+            flex-shrink: 1;
+        }
+        @media (min-width: 1366px) {
+            .navbar-page-title {
+                max-width: 380px;
+            }
+        }
+        @media (min-width: 1600px) {
+            .navbar-page-title {
+                max-width: 520px;
+            }
         }
         .navbar-right {
             display: flex;
             align-items: center;
-            gap: 0.5rem;
+            gap: 0.65rem;
             flex-shrink: 0;
+            margin-left: auto;
         }
         .content-body {
             padding: 1.75rem;
@@ -145,10 +161,22 @@
         }
         .concern-switcher-btn {
             font-size: 0.82rem;
-            padding: 0.28rem 0.65rem;
+            padding: 0.28rem 0.75rem;
             border-radius: 8px;
             white-space: nowrap;
-            max-width: 220px;
+            max-width: 180px;
+            height: 32px;
+            flex-shrink: 0;
+            display: inline-flex;
+            align-items: center;
+            border: 1px solid rgba(0,0,0,0.15);
+        }
+        .concern-switcher-btn:hover {
+            box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+        }
+        .navbar-export-group {
+            flex-shrink: 0;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
         }
         .card-stat {
             border: 1px solid #e2e8f0;
@@ -270,7 +298,7 @@
         <!-- TOP NAVBAR -->
         <header class="top-navbar">
             <div class="navbar-left">
-                <span class="navbar-page-title"><?= htmlspecialchars($pageTitle ?? 'Inventory') ?></span>
+                <span class="navbar-page-title" title="<?= htmlspecialchars($pageTitle ?? 'Inventory') ?>"><?= htmlspecialchars($pageTitle ?? 'Inventory') ?></span>
                 
                 <?php if ($isSuperAdmin): ?>
                     <span class="super-pill">
@@ -312,37 +340,6 @@
             </div>
 
             <div class="navbar-right">
-                <!-- Global Export Reports Button & Dropdown -->
-                <div class="btn-group">
-                    <button class="btn btn-sm btn-success fw-bold d-flex align-items-center gap-1 shadow-sm px-2.5" type="button" data-bs-toggle="modal" data-bs-target="#globalExportModal" style="background: #16a34a; border: none; border-radius: 8px 0 0 8px; height: 32px; font-size: 0.82rem;">
-                        <i class="bi bi-file-earmark-excel"></i> Export
-                    </button>
-                    <button type="button" class="btn btn-sm btn-success dropdown-toggle dropdown-toggle-split shadow-sm" data-bs-toggle="dropdown" aria-expanded="false" style="background: #15803d; border: none; border-radius: 0 8px 8px 0; height: 32px; font-size: 0.82rem;">
-                        <span class="visually-hidden">Toggle Dropdown</span>
-                    </button>
-                    <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="border-radius: 12px; font-size: 0.85rem; min-width: 275px;">
-                        <li class="dropdown-header text-uppercase small fw-bold text-success">
-                            <i class="bi bi-file-earmark-excel me-1"></i> Quick Excel Downloads (.xls)
-                        </li>
-                        <li><a class="dropdown-item d-flex align-items-center justify-content-between" href="<?= \App\Core\Controller::url('/admin/reports/export?format=excel&period=single_day') ?>"><span>Single Day (Today)</span><span class="badge bg-success bg-opacity-10 text-success border">Excel</span></a></li>
-                        <li><a class="dropdown-item d-flex align-items-center justify-content-between" href="<?= \App\Core\Controller::url('/admin/reports/export?format=excel&period=this_month') ?>"><span>This Month</span><span class="badge bg-success bg-opacity-10 text-success border">Excel</span></a></li>
-                        <li><a class="dropdown-item d-flex align-items-center justify-content-between" href="<?= \App\Core\Controller::url('/admin/reports/export?format=excel&period=3_months') ?>"><span>Particular 3 Months</span><span class="badge bg-success bg-opacity-10 text-success border">Excel</span></a></li>
-                        <li><a class="dropdown-item d-flex align-items-center justify-content-between" href="<?= \App\Core\Controller::url('/admin/reports/export?format=excel&period=6_months') ?>"><span>Six Months</span><span class="badge bg-success bg-opacity-10 text-success border">Excel</span></a></li>
-                        <li><a class="dropdown-item d-flex align-items-center justify-content-between" href="<?= \App\Core\Controller::url('/admin/reports/export?format=excel&period=all') ?>"><span>All Time (Consolidated)</span><span class="badge bg-success bg-opacity-10 text-success border">Excel</span></a></li>
-                        <li><hr class="dropdown-divider"></li>
-                        <li class="dropdown-header text-uppercase small fw-bold text-danger">
-                            <i class="bi bi-file-earmark-pdf me-1"></i> Quick PDF Printable Reports (.pdf)
-                        </li>
-                        <li><a class="dropdown-item d-flex align-items-center justify-content-between" target="_blank" href="<?= \App\Core\Controller::url('/admin/reports/export?format=pdf&period=single_day') ?>"><span>Single Day (Today)</span><span class="badge bg-danger bg-opacity-10 text-danger border">PDF</span></a></li>
-                        <li><a class="dropdown-item d-flex align-items-center justify-content-between" target="_blank" href="<?= \App\Core\Controller::url('/admin/reports/export?format=pdf&period=this_month') ?>"><span>This Month</span><span class="badge bg-danger bg-opacity-10 text-danger border">PDF</span></a></li>
-                        <li><a class="dropdown-item d-flex align-items-center justify-content-between" target="_blank" href="<?= \App\Core\Controller::url('/admin/reports/export?format=pdf&period=3_months') ?>"><span>Particular 3 Months</span><span class="badge bg-danger bg-opacity-10 text-danger border">PDF</span></a></li>
-                        <li><a class="dropdown-item d-flex align-items-center justify-content-between" target="_blank" href="<?= \App\Core\Controller::url('/admin/reports/export?format=pdf&period=6_months') ?>"><span>Six Months</span><span class="badge bg-danger bg-opacity-10 text-danger border">PDF</span></a></li>
-                        <li><a class="dropdown-item d-flex align-items-center justify-content-between" target="_blank" href="<?= \App\Core\Controller::url('/admin/reports/export?format=pdf&period=all') ?>"><span>All Time (Consolidated)</span><span class="badge bg-danger bg-opacity-10 text-danger border">PDF</span></a></li>
-                        <li><hr class="dropdown-divider"></li>
-                        <li><a class="dropdown-item text-primary fw-semibold" href="javascript:void(0)" data-bs-toggle="modal" data-bs-target="#globalExportModal"><i class="bi bi-sliders me-1"></i> Custom Range & Module Dialog &rarr;</a></li>
-                    </ul>
-                </div>
-
                 <a href="<?= \App\Core\Controller::url('/m/label_generation') ?>" class="btn btn-sm btn-outline-primary d-flex align-items-center gap-1 shadow-sm px-2.5" style="height: 32px; font-size: 0.82rem; border-radius: 8px;">
                     <i class="bi bi-qr-code-scan"></i> <span class="d-none d-sm-inline">Scan / Labels</span>
                 </a>
@@ -375,6 +372,14 @@
                 </div>
             <?php endif; ?>
 
+            <?php if (!empty($flashWarning)): ?>
+                <div class="alert alert-warning alert-dismissible fade show d-flex align-items-center shadow-sm" role="alert">
+                    <i class="bi bi-exclamation-triangle-fill fs-5 me-2"></i>
+                    <div><?= nl2br(htmlspecialchars($flashWarning)) ?></div>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            <?php endif; ?>
+
             <?php if (!empty($flashError)): ?>
                 <div class="alert alert-danger alert-dismissible fade show d-flex align-items-center shadow-sm" role="alert">
                     <i class="bi bi-exclamation-triangle-fill fs-5 me-2"></i>
@@ -390,164 +395,9 @@
         </main>
     </div>
 
-    <!-- GLOBAL EXPORT MODAL -->
-    <div class="modal fade" id="globalExportModal" tabindex="-1" aria-labelledby="globalExportModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
-                <div class="modal-header border-bottom px-4 py-3" style="background: linear-gradient(135deg, #f0fdf4 0%, #eff6ff 100%);">
-                    <div class="d-flex align-items-center gap-2">
-                        <div style="width: 38px; height: 38px; background: #16a34a; color: white; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.25rem;">
-                            <i class="bi bi-file-earmark-arrow-down"></i>
-                        </div>
-                        <div>
-                            <h5 class="modal-title fw-bold text-dark mb-0" id="globalExportModalLabel">Export Enterprise Report</h5>
-                            <small class="text-muted">Download Excel (.xls) or PDF (.pdf) as per date scope</small>
-                        </div>
-                    </div>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body p-4">
-                    <form id="globalExportForm" onsubmit="event.preventDefault(); runGlobalModalExport();">
-                        <!-- Module Selection -->
-                        <div class="mb-3">
-                            <label class="form-label small fw-bold text-secondary text-uppercase mb-1">Select Module / Report</label>
-                            <select id="modal_export_module" class="form-select form-select-sm" style="border-radius: 8px; font-weight: 500;">
-                                <option value="admin_reports" selected>📊 Consolidated Enterprise Performance Report</option>
-                                <option value="cash_flow">💰 Cash & Cash Flow Statement & Ledger</option>
-                                <option value="customers">👥 Customer Directory & CRM Profiles</option>
-                                <option value="stock_ledger">📦 Operations & Stock Movement Ledger</option>
-                            </select>
-                        </div>
-
-                        <!-- Date Scope / Period -->
-                        <div class="mb-3">
-                            <label class="form-label small fw-bold text-secondary text-uppercase mb-1">Date Period Scope</label>
-                            <select id="modal_export_period" class="form-select form-select-sm" style="border-radius: 8px; font-weight: 500;">
-                                <option value="single_day">Single Day</option>
-                                <option value="this_month" selected>This Month (<?= date('F Y') ?>)</option>
-                                <option value="last_month">Last Month</option>
-                                <option value="3_months">Particular 3 Months</option>
-                                <option value="6_months">Six Months</option>
-                                <option value="custom">Custom Date Range</option>
-                                <option value="all">All Time (Full Historical Data)</option>
-                            </select>
-                        </div>
-
-                        <!-- Single Day Date Picker -->
-                        <div class="mb-3 d-none" id="modal_single_date_box">
-                            <label class="form-label small fw-bold text-secondary text-uppercase mb-1">Select Single Date</label>
-                            <input type="date" id="modal_single_date" class="form-control form-control-sm" value="<?= date('Y-m-d') ?>" style="border-radius: 8px;">
-                        </div>
-
-                        <!-- Custom Date Range Pickers -->
-                        <div class="mb-3 d-none" id="modal_custom_date_box">
-                            <label class="form-label small fw-bold text-secondary text-uppercase mb-1">Custom Range (From - To)</label>
-                            <div class="d-flex align-items-center gap-2">
-                                <input type="date" id="modal_from_date" class="form-control form-control-sm" value="<?= date('Y-m-01') ?>" style="border-radius: 8px;">
-                                <span class="text-muted small">to</span>
-                                <input type="date" id="modal_to_date" class="form-control form-control-sm" value="<?= date('Y-m-d') ?>" style="border-radius: 8px;">
-                            </div>
-                        </div>
-
-                        <!-- Format Selection -->
-                        <div class="mb-4">
-                            <label class="form-label small fw-bold text-secondary text-uppercase mb-2">Export Format</label>
-                            <div class="d-flex gap-2">
-                                <label class="btn btn-outline-success flex-fill d-flex align-items-center justify-content-center gap-2 py-2" style="border-radius: 10px; cursor: pointer;">
-                                    <input type="radio" name="modal_export_format" value="excel" checked class="form-check-input me-1">
-                                    <i class="bi bi-file-earmark-excel fs-5"></i> <strong>Excel (.xls)</strong>
-                                </label>
-                                <label class="btn btn-outline-danger flex-fill d-flex align-items-center justify-content-center gap-2 py-2" style="border-radius: 10px; cursor: pointer;">
-                                    <input type="radio" name="modal_export_format" value="pdf" class="form-check-input me-1">
-                                    <i class="bi bi-file-earmark-pdf fs-5"></i> <strong>PDF</strong>
-                                </label>
-                                <label class="btn btn-outline-secondary flex-fill d-flex align-items-center justify-content-center gap-2 py-2" style="border-radius: 10px; cursor: pointer;">
-                                    <input type="radio" name="modal_export_format" value="csv" class="form-check-input me-1">
-                                    <i class="bi bi-file-earmark-text fs-5"></i> <strong>CSV</strong>
-                                </label>
-                            </div>
-                        </div>
-
-                        <div class="d-flex justify-content-end gap-2 pt-2 border-top">
-                            <button type="button" class="btn btn-light px-3" data-bs-dismiss="modal">Cancel</button>
-                            <button type="submit" class="btn btn-success px-4 fw-bold shadow-sm" style="border-radius: 8px; background: #16a34a; border: none;">
-                                <i class="bi bi-download me-1"></i> Download Export
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <!-- Bootstrap Bundle JS -->
     <script src="<?= \App\Core\Controller::url('/assets/js/bootstrap.bundle.min.js') ?>"></script>
     <script src="<?= \App\Core\Controller::url('/assets/js/qrcode.min.js') ?>"></script>
     <script src="<?= \App\Core\Controller::url('/assets/js/html5-qrcode.min.js') ?>"></script>
-
-    <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const periodSelect = document.getElementById('modal_export_period');
-        const singleBox = document.getElementById('modal_single_date_box');
-        const customBox = document.getElementById('modal_custom_date_box');
-
-        if (periodSelect) {
-            periodSelect.addEventListener('change', function() {
-                const val = this.value;
-                if (val === 'single_day') {
-                    if (singleBox) singleBox.classList.remove('d-none');
-                    if (customBox) customBox.classList.add('d-none');
-                } else if (val === 'custom') {
-                    if (customBox) customBox.classList.remove('d-none');
-                    if (singleBox) singleBox.classList.add('d-none');
-                } else {
-                    if (singleBox) singleBox.classList.add('d-none');
-                    if (customBox) customBox.classList.add('d-none');
-                }
-            });
-        }
-    });
-
-    function runGlobalModalExport() {
-        const moduleVal = document.getElementById('modal_export_module').value;
-        const period = document.getElementById('modal_export_period').value;
-        const singleDate = document.getElementById('modal_single_date') ? document.getElementById('modal_single_date').value : '';
-        const fromDate = document.getElementById('modal_from_date') ? document.getElementById('modal_from_date').value : '';
-        const toDate = document.getElementById('modal_to_date') ? document.getElementById('modal_to_date').value : '';
-        const formatRadio = document.querySelector('input[name="modal_export_format"]:checked');
-        const format = formatRadio ? formatRadio.value : 'excel';
-
-        let baseUrl = '';
-        if (moduleVal === 'cash_flow') {
-            baseUrl = '<?= \App\Core\Controller::url('/m/cash_flow/export') ?>';
-        } else if (moduleVal === 'customers') {
-            baseUrl = '<?= \App\Core\Controller::url('/m/customers/export') ?>';
-        } else if (moduleVal === 'stock_ledger') {
-            baseUrl = '<?= \App\Core\Controller::url('/dashboard/export') ?>';
-        } else {
-            baseUrl = '<?= \App\Core\Controller::url('/admin/reports/export') ?>';
-        }
-
-        const url = baseUrl +
-                    '?format=' + encodeURIComponent(format) +
-                    '&period=' + encodeURIComponent(period) +
-                    '&single_date=' + encodeURIComponent(singleDate) +
-                    '&from_date=' + encodeURIComponent(fromDate) +
-                    '&to_date=' + encodeURIComponent(toDate);
-
-        // Hide modal
-        const modalEl = document.getElementById('globalExportModal');
-        if (modalEl) {
-            const modalInstance = bootstrap.Modal.getInstance(modalEl);
-            if (modalInstance) modalInstance.hide();
-        }
-
-        if (format === 'pdf') {
-            window.open(url, '_blank');
-        } else {
-            window.location.href = url;
-        }
-    }
-    </script>
 </body>
 </html>

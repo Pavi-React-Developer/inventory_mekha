@@ -13,42 +13,6 @@
             <p class="text-secondary small mb-0">Unified cashier shift registers, cash/bank accounts, and consolidated cash flow intelligence.</p>
         </div>
         <div class="d-flex flex-wrap align-items-center gap-2">
-            <!-- Cash Flow Export Excel Dropdown -->
-            <div class="dropdown">
-                <button class="btn btn-success shadow-sm fw-semibold d-flex align-items-center gap-2" data-bs-toggle="dropdown" aria-expanded="false" style="border-radius: 8px; background: #16a34a; border: none;">
-                    <i class="bi bi-file-earmark-excel"></i> Export Excel
-                </button>
-                <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="border-radius: 12px; font-size: 0.85rem; min-width: 250px;">
-                    <li class="dropdown-header text-uppercase small fw-bold text-success">
-                        <i class="bi bi-file-earmark-excel me-1"></i> Cash Flow Excel (.xls)
-                    </li>
-                    <li><a class="dropdown-item d-flex align-items-center justify-content-between" href="<?= \App\Core\Controller::url('/m/cash_flow/export?format=excel&period=single_day') ?>"><span>Single Day (Today)</span><span class="badge bg-success bg-opacity-10 text-success border">Excel</span></a></li>
-                    <li><a class="dropdown-item d-flex align-items-center justify-content-between" href="<?= \App\Core\Controller::url('/m/cash_flow/export?format=excel&period=this_month') ?>"><span>This Month</span><span class="badge bg-success bg-opacity-10 text-success border">Excel</span></a></li>
-                    <li><a class="dropdown-item d-flex align-items-center justify-content-between" href="<?= \App\Core\Controller::url('/m/cash_flow/export?format=excel&period=last_month') ?>"><span>Last Month</span><span class="badge bg-success bg-opacity-10 text-success border">Excel</span></a></li>
-                    <li><a class="dropdown-item d-flex align-items-center justify-content-between" href="<?= \App\Core\Controller::url('/m/cash_flow/export?format=excel&period=3_months') ?>"><span>Particular 3 Months</span><span class="badge bg-success bg-opacity-10 text-success border">Excel</span></a></li>
-                    <li><a class="dropdown-item d-flex align-items-center justify-content-between" href="<?= \App\Core\Controller::url('/m/cash_flow/export?format=excel&period=6_months') ?>"><span>Six Months</span><span class="badge bg-success bg-opacity-10 text-success border">Excel</span></a></li>
-                    <li><a class="dropdown-item d-flex align-items-center justify-content-between" href="<?= \App\Core\Controller::url('/m/cash_flow/export?format=excel&period=all') ?>"><span>All Time (Consolidated)</span><span class="badge bg-success bg-opacity-10 text-success border">Excel</span></a></li>
-                </ul>
-            </div>
-
-            <!-- Cash Flow Export PDF Dropdown -->
-            <div class="dropdown">
-                <button class="btn btn-danger shadow-sm fw-semibold d-flex align-items-center gap-2" data-bs-toggle="dropdown" aria-expanded="false" style="border-radius: 8px; background: #dc2626; border: none;">
-                    <i class="bi bi-file-earmark-pdf"></i> Export PDF
-                </button>
-                <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="border-radius: 12px; font-size: 0.85rem; min-width: 250px;">
-                    <li class="dropdown-header text-uppercase small fw-bold text-danger">
-                        <i class="bi bi-file-earmark-pdf me-1"></i> Cash Flow PDF (.pdf)
-                    </li>
-                    <li><a class="dropdown-item d-flex align-items-center justify-content-between" target="_blank" href="<?= \App\Core\Controller::url('/m/cash_flow/export?format=pdf&period=single_day') ?>"><span>Single Day (Today)</span><span class="badge bg-danger bg-opacity-10 text-danger border">PDF</span></a></li>
-                    <li><a class="dropdown-item d-flex align-items-center justify-content-between" target="_blank" href="<?= \App\Core\Controller::url('/m/cash_flow/export?format=pdf&period=this_month') ?>"><span>This Month</span><span class="badge bg-danger bg-opacity-10 text-danger border">PDF</span></a></li>
-                    <li><a class="dropdown-item d-flex align-items-center justify-content-between" target="_blank" href="<?= \App\Core\Controller::url('/m/cash_flow/export?format=pdf&period=last_month') ?>"><span>Last Month</span><span class="badge bg-danger bg-opacity-10 text-danger border">PDF</span></a></li>
-                    <li><a class="dropdown-item d-flex align-items-center justify-content-between" target="_blank" href="<?= \App\Core\Controller::url('/m/cash_flow/export?format=pdf&period=3_months') ?>"><span>Particular 3 Months</span><span class="badge bg-danger bg-opacity-10 text-danger border">PDF</span></a></li>
-                    <li><a class="dropdown-item d-flex align-items-center justify-content-between" target="_blank" href="<?= \App\Core\Controller::url('/m/cash_flow/export?format=pdf&period=6_months') ?>"><span>Six Months</span><span class="badge bg-danger bg-opacity-10 text-danger border">PDF</span></a></li>
-                    <li><a class="dropdown-item d-flex align-items-center justify-content-between" target="_blank" href="<?= \App\Core\Controller::url('/m/cash_flow/export?format=pdf&period=all') ?>"><span>All Time (Consolidated)</span><span class="badge bg-danger bg-opacity-10 text-danger border">PDF</span></a></li>
-                </ul>
-            </div>
-
             <?php if ($activeShift): ?>
                 <button class="btn btn-warning shadow-sm fw-semibold d-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#modalCloseShift">
                     <i class="bi bi-lock-fill"></i> Close Shift (#<?= htmlspecialchars($activeShift['shift_no']) ?>)
@@ -67,6 +31,15 @@
             </button>
         </div>
     </div>
+
+    <!-- Export Intelligence Toolbar -->
+    <?php
+    $exportTitle = 'Export Cash Flow & Treasury Ledger (Excel & PDF)';
+    $exportSubtitle = 'Download cashier shifts, drawer reconcilements, bank accounts & consolidated cash receipts';
+    $exportUrl = \App\Core\Controller::url('/m/cash_flow/export');
+    $prefix = 'cflow_exp';
+    include __DIR__ . '/../partials/export_card.php';
+    ?>
 
     <!-- Active Shift Status Banner -->
     <?php if ($activeShift): ?>
@@ -304,6 +277,21 @@
                                 <h4 class="fw-bold <?= $acc['balance'] >= 0 ? 'text-success' : 'text-danger' ?> mb-0">
                                     ₹<?= number_format($acc['balance'], 2) ?>
                                 </h4>
+                            </div>
+                            <div class="d-flex justify-content-end gap-1 mt-3 pt-2 border-top">
+                                <button type="button" class="btn btn-sm btn-outline-info px-2 py-1" onclick='openViewAccountModal(<?= json_encode($acc, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>)' title="View Account Details">
+                                    <i class="bi bi-eye me-1"></i> View
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-primary px-2 py-1" onclick='openEditAccountModal(<?= json_encode($acc, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>)' title="Edit Account">
+                                    <i class="bi bi-pencil me-1"></i> Edit
+                                </button>
+                                <form action="<?= \App\Core\Controller::url('/m/cash_flow/account/delete') ?>" method="POST" class="d-inline" onsubmit="return confirm('Delete account <?= htmlspecialchars(addslashes($acc['name'])) ?>?');">
+                                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
+                                    <input type="hidden" name="id" value="<?= $acc['id'] ?>">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger px-2 py-1" title="Delete Account">
+                                        <i class="bi bi-trash me-1"></i> Delete
+                                    </button>
+                                </form>
                             </div>
                         </div>
                     </div>
@@ -585,6 +573,25 @@
                     </div>
                 </div>
 
+                <!-- Mismatch / Variance Reason Input Box (Appears automatically when variance != 0) -->
+                <div id="mismatchReasonRow" class="d-none mb-3 p-3 rounded-4" style="background: #fff1f2; border: 1.5px dashed #f43f5e;">
+                    <div class="d-flex align-items-center justify-content-between mb-1">
+                        <label class="form-label fw-bold text-danger mb-0 d-flex align-items-center gap-2" style="font-size: 0.86rem;">
+                            <i class="bi bi-exclamation-triangle-fill"></i> Float Mismatch Reason <span class="text-danger">*</span>
+                        </label>
+                        <span class="badge rounded-pill bg-danger text-white px-2 py-1" style="font-size: 0.7rem;">Required on Mismatch</span>
+                    </div>
+                    <div class="text-muted mb-2" style="font-size: 0.78rem;">
+                        The starting cash float (₹<span id="label_starting_float" class="fw-bold">0.00</span>) does not match the physical denomination count (₹<span id="label_denom_total" class="fw-bold">0.00</span>). Please state the reason for this variance:
+                    </div>
+                    <textarea name="variance_reason" id="variance_reason" class="form-control" rows="2" 
+                              placeholder="e.g. Additional ₹1,000 kept in till drawer for customer morning change / Previous day recount discrepancy..." 
+                              style="border-radius: 10px; border-color: #fca5a5; font-size: 0.88rem;"></textarea>
+                    <div id="variance_reason_error" class="text-danger small mt-1 d-none fw-semibold">
+                        <i class="bi bi-x-circle me-1"></i> Please specify the reason for the cash float mismatch before starting the shift.
+                    </div>
+                </div>
+
                 <!-- Starting Denominations Count (Optional) -->
                 <div class="border rounded-4 p-3 bg-white" style="border-color: #e2e8f0 !important;">
                     <div class="d-flex justify-content-between align-items-center mb-3">
@@ -803,9 +810,112 @@
 </div>
 
 <!-- ======================================================== -->
+<!-- MODAL: EDIT CASH OR BANK ACCOUNT                         -->
+<!-- ======================================================== -->
+<div class="modal fade" id="modalEditAccount" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <form action="<?= \App\Core\Controller::url('/m/cash_flow/account/update') ?>" method="POST" class="modal-content border-0 shadow-lg" style="border-radius: 18px;">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
+            <input type="hidden" name="id" id="edit_account_id" value="">
+
+            <div class="modal-header border-0 pb-0 pt-4 px-4">
+                <h5 class="modal-title fw-bold text-dark"><i class="bi bi-pencil-square me-1 text-primary"></i> Edit Account</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body px-4 py-3">
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Account Name *</label>
+                    <input type="text" name="name" id="edit_account_name" class="form-control" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Account Type *</label>
+                    <select name="account_type" id="edit_account_type" class="form-select" required>
+                        <option value="cash">Cash Counter / Till</option>
+                        <option value="petty_cash">Petty Cash</option>
+                        <option value="bank">Bank Account</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Account / Drawer Identifier</label>
+                    <input type="text" name="account_number" id="edit_account_number" class="form-control">
+                </div>
+            </div>
+            <div class="modal-footer border-0 px-4 pb-4 pt-1">
+                <button type="button" class="btn btn-secondary px-3" data-bs-dismiss="modal" style="border-radius: 9999px;">Cancel</button>
+                <button type="submit" class="btn btn-primary px-4 fw-semibold" style="border-radius: 9999px;">Update Account</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal View Account -->
+<div class="modal fade" id="modalViewAccount" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title fw-bold"><i class="bi bi-eye text-info me-2"></i> Cash & Bank Account Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
+                    <span class="text-muted small">Account Name</span>
+                    <span class="fw-bold fs-6 text-dark" id="view_account_name">-</span>
+                </div>
+                <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
+                    <span class="text-muted small">Account Type</span>
+                    <span class="badge" id="view_account_type">-</span>
+                </div>
+                <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
+                    <span class="text-muted small">Account / Till ID</span>
+                    <span class="font-monospace text-secondary" id="view_account_no">-</span>
+                </div>
+                <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
+                    <span class="text-muted small">Current Live Balance</span>
+                    <span class="fw-bold fs-5" id="view_account_balance">-</span>
+                </div>
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="text-muted small">Associated Concern</span>
+                    <span class="fw-semibold text-secondary" id="view_account_concern">-</span>
+                </div>
+            </div>
+            <div class="modal-footer bg-light py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ======================================================== -->
 <!-- INTERACTIVE JAVASCRIPT LOGIC                             -->
 <!-- ======================================================== -->
 <script>
+function openViewAccountModal(acc) {
+    if (!acc) return;
+    document.getElementById('view_account_name').innerText = acc.name || '-';
+    const badge = document.getElementById('view_account_type');
+    badge.innerText = (acc.account_type || 'cash').toUpperCase();
+    badge.className = 'badge ' + (acc.account_type === 'bank' ? 'bg-primary' : 'bg-warning text-dark');
+    document.getElementById('view_account_no').innerText = acc.account_number || 'Internal Drawer';
+    const balEl = document.getElementById('view_account_balance');
+    const bal = parseFloat(acc.balance || 0);
+    balEl.innerText = '₹' + bal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    balEl.className = 'fw-bold fs-5 ' + (bal >= 0 ? 'text-success' : 'text-danger');
+    document.getElementById('view_account_concern').innerText = acc.concern_name || 'Active Concern';
+
+    const modal = new bootstrap.Modal(document.getElementById('modalViewAccount'));
+    modal.show();
+}
+
+function openEditAccountModal(acc) {
+    if (!acc) return;
+    document.getElementById('edit_account_id').value = acc.id || '';
+    document.getElementById('edit_account_name').value = acc.name || '';
+    document.getElementById('edit_account_type').value = acc.account_type || 'cash';
+    document.getElementById('edit_account_number').value = acc.account_number || '';
+
+    const modal = new bootstrap.Modal(document.getElementById('modalEditAccount'));
+    modal.show();
+}
 document.addEventListener('DOMContentLoaded', function() {
     // 1. Tab restoration via URL hash / query param (?tab=accounts / ?tab=shift)
     const urlParams = new URLSearchParams(window.location.search);
@@ -851,6 +961,14 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         const variance = denomTotal - startingFloat;
+        const mismatchRow = document.getElementById('mismatchReasonRow');
+        const reasonInput = document.getElementById('variance_reason');
+        const reasonError = document.getElementById('variance_reason_error');
+        const labelStart = document.getElementById('label_starting_float');
+        const labelDenom = document.getElementById('label_denom_total');
+
+        if (labelStart) labelStart.textContent = startingFloat.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+        if (labelDenom) labelDenom.textContent = denomTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 });
 
         if (Math.abs(variance) < 0.01) {
             // Exact Match
@@ -863,6 +981,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 matchBadge.style.background = '#dcfce7';
                 matchBadge.style.color = '#15803d';
             }
+            if (mismatchRow) mismatchRow.classList.add('d-none');
+            if (reasonInput) {
+                reasonInput.required = false;
+                reasonInput.classList.remove('is-invalid');
+            }
+            if (reasonError) reasonError.classList.add('d-none');
         } else {
             // Variance / Mismatch
             const varFormatted = (variance > 0 ? '+' : '') + '₹' + variance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -875,6 +999,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 matchBadge.style.background = '#fee2e2';
                 matchBadge.style.color = '#b91c1c';
             }
+            if (mismatchRow) mismatchRow.classList.remove('d-none');
+            if (reasonInput) reasonInput.required = true;
         }
     }
 
@@ -901,6 +1027,43 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (isFloatModified) isFloatModified.value = "1";
                 if (lockText) lockText.textContent = "Synced";
                 updateFloatStatus();
+            }
+        });
+    }
+
+    // Form submit validation for mismatch reason
+    const startShiftForm = document.querySelector('form[action*="/m/cash_flow/shift/open"]');
+    if (startShiftForm) {
+        startShiftForm.addEventListener('submit', function(e) {
+            const startingFloat = parseFloat(startingFloatInput ? startingFloatInput.value : 0) || 0;
+            const denomTotal = calculateDenomTotal();
+            const variance = denomTotal - startingFloat;
+            const reasonInput = document.getElementById('variance_reason');
+            const errorDiv = document.getElementById('variance_reason_error');
+
+            if (Math.abs(variance) >= 0.01) {
+                if (!reasonInput || !reasonInput.value.trim()) {
+                    e.preventDefault();
+                    if (errorDiv) errorDiv.classList.remove('d-none');
+                    if (reasonInput) {
+                        reasonInput.focus();
+                        reasonInput.classList.add('is-invalid');
+                    }
+                    return false;
+                }
+            }
+            if (errorDiv) errorDiv.classList.add('d-none');
+            if (reasonInput) reasonInput.classList.remove('is-invalid');
+        });
+    }
+
+    const reasonInputElem = document.getElementById('variance_reason');
+    if (reasonInputElem) {
+        reasonInputElem.addEventListener('input', function() {
+            const errorDiv = document.getElementById('variance_reason_error');
+            if (this.value.trim()) {
+                this.classList.remove('is-invalid');
+                if (errorDiv) errorDiv.classList.add('d-none');
             }
         });
     }

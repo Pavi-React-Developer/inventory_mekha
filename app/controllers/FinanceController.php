@@ -102,18 +102,9 @@ class FinanceController extends Controller {
             $accounts = DB::fetchAll("SELECT * FROM cash_accounts WHERE status = 'active'");
         }
 
-        $categoriesList = [
-            'Carton & Packaging Boxes',
-            'Freight Transport & Logistics',
-            'Forklift & Machinery Maintenance',
-            'Electricity & Utility Bills',
-            'Petty Cash / Refreshments / Tea',
-            'Stationery & Consumables',
-            'Labour & Loading Wages',
-            'Warehouse Rent & Storage',
-            'Safety Gear & Equipment',
-            'Office & Miscellaneous'
-        ];
+        // Dynamic Expense Categories from database (no hardcoded defaults)
+        $catRows = DB::fetchAll("SELECT name FROM expense_categories WHERE status = 'active' ORDER BY name ASC");
+        $categoriesList = array_values(array_unique(array_filter(array_column($catRows, 'name'))));
 
         $paymentModes = [
             'Cash',
@@ -156,13 +147,13 @@ class FinanceController extends Controller {
 
         $expDate         = $_POST['expense_date'] ?: date('Y-m-d');
         $category        = trim($_POST['category'] ?? 'Miscellaneous');
-        $particulars     = trim($_POST['item_particulars'] ?? '');
+        $desc            = trim($_POST['description'] ?? '');
+        $particulars     = trim($_POST['item_particulars'] ?? ($desc ?: $category));
         $paidTo          = trim($_POST['paid_to'] ?? '');
         $amount          = (float)($_POST['amount'] ?? 0);
         $payMode         = trim($_POST['payment_mode'] ?? 'Cash');
         $status          = trim($_POST['status'] ?? 'Paid');
         $accountId       = !empty($_POST['account_id']) ? (int)$_POST['account_id'] : null;
-        $desc            = trim($_POST['description'] ?? '');
 
         if ($amount <= 0) {
             $this->flash('error', 'Expense amount must be greater than zero.');
@@ -173,6 +164,17 @@ class FinanceController extends Controller {
         try {
             $prefix = 'WH-EXP-' . date('Ymd') . '-';
             $expNo = $prefix . rand(1000, 9999);
+
+            // Ensure category exists in expense_categories table
+            if (!empty($category)) {
+                $catExists = DB::fetch("SELECT id FROM expense_categories WHERE LOWER(name) = LOWER(?)", [$category]);
+                if (!$catExists) {
+                    DB::query(
+                        "INSERT INTO expense_categories (concern_id, name, status, created_at) VALUES (?, ?, 'active', NOW())",
+                        [$cid, $category]
+                    );
+                }
+            }
 
             DB::query(
                 "INSERT INTO expenses (concern_id, expense_no, expense_date, category, item_particulars, paid_to, amount, payment_mode, status, account_id, description, created_by, created_at)
@@ -206,15 +208,147 @@ class FinanceController extends Controller {
         $this->redirect('/m/expense');
     }
 
+    public function updateExpense(): void {
+        $this->validateCsrf();
+        $id = (int)($_POST['id'] ?? 0);
+        $cid = Auth::concernId();
+
+        $expense = DB::fetch("SELECT * FROM expenses WHERE id = ?", [$id]);
+        if (!$expense) {
+            $this->flash('error', 'Expense voucher not found.');
+            $this->redirect('/m/expense');
+        }
+
+        if ($cid && (int)$expense['concern_id'] !== $cid && !Auth::isSuperAdmin()) {
+            $this->flash('error', 'Unauthorized access to this voucher.');
+            $this->redirect('/m/expense');
+        }
+
+        $expDate     = $_POST['expense_date'] ?: $expense['expense_date'];
+        $category    = trim($_POST['category'] ?? $expense['category']);
+        $paidTo      = trim($_POST['paid_to'] ?? '');
+        $amount      = (float)($_POST['amount'] ?? 0);
+        $payMode     = trim($_POST['payment_mode'] ?? 'Cash');
+        $status      = trim($_POST['status'] ?? 'Paid');
+        $desc        = trim($_POST['description'] ?? '');
+
+        if ($amount <= 0) {
+            $this->flash('error', 'Expense amount must be greater than zero.');
+            $this->redirect('/m/expense');
+        }
+
+        DB::beginTransaction();
+        try {
+            // Ensure category exists
+            if (!empty($category)) {
+                $catExists = DB::fetch("SELECT id FROM expense_categories WHERE LOWER(name) = LOWER(?)", [$category]);
+                if (!$catExists) {
+                    DB::query("INSERT INTO expense_categories (concern_id, name, status, created_at) VALUES (?, ?, 'active', NOW())", [(int)$expense['concern_id'], $category]);
+                }
+            }
+
+            DB::query(
+                "UPDATE expenses SET expense_date = ?, category = ?, paid_to = ?, amount = ?, payment_mode = ?, status = ?, description = ? WHERE id = ?",
+                [$expDate, $category, $paidTo, $amount, $payMode, $status, $desc, $id]
+            );
+
+            DB::commit();
+            $this->flash('success', "Expense voucher '{$expense['expense_no']}' updated successfully.");
+        } catch (Exception $e) {
+            DB::rollBack();
+            $this->flash('error', 'Failed to update expense voucher: ' . $e->getMessage());
+        }
+
+        $this->redirect('/m/expense');
+    }
+
+    public function deleteExpense(): void {
+        $this->validateCsrf();
+        $id = (int)($_POST['id'] ?? 0);
+        $cid = Auth::concernId();
+
+        $expense = DB::fetch("SELECT * FROM expenses WHERE id = ?", [$id]);
+        if (!$expense) {
+            $this->flash('error', 'Expense voucher not found.');
+            $this->redirect('/m/expense');
+        }
+
+        if ($cid && (int)$expense['concern_id'] !== $cid && !Auth::isSuperAdmin()) {
+            $this->flash('error', 'Unauthorized access to delete this voucher.');
+            $this->redirect('/m/expense');
+        }
+
+        DB::beginTransaction();
+        try {
+            // Delete linked cash transaction if any
+            DB::query("DELETE FROM cash_transactions WHERE ref_module = 'Warehouse Expense' AND ref_id = ?", [$id]);
+
+            // Delete expense record
+            DB::query("DELETE FROM expenses WHERE id = ?", [$id]);
+
+            DB::commit();
+            $this->flash('success', "Expense voucher '{$expense['expense_no']}' has been deleted.");
+        } catch (Exception $e) {
+            DB::rollBack();
+            $this->flash('error', 'Failed to delete expense: ' . $e->getMessage());
+        }
+
+        $this->redirect('/m/expense');
+    }
+
+    public function storeCategory(): void {
+        $this->validateCsrf();
+        $name = trim($_POST['name'] ?? '');
+        $cid  = Auth::concernId();
+
+        if (empty($name)) {
+            $this->renderJson(['success' => false, 'message' => 'Category name cannot be empty.'], 400);
+            return;
+        }
+
+        // Check if category already exists (case-insensitive)
+        $exists = DB::fetch("SELECT id, name FROM expense_categories WHERE LOWER(name) = LOWER(?)", [$name]);
+        if (!$exists) {
+            DB::query(
+                "INSERT INTO expense_categories (concern_id, name, status, created_at) VALUES (?, ?, 'active', NOW())",
+                [$cid, $name]
+            );
+            $id = (int)DB::lastInsertId();
+        } else {
+            $id = (int)$exists['id'];
+            $name = $exists['name'];
+        }
+
+        $this->renderJson([
+            'success' => true,
+            'id'      => $id,
+            'name'    => $name,
+            'message' => 'Category saved successfully.'
+        ]);
+    }
+
     public function exportExpenses(): void {
         $cid = Auth::concernId();
         $format          = strtolower(trim($_GET['format'] ?? 'excel'));
         $filterConcernId = isset($_GET['concern_id']) && $_GET['concern_id'] !== '' ? (int)$_GET['concern_id'] : ($cid ?: null);
-        $fromDate        = !empty($_GET['from_date']) ? $_GET['from_date'] : date('Y-m-01');
-        $toDate          = !empty($_GET['to_date']) ? $_GET['to_date'] : date('Y-m-d');
+        $period          = trim($_GET['period'] ?? '');
+        $singleDate      = trim($_GET['single_date'] ?? '');
+        $rawFromDate     = trim($_GET['from_date'] ?? '');
+        $rawToDate       = trim($_GET['to_date'] ?? '');
         $category        = trim($_GET['category'] ?? '');
         $payMode         = trim($_GET['payment_mode'] ?? '');
         $search          = trim($_GET['search'] ?? '');
+
+        if (!empty($period)) {
+            $range = \App\Services\ExportService::resolveDateRange($period, $singleDate, $rawFromDate, $rawToDate);
+            $fromDate = $range['start_date'];
+            $toDate   = $range['end_date'];
+            $periodLabel = $range['label'] ?? 'All Time';
+        } else {
+            $fromDate = !empty($rawFromDate) ? $rawFromDate : date('Y-m-01');
+            $toDate   = !empty($rawToDate) ? $rawToDate : date('Y-m-d');
+            $periodLabel = date('d M Y', strtotime($fromDate)) . ' to ' . date('d M Y', strtotime($toDate));
+        }
 
         $sql = "SELECT e.*, ca.name AS account_name, u.name AS user_name,
                        con.name AS concern_name, con.code AS concern_code
@@ -284,7 +418,7 @@ class FinanceController extends Controller {
 
         $metadata = [
             'Report'       => 'Warehouse Operational Expenses & Petty Cash',
-            'Period'       => date('d M Y', strtotime($fromDate)) . ' to ' . date('d M Y', strtotime($toDate)),
+            'Period'       => $periodLabel,
             'Generated By' => Auth::user()['name'] ?? 'User',
             'Total Outflow'=> '₹' . number_format($totalAmount, 2)
         ];
@@ -330,6 +464,55 @@ class FinanceController extends Controller {
         );
 
         $this->flash('success', "Cash Account '{$name}' created with opening balance of ₹" . number_format($opening, 2) . ".");
+        $this->redirect('/m/cash_flow?tab=accounts');
+    }
+
+    public function updateAccount(): void {
+        $this->validateCsrf();
+        $id = (int)($_POST['id'] ?? 0);
+        $account = DB::fetch("SELECT * FROM cash_accounts WHERE id = ?", [$id]);
+        if (!$account) {
+            $this->flash('error', 'Account not found.');
+            $this->redirect('/m/cash_flow?tab=accounts');
+        }
+
+        $name   = trim($_POST['name'] ?? '');
+        $type   = $_POST['account_type'] ?? $account['account_type'];
+        $accNo  = trim($_POST['account_number'] ?? $account['account_number']);
+        $status = $_POST['status'] ?? $account['status'];
+
+        if (empty($name)) {
+            $this->flash('error', 'Account Name is required.');
+            $this->redirect('/m/cash_flow?tab=accounts');
+        }
+
+        DB::query(
+            "UPDATE cash_accounts SET name = ?, account_type = ?, account_number = ?, status = ? WHERE id = ?",
+            [$name, $type, $accNo, $status, $id]
+        );
+
+        $this->flash('success', "Account '{$name}' updated successfully.");
+        $this->redirect('/m/cash_flow?tab=accounts');
+    }
+
+    public function deleteAccount(): void {
+        $this->validateCsrf();
+        $id = (int)($_POST['id'] ?? 0);
+        $account = DB::fetch("SELECT * FROM cash_accounts WHERE id = ?", [$id]);
+        if (!$account) {
+            $this->flash('error', 'Account not found.');
+            $this->redirect('/m/cash_flow?tab=accounts');
+        }
+
+        $txCount = (int)DB::fetchValue("SELECT COUNT(*) FROM cash_transactions WHERE account_id = ?", [$id]);
+        if ($txCount > 0) {
+            DB::query("UPDATE cash_accounts SET status = 'inactive' WHERE id = ?", [$id]);
+            $this->flash('warning', "Account '{$account['name']}' has {$txCount} historical transactions, so it has been set to Inactive instead of deleting.");
+        } else {
+            DB::query("DELETE FROM cash_accounts WHERE id = ?", [$id]);
+            $this->flash('success', "Account '{$account['name']}' deleted successfully.");
+        }
+
         $this->redirect('/m/cash_flow?tab=accounts');
     }
 
@@ -532,19 +715,31 @@ class FinanceController extends Controller {
         $denoms['total'] = $denomTotal;
 
         $shiftNo = 'SHF-' . date('Ymd') . '-' . rand(100, 999);
+        $variance = ($denomTotal > 0) ? round($denomTotal - $startingFloat, 2) : 0.00;
+        $varianceReason = trim($_POST['variance_reason'] ?? '');
+        if ($variance != 0 && !empty($varianceReason)) {
+            $notesSuffix = " [Mismatch Variance: " . ($variance > 0 ? "+₹" : "-₹") . number_format(abs($variance), 2) . " | Reason: {$varianceReason}]";
+            $openingNotes = $openingNotes ? ($openingNotes . $notesSuffix) : ltrim($notesSuffix);
+        }
+
+        // If starting float was left at 0 but denominations were counted, use denomination total as effective float
+        $effectiveFloat = ($startingFloat > 0) ? $startingFloat : $denomTotal;
+        if ($startingFloat <= 0 && $denomTotal > 0) {
+            $startingFloat = $denomTotal;
+        }
 
         DB::beginTransaction();
         try {
             DB::query(
-                "INSERT INTO cashier_shifts (concern_id, user_id, cashier_name, shift_no, opening_notes, starting_float, is_float_modified, denominations_json, status, opened_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', NOW())",
-                [$cid, Auth::id(), $cashierName, $shiftNo, $openingNotes, $startingFloat, $isModified, json_encode($denoms)]
+                "INSERT INTO cashier_shifts (concern_id, user_id, cashier_name, shift_no, opening_notes, starting_float, is_float_modified, denominations_json, variance, variance_reason, status, opened_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', NOW())",
+                [$cid, Auth::id(), $cashierName, $shiftNo, $openingNotes, $startingFloat, $isModified, json_encode($denoms), $variance, $varianceReason]
             );
 
             $shiftId = (int)DB::lastInsertId();
 
             // Record transaction so starting cash float reflects in cash accounts and cash flow ledger
-            if ($startingFloat > 0) {
+            if ($effectiveFloat > 0) {
                 // Find or create cash till account for this concern
                 $cashAccount = DB::fetch(
                     "SELECT id FROM cash_accounts WHERE concern_id = ? AND account_type IN ('cash', 'petty_cash') ORDER BY id ASC LIMIT 1",
@@ -564,15 +759,20 @@ class FinanceController extends Controller {
                     $cashAccountId = (int)$cashAccount['id'];
                 }
 
+                $txDesc = "Shift #{$shiftNo} Starting Float [Cashier: {$cashierName}]";
+                if (!empty($varianceReason)) {
+                    $txDesc .= " (Reason: {$varianceReason})";
+                }
+
                 CashService::postTransaction(
                     $cid,
                     $cashAccountId,
                     date('Y-m-d'),
                     'credit',
-                    $startingFloat,
+                    $effectiveFloat,
                     'Shift Register',
                     $shiftId,
-                    "Shift #{$shiftNo} Starting Float [Cashier: {$cashierName}]",
+                    $txDesc,
                     Auth::id()
                 );
             }

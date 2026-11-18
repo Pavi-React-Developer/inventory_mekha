@@ -36,6 +36,15 @@
         </div>
     </div>
 
+    <!-- Export Intelligence Toolbar -->
+    <?php
+    $exportTitle = 'Export POS Sales Invoices (Excel & PDF)';
+    $exportSubtitle = 'Download POS store transactions, register sales receipts, tax breakdowns & cashier collections';
+    $exportUrl = \App\Core\Controller::url('/m/billing/export');
+    $prefix = 'pos_bill_exp';
+    include __DIR__ . '/../partials/export_card.php';
+    ?>
+
     <!-- Main Terminal Grid (Left: Scanner / Shortcuts, Right: Customer & Cart) -->
     <form id="pos_billing_form" action="<?= \App\Core\Controller::url('/m/billing/complete') ?>" method="POST">
         <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">

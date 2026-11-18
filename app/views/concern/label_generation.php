@@ -11,6 +11,15 @@
         </a>
     </div>
 
+    <!-- Export Intelligence Toolbar -->
+    <?php
+    $exportTitle = 'Export Label Print Jobs (Excel & PDF)';
+    $exportSubtitle = 'Download barcode printing batches, SKU assignments, label runs & production logs';
+    $exportUrl = \App\Core\Controller::url('/m/label_generation/export');
+    $prefix = 'lbl_exp';
+    include __DIR__ . '/../partials/export_card.php';
+    ?>
+
     <div class="row g-4 mb-4">
         <!-- Generator Form Card -->
         <div class="col-lg-5">

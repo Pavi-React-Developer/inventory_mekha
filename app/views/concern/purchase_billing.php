@@ -12,6 +12,15 @@
         </div>
     </div>
 
+    <!-- Export Intelligence Toolbar -->
+    <?php
+    $exportTitle = 'Export Purchase Invoices (Excel & PDF)';
+    $exportSubtitle = 'Download vendor bills, procurement totals, GST tax breakdown & payment settlement status';
+    $exportUrl = \App\Core\Controller::url('/m/purchase_billing/export');
+    $prefix = 'pbill_exp';
+    include __DIR__ . '/../partials/export_card.php';
+    ?>
+
     <!-- Quick Metrics Overview Cards -->
     <?php
     $totalBills = count($bills);

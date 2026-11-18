@@ -1513,4 +1513,326 @@ class PurchaseController extends Controller {
 
         $this->redirect('/m/purchase_damage');
     }
+
+    public function updateDamage(): void {
+        $this->validateCsrf();
+        $id = (int)($_POST['id'] ?? 0);
+        $dmg = DB::fetch("SELECT * FROM purchase_damages WHERE id = ?", [$id]);
+        if (!$dmg) {
+            $this->flash('error', 'Purchase damage record not found.');
+            $this->redirect('/m/purchase_damage');
+        }
+
+        $supplierId  = !empty($_POST['supplier_id']) ? (int)$_POST['supplier_id'] : $dmg['supplier_id'];
+        $location    = trim($_POST['location'] ?? $dmg['location']);
+        $reason      = trim($_POST['reason'] ?? $dmg['reason']);
+        $actionTaken = trim($_POST['action_taken'] ?? $dmg['action_taken']);
+        $newQty      = (float)($_POST['qty'] ?? $dmg['qty']);
+
+        DB::beginTransaction();
+        try {
+            $diff = $newQty - (float)$dmg['qty'];
+            if ($diff != 0) {
+                if ($diff > 0) {
+                    StockService::move($dmg['concern_id'], $dmg['variant_id'], $location, 0.00, $diff, 'Purchase Damage', $id, "Updated Purchase Damage [{$dmg['damage_no']}]: Extra deduction", Auth::id());
+                } else {
+                    StockService::move($dmg['concern_id'], $dmg['variant_id'], $location, abs($diff), 0.00, 'Purchase Damage', $id, "Updated Purchase Damage [{$dmg['damage_no']}]: Restored partial stock", Auth::id());
+                }
+            }
+
+            DB::query(
+                "UPDATE purchase_damages SET supplier_id = ?, qty = ?, location = ?, reason = ?, action_taken = ? WHERE id = ?",
+                [$supplierId, $newQty, $location, $reason, $actionTaken, $id]
+            );
+
+            DB::commit();
+            $this->flash('success', "Purchase damage '{$dmg['damage_no']}' updated successfully.");
+        } catch (Exception $e) {
+            DB::rollBack();
+            $this->flash('error', 'Failed to update purchase damage: ' . $e->getMessage());
+        }
+
+        $this->redirect('/m/purchase_damage');
+    }
+
+    public function deleteDamage(): void {
+        $this->validateCsrf();
+        $id = (int)($_POST['id'] ?? 0);
+        $dmg = DB::fetch("SELECT * FROM purchase_damages WHERE id = ?", [$id]);
+        if (!$dmg) {
+            $this->flash('error', 'Purchase damage record not found.');
+            $this->redirect('/m/purchase_damage');
+        }
+
+        DB::beginTransaction();
+        try {
+            // Restore deducted stock
+            StockService::move(
+                $dmg['concern_id'],
+                $dmg['variant_id'],
+                $dmg['location'],
+                (float)$dmg['qty'],
+                0.00,
+                'Purchase Damage',
+                $id,
+                "Reversal of deleted Purchase Damage [{$dmg['damage_no']}]",
+                Auth::id()
+            );
+
+            DB::query("DELETE FROM purchase_damages WHERE id = ?", [$id]);
+            DB::commit();
+            $this->flash('success', "Purchase damage '{$dmg['damage_no']}' deleted and {$dmg['qty']} units restored to stock.");
+        } catch (Exception $e) {
+            DB::rollBack();
+            $this->flash('error', 'Failed to delete purchase damage: ' . $e->getMessage());
+        }
+
+        $this->redirect('/m/purchase_damage');
+    }
+
+    public function exportSuppliers(): void {
+        $cid = Auth::concernId();
+        $format = strtolower($_GET['format'] ?? 'excel');
+        $period = $_GET['period'] ?? 'all';
+        $singleDate = $_GET['single_date'] ?? null;
+        $fromDate = $_GET['from_date'] ?? null;
+        $toDate = $_GET['to_date'] ?? null;
+
+        $dateScope = \App\Services\ExportService::resolveDateRange($period, $singleDate, $fromDate, $toDate);
+
+        $sql = "SELECT s.*, con.name AS concern_name, con.code AS concern_code
+                FROM suppliers s
+                LEFT JOIN concerns con ON s.concern_id = con.id";
+        $params = [];
+        $where = [];
+        if ($cid) {
+            $where[] = "s.concern_id = ?";
+            $params[] = $cid;
+        }
+        if ($dateScope['start_date'] && $dateScope['end_date']) {
+            $where[] = "DATE(s.created_at) BETWEEN ? AND ?";
+            $params[] = $dateScope['start_date'];
+            $params[] = $dateScope['end_date'];
+        }
+        if (!empty($where)) {
+            $sql .= " WHERE " . implode(" AND ", $where);
+        }
+        $sql .= " ORDER BY s.id DESC";
+        $suppliers = DB::fetchAll($sql, $params);
+
+        $headers = [
+            'ID', 'Company / Mill Name', 'Contact Person', 'Phone', 'Email', 
+            'GSTIN', 'District', 'State', 'Opening Bal (₹)', 'Current Bal (₹)', 'Status', 'Concern'
+        ];
+
+        $rows = [];
+        $totOpening = 0;
+        $totCurrent = 0;
+        foreach ($suppliers as $s) {
+            $totOpening += (float)($s['opening_balance'] ?? 0);
+            $totCurrent += (float)($s['current_balance'] ?? 0);
+            $rows[] = [
+                'SUP-' . str_pad($s['id'], 4, '0', STR_PAD_LEFT),
+                $s['company_name'] ?? $s['name'],
+                $s['name'],
+                $s['phone'] ?? '-',
+                $s['email'] ?? '-',
+                $s['gstin'] ?? '-',
+                $s['district'] ?? '-',
+                $s['state'] ?? 'Tamil Nadu',
+                '₹' . number_format((float)($s['opening_balance'] ?? 0), 2),
+                '₹' . number_format((float)($s['current_balance'] ?? 0), 2),
+                ucfirst($s['status'] ?? 'Active'),
+                $s['concern_name'] ?? 'Consolidated'
+            ];
+        }
+
+        $totals = ['Total Suppliers: ' . count($suppliers), '', '', '', '', '', '', '', '₹' . number_format($totOpening, 2), '₹' . number_format($totCurrent, 2), '', ''];
+        $metadata = [
+            'Report Title' => 'Registered Suppliers & Vendor Master Directory',
+            'Scope / Period' => $dateScope['label'],
+            'Generated At' => date('d M Y, h:i A'),
+            'Total Vendors' => count($suppliers),
+            'Total Outstanding' => '₹' . number_format($totCurrent, 2)
+        ];
+
+        $filename = 'suppliers_master_' . date('Ymd_His');
+
+        if ($format === 'pdf') {
+            \App\Services\ExportService::renderPdfView('Supplier & Vendor Directory Report', $metadata, $headers, $rows, $totals);
+        } elseif ($format === 'csv') {
+            \App\Services\ExportService::downloadCsv($filename, $headers, $rows, $totals);
+        } else {
+            \App\Services\ExportService::downloadExcel($filename, 'Supplier & Vendor Directory Report', $metadata, $headers, $rows, $totals);
+        }
+    }
+
+    public function exportBills(): void {
+        $cid = Auth::concernId();
+        $format = strtolower($_GET['format'] ?? 'excel');
+        $period = $_GET['period'] ?? 'all';
+        $singleDate = $_GET['single_date'] ?? null;
+        $fromDate = $_GET['from_date'] ?? null;
+        $toDate = $_GET['to_date'] ?? null;
+
+        $dateScope = \App\Services\ExportService::resolveDateRange($period, $singleDate, $fromDate, $toDate);
+
+        $sql = "SELECT pb.*, s.name AS supplier_name, s.company_name, con.name AS concern_name, con.code AS concern_code
+                FROM purchase_bills pb
+                JOIN suppliers s ON pb.supplier_id = s.id
+                LEFT JOIN concerns con ON pb.concern_id = con.id";
+        $params = [];
+        $where = [];
+        if ($cid) {
+            $where[] = "pb.concern_id = ?";
+            $params[] = $cid;
+        }
+        if ($dateScope['start_date'] && $dateScope['end_date']) {
+            $where[] = "DATE(pb.bill_date) BETWEEN ? AND ?";
+            $params[] = $dateScope['start_date'];
+            $params[] = $dateScope['end_date'];
+        }
+        if (!empty($where)) {
+            $sql .= " WHERE " . implode(" AND ", $where);
+        }
+        $sql .= " ORDER BY pb.id DESC";
+        $bills = DB::fetchAll($sql, $params);
+
+        $headers = [
+            'Bill No', 'Date', 'Supplier / Mill', 'Invoice No', 'Terms', 
+            'Subtotal (₹)', 'Tax (₹)', 'Grand Total (₹)', 'Paid (₹)', 'Balance (₹)', 'Status', 'Concern'
+        ];
+
+        $rows = [];
+        $totSub = 0; $totTax = 0; $totGrand = 0; $totPaid = 0; $totBal = 0;
+        foreach ($bills as $b) {
+            $sub = (float)($b['total_amount'] ?? 0);
+            $tax = (float)($b['tax_amount'] ?? 0);
+            $grand = (float)($b['grand_total'] ?? 0);
+            $paid = (float)($b['paid_amount'] ?? 0);
+            $bal = (float)($b['balance_amount'] ?? ($grand - $paid));
+
+            $totSub += $sub; $totTax += $tax; $totGrand += $grand; $totPaid += $paid; $totBal += $bal;
+
+            $rows[] = [
+                $b['bill_no'],
+                date('d M Y', strtotime($b['bill_date'])),
+                $b['company_name'] ?: $b['supplier_name'],
+                $b['invoice_no'] ?: '-',
+                $b['payment_terms'] ?: 'Net 30',
+                '₹' . number_format($sub, 2),
+                '₹' . number_format($tax, 2),
+                '₹' . number_format($grand, 2),
+                '₹' . number_format($paid, 2),
+                '₹' . number_format($bal, 2),
+                strtoupper($b['status'] ?? 'PENDING'),
+                $b['concern_name'] ?? 'Consolidated'
+            ];
+        }
+
+        $totals = [
+            'Total Bills: ' . count($bills), '', '', '', '',
+            '₹' . number_format($totSub, 2),
+            '₹' . number_format($totTax, 2),
+            '₹' . number_format($totGrand, 2),
+            '₹' . number_format($totPaid, 2),
+            '₹' . number_format($totBal, 2),
+            '', ''
+        ];
+
+        $metadata = [
+            'Report Title' => 'Purchase Billing Register & Invoices',
+            'Scope / Period' => $dateScope['label'],
+            'Generated At' => date('d M Y, h:i A'),
+            'Total Bills' => count($bills),
+            'Grand Total' => '₹' . number_format($totGrand, 2),
+            'Total Balance Due' => '₹' . number_format($totBal, 2)
+        ];
+
+        $filename = 'purchase_bills_' . date('Ymd_His');
+
+        if ($format === 'pdf') {
+            \App\Services\ExportService::renderPdfView('Purchase Invoices & Billing Register', $metadata, $headers, $rows, $totals);
+        } elseif ($format === 'csv') {
+            \App\Services\ExportService::downloadCsv($filename, $headers, $rows, $totals);
+        } else {
+            \App\Services\ExportService::downloadExcel($filename, 'Purchase Invoices & Billing Register', $metadata, $headers, $rows, $totals);
+        }
+    }
+
+    public function exportDamage(): void {
+        $cid = Auth::concernId();
+        $format = strtolower($_GET['format'] ?? 'excel');
+        $period = $_GET['period'] ?? 'all';
+        $singleDate = $_GET['single_date'] ?? null;
+        $fromDate = $_GET['from_date'] ?? null;
+        $toDate = $_GET['to_date'] ?? null;
+
+        $dateScope = \App\Services\ExportService::resolveDateRange($period, $singleDate, $fromDate, $toDate);
+
+        $sql = "SELECT pd.*, s.name AS supplier_name, s.company_name, v.name AS variant_name, v.sku_code,
+                       con.name AS concern_name, con.code AS concern_code
+                FROM purchase_damages pd
+                JOIN suppliers s ON pd.supplier_id = s.id
+                JOIN variants v ON pd.variant_id = v.id
+                LEFT JOIN concerns con ON pd.concern_id = con.id";
+        $params = [];
+        $where = [];
+        if ($cid) {
+            $where[] = "pd.concern_id = ?";
+            $params[] = $cid;
+        }
+        if ($dateScope['start_date'] && $dateScope['end_date']) {
+            $where[] = "DATE(pd.created_at) BETWEEN ? AND ?";
+            $params[] = $dateScope['start_date'];
+            $params[] = $dateScope['end_date'];
+        }
+        if (!empty($where)) {
+            $sql .= " WHERE " . implode(" AND ", $where);
+        }
+        $sql .= " ORDER BY pd.id DESC";
+        $damages = DB::fetchAll($sql, $params);
+
+        $headers = [
+            'Damage No', 'Date', 'Supplier', 'SKU Code', 'Variant / Item', 
+            'Damaged Qty', 'Location', 'Damage Reason', 'Action Taken', 'Concern'
+        ];
+
+        $rows = [];
+        $totQty = 0;
+        foreach ($damages as $d) {
+            $totQty += (float)$d['qty'];
+            $rows[] = [
+                $d['damage_no'],
+                date('d M Y', strtotime($d['created_at'])),
+                $d['company_name'] ?: $d['supplier_name'],
+                $d['sku_code'],
+                $d['variant_name'],
+                (float)$d['qty'],
+                $d['location'] ?? 'Receiving Bay',
+                $d['reason'] ?? '-',
+                $d['action_taken'] ?? '-',
+                $d['concern_name'] ?? 'Consolidated'
+            ];
+        }
+
+        $totals = ['Total Records: ' . count($damages), '', '', '', '', $totQty, '', '', '', ''];
+        $metadata = [
+            'Report Title' => 'Purchase Inbound Damage & Supplier Rejections',
+            'Scope / Period' => $dateScope['label'],
+            'Generated At' => date('d M Y, h:i A'),
+            'Total Incident Records' => count($damages),
+            'Total Damaged Units' => number_format($totQty, 2)
+        ];
+
+        $filename = 'purchase_damages_' . date('Ymd_His');
+
+        if ($format === 'pdf') {
+            \App\Services\ExportService::renderPdfView('Purchase Damage & Rejection Audit Report', $metadata, $headers, $rows, $totals);
+        } elseif ($format === 'csv') {
+            \App\Services\ExportService::downloadCsv($filename, $headers, $rows, $totals);
+        } else {
+            \App\Services\ExportService::downloadExcel($filename, 'Purchase Damage & Rejection Audit Report', $metadata, $headers, $rows, $totals);
+        }
+    }
 }
