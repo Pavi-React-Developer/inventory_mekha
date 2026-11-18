@@ -39,6 +39,9 @@ $router->get('/', function() {
 $router->get('/login', [AuthController::class, 'showLogin']);
 $router->post('/login', [AuthController::class, 'login']);
 $router->get('/logout', [AuthController::class, 'logout']);
+$router->get('/select-concern', [AuthController::class, 'selectConcern']);
+$router->post('/select-concern', [AuthController::class, 'setConcern']);
+$router->get('/switch-concern', [AuthController::class, 'switchConcernAction']);
 
 // ==========================================
 // SUPER ADMIN MODULES (guarded 'super_admin')

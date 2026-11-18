@@ -78,6 +78,97 @@ class Auth {
         return DB::fetchAll("SELECT id, name, code, status FROM concerns WHERE status = 'active' ORDER BY name ASC");
     }
 
+    /**
+     * Get all active concerns a specific user is authorized to access.
+     */
+    public static function getUserConcerns(int $userId): array {
+        return DB::fetchAll(
+            "SELECT DISTINCT c.id, c.name, c.code, c.status, c.logo
+             FROM concerns c
+             WHERE c.status = 'active'
+               AND c.id IN (
+                   SELECT concern_id FROM user_concerns WHERE user_id = ?
+                   UNION
+                   SELECT concern_id FROM staff WHERE user_id = ? AND status = 'active'
+                   UNION
+                   SELECT concern_id FROM users WHERE id = ? AND concern_id IS NOT NULL AND status = 'active'
+               )
+             ORDER BY c.name ASC",
+            [$userId, $userId, $userId]
+        );
+    }
+
+    /**
+     * Check if a concern is a retail shop / store
+     */
+    public static function isShopConcern(?int $concernId): bool {
+        if (!$concernId) {
+            return false;
+        }
+        $c = DB::fetch("SELECT name, code FROM concerns WHERE id = ?", [$concernId]);
+        if (!$c) {
+            return false;
+        }
+        $nameLower = strtolower($c['name']);
+        $codeLower = strtolower($c['code']);
+        return str_contains($nameLower, 'shop') || str_contains($nameLower, 'store') || str_contains($nameLower, 'retail') || str_contains($codeLower, 'sh');
+    }
+
+    /**
+     * Set active concern context for current session
+     */
+    public static function setSessionConcern(int $concernId): bool {
+        self::startSession();
+        $c = DB::fetch("SELECT id, name, code, status, logo FROM concerns WHERE id = ? AND status = 'active'", [$concernId]);
+        if (!$c) {
+            return false;
+        }
+
+        if (isset($_SESSION['user'])) {
+            $_SESSION['user']['concern_id'] = (int)$c['id'];
+        }
+
+        $_SESSION['concern'] = [
+            'id'   => (int)$c['id'],
+            'name' => $c['name'],
+            'code' => $c['code'],
+            'logo' => $c['logo'],
+        ];
+
+        // Cache enabled modules for fast checking
+        $mods = DB::fetchAll(
+            "SELECT m.code, m.id FROM concern_modules cm 
+             JOIN modules m ON cm.module_id = m.id 
+             WHERE cm.concern_id = ? AND cm.enabled = 1",
+            [(int)$c['id']]
+        );
+        $_SESSION['enabled_modules'] = array_column($mods, 'code');
+
+        // Cache permissions
+        $roleId = $_SESSION['user']['role_id'] ?? 0;
+        if ($roleId) {
+            $perms = DB::fetchAll(
+                "SELECT m.code, rp.can_view, rp.can_add, rp.can_edit, rp.can_delete 
+                 FROM role_permissions rp
+                 JOIN modules m ON rp.module_id = m.id
+                 WHERE rp.role_id = ?",
+                [(int)$roleId]
+            );
+            $pMap = [];
+            foreach ($perms as $p) {
+                $pMap[$p['code']] = [
+                    'view'   => (bool)$p['can_view'],
+                    'add'    => (bool)$p['can_add'],
+                    'edit'   => (bool)$p['can_edit'],
+                    'delete' => (bool)$p['can_delete'],
+                ];
+            }
+            $_SESSION['role_permissions'] = $pMap;
+        }
+
+        return true;
+    }
+
     public static function concern(): ?array {
         if (!self::isSuperAdmin()) {
             return $_SESSION['concern'] ?? null;

@@ -131,6 +131,10 @@ class StaffController extends Controller {
                 [$cid, $userId, $staffCode, $name, $email, $passwordHash, $phone, $designation, $department, $status, Auth::id()]
             );
 
+            if ($userId && $cid) {
+                DB::query("INSERT IGNORE INTO user_concerns (user_id, concern_id) VALUES (?, ?)", [$userId, $cid]);
+            }
+
             $this->flash('success', "Staff member '{$name}' [{$staffCode}] registered successfully.");
         } catch (Exception $e) {
             $this->flash('error', 'Failed to register staff: ' . $e->getMessage());
@@ -189,6 +193,11 @@ class StaffController extends Controller {
                  WHERE id = ?",
                 [$cid, $name, $email, $passwordHash, $phone, $designation, $department, $status, $id]
             );
+
+            $effectiveUserId = !empty($staff['user_id']) ? (int)$staff['user_id'] : ($userId ?? null);
+            if ($effectiveUserId && $cid) {
+                DB::query("INSERT IGNORE INTO user_concerns (user_id, concern_id) VALUES (?, ?)", [$effectiveUserId, $cid]);
+            }
 
             $this->flash('success', "Staff member '{$name}' updated successfully.");
         } catch (Exception $e) {
