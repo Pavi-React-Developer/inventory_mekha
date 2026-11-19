@@ -648,7 +648,41 @@ $concernName = $concern['name'] ?? 'INVENTO ERP';
                                             <?= htmlspecialchars($varName) ?> (<?= htmlspecialchars($tagCode) ?>) &bull; <?= number_format((float)$fg['qty'], 0) ?> pcs &bull; Bill #<?= htmlspecialchars($fg['bill_no']) ?> [Mapped: <?= htmlspecialchars($sku) ?>]
                                         </option>
                                     <?php endforeach; ?>
-                                    <?php if ($mappedFgCount === 0): ?>
+                                    <?php if (!empty($productionItems)): ?>
+                                        <optgroup label="--- Stitched Production Finished Goods ---">
+                                            <?php foreach ($productionItems as $pfg): 
+                                                $pfgTag = QrService::generateTagCode(
+                                                    $pfg['variant_name'],
+                                                    $pfg['variant_color'] ?? ($pfg['color'] ?? ''),
+                                                    $pfg['program_no'] ?? '',
+                                                    (string)($pfg['produced_variant_id'] ?: $pfg['variant_id'] ?: $pfg['id'])
+                                                );
+                                            ?>
+                                                <option value="prod_<?= $pfg['id'] ?>"
+                                                        data-name="<?= htmlspecialchars($pfg['variant_name']) ?>"
+                                                        data-sku="<?= htmlspecialchars($pfg['sku_code']) ?>"
+                                                        data-tag="<?= htmlspecialchars($pfgTag) ?>"
+                                                        data-mrp="<?= htmlspecialchars($pfg['variant_mrp']) ?>"
+                                                        data-price="<?= htmlspecialchars($pfg['variant_price'] ?? $pfg['variant_mrp']) ?>"
+                                                        data-size="<?= htmlspecialchars($pfg['variant_size'] ?: 'Standard') ?>"
+                                                        data-pattern="<?= htmlspecialchars($pfg['program_no'] ?: 'In-House') ?>"
+                                                        data-cat="<?= htmlspecialchars($pfg['category_name'] ?: 'Apparel') ?>"
+                                                        data-brand="INVENTO Production"
+                                                        data-color="<?= htmlspecialchars($pfg['variant_color'] ?? ($pfg['color'] ?? 'Standard')) ?>"
+                                                        data-mapped="1"
+                                                        data-varid="<?= htmlspecialchars($pfg['variant_id'] ?? '') ?>"
+                                                        data-qty="<?= htmlspecialchars($pfg['stitched_pieces']) ?>"
+                                                        data-unit="pcs"
+                                                        data-bill="<?= htmlspecialchars($pfg['log_no']) ?>"
+                                                        data-qr="<?= htmlspecialchars($pfgTag) ?>"
+                                                        data-in-stock="<?= !empty($pfg['is_in_stock']) ? '1' : '0' ?>"
+                                                        data-is-production="1">
+                                                    [Stitched] <?= htmlspecialchars($pfg['variant_name']) ?> [<?= htmlspecialchars($pfg['variant_size'] ?: 'Standard') ?>] (<?= htmlspecialchars($pfg['sku_code']) ?>) &bull; <?= (int)$pfg['stitched_pieces'] ?> pcs &bull; Batch #<?= htmlspecialchars($pfg['log_no']) ?> <?= !empty($pfg['is_in_stock']) ? '✓ In Stock' : '' ?>
+                                                </option>
+                                            <?php endforeach; ?>
+                                        </optgroup>
+                                    <?php endif; ?>
+                                    <?php if ($mappedFgCount === 0 && empty($productionItems)): ?>
                                         <option value="" disabled>-- No Mapped Goods Found (Please map items in Catalog Mapping) --</option>
                                     <?php endif; ?>
                                 </select>
@@ -871,9 +905,9 @@ $concernName = $concern['name'] ?? 'INVENTO ERP';
                                     <?php foreach ($productionItems as $prod): 
                                         $tagCode = QrService::generateTagCode(
                                             $prod['variant_name'],
-                                            '',
+                                            $prod['variant_color'] ?? ($prod['color'] ?? ''),
                                             $prod['program_no'] ?? '',
-                                            (string)$prod['produced_variant_id']
+                                            (string)($prod['produced_variant_id'] ?: $prod['variant_id'] ?: $prod['id'])
                                         );
                                     ?>
                                         <option value="<?= $prod['id'] ?>"
@@ -881,14 +915,17 @@ $concernName = $concern['name'] ?? 'INVENTO ERP';
                                                 data-sku="<?= htmlspecialchars($prod['sku_code']) ?>"
                                                 data-tag="<?= htmlspecialchars($tagCode) ?>"
                                                 data-mrp="<?= htmlspecialchars($prod['variant_mrp']) ?>"
+                                                data-price="<?= htmlspecialchars($prod['variant_price'] ?? $prod['variant_mrp']) ?>"
                                                 data-size="<?= htmlspecialchars($prod['variant_size'] ?: 'Standard') ?>"
+                                                data-color="<?= htmlspecialchars($prod['variant_color'] ?? ($prod['color'] ?? 'Standard')) ?>"
                                                 data-cat="<?= htmlspecialchars($prod['category_name'] ?: 'Apparel') ?>"
                                                 data-brand="<?= htmlspecialchars($prod['brand_name'] ?: 'INVENTO Production') ?>"
                                                 data-log="<?= htmlspecialchars($prod['log_no']) ?>"
                                                 data-pcs="<?= htmlspecialchars($prod['stitched_pieces']) ?>"
                                                 data-program="<?= htmlspecialchars($prod['program_no'] ?: 'Standard Program') ?>"
+                                                data-in-stock="<?= !empty($prod['is_in_stock']) ? '1' : '0' ?>"
                                                 data-qr="<?= htmlspecialchars($tagCode) ?>">
-                                            Log #<?= htmlspecialchars($prod['log_no']) ?> &bull; <?= htmlspecialchars($prod['variant_name']) ?> (<?= htmlspecialchars($tagCode) ?>) &bull; <?= (int)$prod['stitched_pieces'] ?> pcs stitched
+                                            Batch #<?= htmlspecialchars($prod['log_no']) ?> &bull; <?= htmlspecialchars($prod['variant_name']) ?> [<?= htmlspecialchars($prod['variant_size'] ?: 'Standard') ?>] (<?= htmlspecialchars($prod['sku_code']) ?>) &bull; <?= (int)$prod['stitched_pieces'] ?> pcs stitched <?= !empty($prod['is_in_stock']) ? '✓ In Stock' : '' ?>
                                         </option>
                                     <?php endforeach; ?>
                                 </select>
@@ -943,9 +980,14 @@ $concernName = $concern['name'] ?? 'INVENTO ERP';
                                 </div>
                             </div>
 
-                            <button type="submit" class="btn btn-warning text-dark w-100 py-2 fw-semibold shadow-sm mt-auto">
-                                <i class="bi bi-printer-fill me-1"></i> Generate Printable Sheet (N Labels)
-                            </button>
+                            <div class="d-flex gap-2 mt-auto">
+                                <button type="submit" class="btn btn-warning text-dark flex-grow-1 py-2 fw-semibold shadow-sm">
+                                    <i class="bi bi-printer-fill me-1"></i> Generate Printable Sheet (N Labels)
+                                </button>
+                                <button type="button" class="btn btn-success py-2 px-3 fw-semibold shadow-sm" onclick="submitProdToStock()" title="Inward selected stitched item into Live Stock">
+                                    <i class="bi bi-box-arrow-in-down me-1"></i> Add to Stock
+                                </button>
+                            </div>
                         </form>
                     </div>
                 </div>
@@ -968,12 +1010,13 @@ $concernName = $concern['name'] ?? 'INVENTO ERP';
                                         <th>Log & Program</th>
                                         <th>Assembled Garment</th>
                                         <th>Stitched Pcs</th>
+                                        <th>Stock Status</th>
                                         <th class="text-end pe-3">Action</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     <?php if (empty($productionItems)): ?>
-                                        <tr><td colspan="5" class="text-center py-4 text-muted">No stitched production batches found. Complete a stitching log in Production Line.</td></tr>
+                                        <tr><td colspan="6" class="text-center py-4 text-muted">No stitched production batches found. Complete a stitching log in Production Line.</td></tr>
                                     <?php else: ?>
                                         <?php $idx = 1; foreach ($productionItems as $p): ?>
                                             <tr class="prod-row" data-search="<?= strtolower(htmlspecialchars($p['log_no'] . ' ' . $p['variant_name'] . ' ' . $p['sku_code'])) ?>">
@@ -993,10 +1036,37 @@ $concernName = $concern['name'] ?? 'INVENTO ERP';
                                                     <span class="badge bg-success font-monospace fs-6"><?= (int)$p['stitched_pieces'] ?> pcs</span>
                                                     <small class="d-block text-muted"><?= date('d M Y', strtotime($p['created_at'])) ?></small>
                                                 </td>
+                                                <td>
+                                                    <?php if (!empty($p['is_in_stock'])): ?>
+                                                        <span class="badge bg-success-subtle text-success border border-success px-2 py-1">
+                                                            <i class="bi bi-check-circle-fill me-1"></i> In Stock
+                                                        </span>
+                                                    <?php else: ?>
+                                                        <span class="badge bg-warning-subtle text-warning border border-warning px-2 py-1">
+                                                            <i class="bi bi-clock-history me-1"></i> Pending Inward
+                                                        </span>
+                                                    <?php endif; ?>
+                                                </td>
                                                 <td class="text-end pe-3">
-                                                    <button type="button" class="btn btn-sm btn-outline-warning text-dark py-1 px-2 fw-semibold" onclick="selectProdItem(<?= (int)$p['id'] ?>)">
-                                                        <i class="bi bi-printer me-1"></i> Print
-                                                    </button>
+                                                    <div class="d-inline-flex gap-1 align-items-center">
+                                                        <button type="button" class="btn btn-sm btn-outline-warning text-dark py-1 px-2 fw-semibold" onclick="selectProdItem(<?= (int)$p['id'] ?>)" title="Configure & Print Labels">
+                                                            <i class="bi bi-printer me-1"></i> Print
+                                                        </button>
+                                                        <?php if (!empty($p['is_in_stock'])): ?>
+                                                            <a href="<?= \App\Core\Controller::url('/m/stocks') ?>" class="btn btn-sm btn-outline-success py-1 px-2 fw-semibold" title="View in Live Stocks">
+                                                                <i class="bi bi-eye"></i> Stock
+                                                            </a>
+                                                        <?php else: ?>
+                                                            <form action="<?= \App\Core\Controller::url('/m/label/add_to_stock') ?>" method="POST" class="d-inline">
+                                                                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
+                                                                <input type="hidden" name="item_id" value="<?= (int)$p['id'] ?>">
+                                                                <input type="hidden" name="tab" value="production">
+                                                                <button type="submit" class="btn btn-sm btn-success py-1 px-2 fw-semibold" title="Inward directly into Live Inventory Stocks">
+                                                                    <i class="bi bi-box-arrow-in-down me-1"></i> Add to Stock
+                                                                </button>
+                                                            </form>
+                                                        <?php endif; ?>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         <?php endforeach; ?>
@@ -1610,11 +1680,12 @@ function updateProdPreview() {
     const sel = document.getElementById('prod_item_select');
     const opt = sel.options[sel.selectedIndex];
     if (opt && opt.value) {
-        const tag = opt.dataset.tag || makeTagCode(opt.dataset.name, '', opt.dataset.program, opt.value);
+        const tag = opt.dataset.tag || makeTagCode(opt.dataset.name, opt.dataset.color, opt.dataset.program, opt.value);
         const ref = opt.dataset.program || opt.dataset.log || 'PP-REF';
-        const color = 'STANDARD';
-        const design = (opt.dataset.program || opt.dataset.pattern || 'STANDARD').toUpperCase();
-        const price = parseFloat(opt.dataset.mrp || 0);
+        const color = (opt.dataset.color || 'STANDARD').toUpperCase();
+        const design = (opt.dataset.size ? ('SIZE: ' + opt.dataset.size) : (opt.dataset.program || 'STANDARD')).toUpperCase();
+        const price = parseFloat(opt.dataset.price || opt.dataset.mrp || 0);
+        const isInStock = opt.dataset.inStock === '1';
 
         document.getElementById('prod_preview_ref').textContent = ref;
         document.getElementById('prod_preview_title').textContent = opt.dataset.name || 'Production Garment';
@@ -1623,6 +1694,12 @@ function updateProdPreview() {
         document.getElementById('prod_preview_design').textContent = design;
         document.getElementById('prod_preview_price').textContent = '₹' + price.toFixed(2);
         document.getElementById('prod_preview_code_tag').textContent = tag;
+
+        const badgeEl = document.getElementById('prod_preview_badge');
+        if (badgeEl) {
+            badgeEl.textContent = isInStock ? 'IN STOCK' : 'IN-HOUSE STITCHED';
+            badgeEl.className = isInStock ? 'badge bg-success-subtle text-success border border-success font-monospace' : 'badge bg-warning-subtle text-warning border border-warning font-monospace';
+        }
 
         renderQr('prod_qr_box', tag);
     } else {
@@ -1633,6 +1710,11 @@ function updateProdPreview() {
         document.getElementById('prod_preview_design').textContent = 'STANDARD';
         document.getElementById('prod_preview_price').textContent = '₹0.00';
         document.getElementById('prod_preview_code_tag').textContent = 'PRO-S-01';
+        const badgeEl = document.getElementById('prod_preview_badge');
+        if (badgeEl) {
+            badgeEl.textContent = 'IN-HOUSE STITCHED';
+            badgeEl.className = 'badge bg-warning-subtle text-warning border border-warning font-monospace';
+        }
         renderQr('prod_qr_box', 'PRO-S-01');
     }
 }
@@ -1652,6 +1734,27 @@ function matchProdQty() {
         const pcs = parseInt(opt.dataset.pcs || 24, 10);
         document.getElementById('prod_qty').value = pcs > 0 ? pcs : 24;
     }
+}
+
+function submitProdToStock() {
+    const select = document.getElementById('prod_item_select');
+    if (!select || !select.value) {
+        alert('Please choose a stitched production batch / item first.');
+        return;
+    }
+    const val = select.value;
+    const isProd = val.startsWith('prod_');
+    const cleanId = isProd ? val.replace('prod_', '') : val;
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '<?= \App\Core\Controller::url('/m/label/add_to_stock') ?>';
+    form.innerHTML = `
+        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
+        <input type="hidden" name="item_id" value="${cleanId}">
+        <input type="hidden" name="tab" value="production">
+    `;
+    document.body.appendChild(form);
+    form.submit();
 }
 
 // Tab 4: Return Preview Handler
@@ -1777,14 +1880,20 @@ function submitFgToStock() {
         alert('Please select a finished goods item first.');
         return;
     }
+    const val = select.value;
+    const isProd = val.startsWith('prod_');
+    const cleanId = isProd ? val.replace('prod_', '') : val;
     const form = document.createElement('form');
     form.method = 'POST';
     form.action = '<?= \App\Core\Controller::url('/m/label/add_to_stock') ?>';
     form.innerHTML = `
         <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
-        <input type="hidden" name="item_id" value="${select.value}">
-        <input type="hidden" name="tab" value="finished_goods">
+        <input type="hidden" name="item_id" value="${cleanId}">
+        <input type="hidden" name="tab" value="${isProd ? 'production' : 'finished_goods'}">
     `;
+    document.body.appendChild(form);
+    form.submit();
+}
     document.body.appendChild(form);
     form.submit();
 }
