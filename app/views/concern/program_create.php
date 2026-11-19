@@ -664,7 +664,38 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function updateHierarchyBadgeFromCats(catSelect, subcatSelect, subsubcatSelect, badgeEl, catalogSelect) {
-        if (catalogSelect.value) return;
+        if (catalogSelect && catalogSelect.value) {
+            const selOpt = catalogSelect.options[catalogSelect.selectedIndex];
+            if (badgeEl && selOpt) {
+                badgeEl.textContent = selOpt.text.trim();
+                badgeEl.className = 'badge bg-primary text-white border-0 roll-catalog-badge';
+            }
+            return;
+        }
+
+        // Auto-match catalog from CATALOGS
+        const subsubId = subsubcatSelect ? subsubcatSelect.value : '';
+        const subcatId = subcatSelect ? subcatSelect.value : '';
+        const catId = catSelect ? catSelect.value : '';
+
+        if (catalogSelect && typeof CATALOGS !== 'undefined' && CATALOGS.length > 0) {
+            let matched = null;
+            if (subsubId) {
+                matched = CATALOGS.find(c => String(c.sub_sub_category_id) === String(subsubId));
+            }
+            if (!matched && subcatId && catId) {
+                matched = CATALOGS.find(c => String(c.subcategory_id) === String(subcatId) && String(c.category_id) === String(catId));
+            }
+            if (matched) {
+                catalogSelect.value = matched.id;
+                if (badgeEl) {
+                    badgeEl.textContent = `${matched.style_code ? '[' + matched.style_code + '] ' : ''}${matched.name}`;
+                    badgeEl.className = 'badge bg-primary text-white border-0 roll-catalog-badge';
+                }
+                return;
+            }
+        }
+
         const c1 = catSelect.selectedIndex > 0 ? catSelect.options[catSelect.selectedIndex].text : '';
         const c2 = subcatSelect.selectedIndex > 0 ? subcatSelect.options[subcatSelect.selectedIndex].text : '';
         const c3 = subsubcatSelect.selectedIndex > 0 ? subsubcatSelect.options[subsubcatSelect.selectedIndex].text : '';

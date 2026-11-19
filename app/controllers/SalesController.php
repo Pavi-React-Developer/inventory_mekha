@@ -117,9 +117,13 @@ class SalesController extends Controller {
         $address = trim($_POST['address'] ?? '');
         $city    = trim($_POST['city'] ?? '');
 
+        $redirectUrl = (!empty($_SERVER['HTTP_REFERER']) && str_contains($_SERVER['HTTP_REFERER'], '/shop/customers'))
+            ? '/shop/customers'
+            : '/m/customers';
+
         if (empty($name)) {
             $this->flash('error', 'Customer name is required.');
-            $this->redirect('/m/customers');
+            $this->redirect($redirectUrl);
         }
 
         $code = 'CUST-' . str_pad((string)(DB::fetchValue("SELECT COUNT(*) FROM customers WHERE concern_id = ?", [$cid]) + 1), 3, '0', STR_PAD_LEFT);
@@ -131,7 +135,7 @@ class SalesController extends Controller {
         );
 
         $this->flash('success', "Customer '{$name}' created with code {$code}.");
-        $this->redirect('/m/customers');
+        $this->redirect($redirectUrl);
     }
 
     public function updateCustomer(): void {
@@ -139,9 +143,13 @@ class SalesController extends Controller {
         $id = (int)($_POST['id'] ?? 0);
         $cid = Auth::concernId() ?: (int)($_POST['concern_id'] ?? 0);
 
+        $redirectUrl = (!empty($_SERVER['HTTP_REFERER']) && str_contains($_SERVER['HTTP_REFERER'], '/shop/customers'))
+            ? '/shop/customers'
+            : '/m/customers';
+
         if (!$id) {
             $this->flash('error', 'Customer not found.');
-            $this->redirect('/m/customers');
+            $this->redirect($redirectUrl);
         }
 
         $name    = trim($_POST['name'] ?? '');
@@ -154,7 +162,7 @@ class SalesController extends Controller {
 
         if (empty($name)) {
             $this->flash('error', 'Customer name is required.');
-            $this->redirect('/m/customers');
+            $this->redirect($redirectUrl);
         }
 
         $sql = "UPDATE customers SET name = ?, phone = ?, email = ?, gstin = ?, address = ?, city = ?, status = ? WHERE id = ?";
@@ -166,7 +174,7 @@ class SalesController extends Controller {
 
         DB::query($sql, $params);
         $this->flash('success', "Customer '{$name}' updated successfully.");
-        $this->redirect('/m/customers');
+        $this->redirect($redirectUrl);
     }
 
     public function deleteCustomer(): void {
@@ -175,9 +183,13 @@ class SalesController extends Controller {
         $cid = Auth::concernId();
 
         $customer = DB::fetch("SELECT * FROM customers WHERE id = ?", [$id]);
+        $redirectUrl = (!empty($_SERVER['HTTP_REFERER']) && str_contains($_SERVER['HTTP_REFERER'], '/shop/customers'))
+            ? '/shop/customers'
+            : '/m/customers';
+
         if (!$customer) {
             $this->flash('error', 'Customer not found.');
-            $this->redirect('/m/customers');
+            $this->redirect($redirectUrl);
         }
 
         // Check if there are sales invoices or requests linked to this customer
@@ -192,7 +204,7 @@ class SalesController extends Controller {
             $this->flash('success', "Customer '{$customer['name']}' deleted successfully.");
         }
 
-        $this->redirect('/m/customers');
+        $this->redirect($redirectUrl);
     }
 
     public function customerProfile(): void {

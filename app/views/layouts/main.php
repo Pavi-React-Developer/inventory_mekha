@@ -274,10 +274,14 @@
                     if ($m['code'] === 'catalog_program') $href = \App\Core\Controller::url('/production/catalog');
                     if ($m['code'] === 'catalog_mapping') $href = \App\Core\Controller::url('/production/catalog-mapping');
                     if ($m['code'] === 'cutting_wastage') $href = \App\Core\Controller::url('/production/cutting');
+                    if ($m['code'] === 'stitching_wastage') $href = \App\Core\Controller::url('/production/stitching');
 
                     if ($m['code'] === 'cash_flow') {
                         $isActive = (isset($currentModule) && in_array($currentModule, ['cash_flow', 'cash'])) || 
                                     (str_contains($activeRoute, 'cash'));
+                    } elseif ($m['code'] === 'stitching_wastage') {
+                        $isActive = (isset($currentModule) && in_array($currentModule, ['stitching_wastage', 'stitching'])) || 
+                                    (str_contains($activeRoute, 'stitching'));
                     } else {
                         $isActive = (isset($currentModule) && $currentModule === $m['code']) || 
                                     (str_contains($activeRoute, $m['code']));
@@ -297,9 +301,17 @@
             </a>
 
             <div class="nav-group-title">Staff</div>
-            <a href="<?= \App\Core\Controller::url('/m/staff') ?>" class="nav-link <?= (isset($currentModule) && $currentModule === 'staff') ? 'active' : '' ?>">
+            <a href="<?= \App\Core\Controller::url('/m/staff') ?>" class="nav-link <?= (isset($currentModule) && $currentModule === 'staff' && (empty($currentSubModule) || $currentSubModule === 'all')) ? 'active' : '' ?>">
                 <i class="bi bi-people-fill"></i>
-                <span>Staff</span>
+                <span>All Staff</span>
+            </a>
+            <a href="<?= \App\Core\Controller::url('/m/staff/create') ?>" class="nav-link <?= (isset($currentModule) && $currentModule === 'staff' && isset($currentSubModule) && $currentSubModule === 'create') ? 'active' : '' ?>">
+                <i class="bi bi-person-plus-fill"></i>
+                <span>Add New Staff</span>
+            </a>
+            <a href="<?= \App\Core\Controller::url('/m/staff/roles') ?>" class="nav-link <?= (isset($currentSubModule) && $currentSubModule === 'roles') ? 'active' : '' ?>">
+                <i class="bi bi-person-badge-fill"></i>
+                <span>Role Assign</span>
             </a>
         </div>
     </nav>
@@ -447,5 +459,49 @@
     <script src="<?= \App\Core\Controller::url('/assets/js/bootstrap.bundle.min.js') ?>"></script>
     <script src="<?= \App\Core\Controller::url('/assets/js/qrcode.min.js') ?>"></script>
     <script src="<?= \App\Core\Controller::url('/assets/js/html5-qrcode.min.js') ?>"></script>
+
+    <?php if (!empty($flashError) || !empty($flashWarning) || !empty($flashSuccess)): ?>
+        <!-- FLASH ALERT POPUP MODAL -->
+        <div class="modal fade" id="modalFlashAlertPopup" tabindex="-1" aria-hidden="true" style="z-index: 1090;">
+            <div class="modal-dialog modal-dialog-centered" style="max-width: 440px;">
+                <div class="modal-content border-0 shadow-lg rounded-4 text-center p-4">
+                    <div class="modal-body p-0">
+                        <div class="mb-3">
+                            <?php if (!empty($flashError)): ?>
+                                <span class="d-inline-flex align-items-center justify-content-center rounded-circle bg-danger-subtle text-danger" style="width: 64px; height: 64px;">
+                                    <i class="bi bi-exclamation-octagon-fill fs-1"></i>
+                                </span>
+                            <?php elseif (!empty($flashWarning)): ?>
+                                <span class="d-inline-flex align-items-center justify-content-center rounded-circle bg-warning-subtle text-warning-emphasis" style="width: 64px; height: 64px;">
+                                    <i class="bi bi-exclamation-triangle-fill fs-1"></i>
+                                </span>
+                            <?php else: ?>
+                                <span class="d-inline-flex align-items-center justify-content-center rounded-circle bg-success-subtle text-success" style="width: 64px; height: 64px;">
+                                    <i class="bi bi-check-circle-fill fs-1"></i>
+                                </span>
+                            <?php endif; ?>
+                        </div>
+                        <h5 class="fw-bold text-dark mb-2">
+                            <?= !empty($flashError) ? 'Notice' : (!empty($flashWarning) ? 'Warning' : 'Success') ?>
+                        </h5>
+                        <p class="text-secondary small mb-4">
+                            <?= nl2br(htmlspecialchars($flashError ?: ($flashWarning ?: $flashSuccess))) ?>
+                        </p>
+                        <button type="button" class="btn <?= !empty($flashError) ? 'btn-danger' : (!empty($flashWarning) ? 'btn-warning text-dark' : 'btn-success') ?> w-100 rounded-pill py-2 fw-semibold shadow-sm" data-bs-dismiss="modal">
+                            OK
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <script>
+            document.addEventListener('DOMContentLoaded', function() {
+                var el = document.getElementById('modalFlashAlertPopup');
+                if (el && typeof bootstrap !== 'undefined') {
+                    new bootstrap.Modal(el).show();
+                }
+            });
+        </script>
+    <?php endif; ?>
 </body>
 </html>

@@ -24,7 +24,33 @@ class Auth {
 
     public static function check(): bool {
         self::startSession();
-        return isset($_SESSION['user']) && !empty($_SESSION['user']['id']);
+        if (!isset($_SESSION['user']) || empty($_SESSION['user']['id'])) {
+            return false;
+        }
+
+        // Real-time active status check to immediately evict deactivated users
+        try {
+            $userId = (int)$_SESSION['user']['id'];
+            $userStatus = DB::fetchValue("SELECT status FROM users WHERE id = ?", [$userId]);
+            if ($userStatus !== 'active') {
+                self::logout();
+                return false;
+            }
+
+            $concernId = $_SESSION['user']['concern_id'] ?? null;
+            if ($concernId !== null) {
+                $concernStatus = DB::fetchValue("SELECT status FROM concerns WHERE id = ?", [(int)$concernId]);
+                if ($concernStatus !== 'active') {
+                    self::logout();
+                    return false;
+                }
+            }
+        } catch (\Throwable $e) {
+            // In case of DB disconnection during check, fall back to false
+            return false;
+        }
+
+        return true;
     }
 
     public static function user(): ?array {
@@ -142,29 +168,59 @@ class Auth {
         );
         $_SESSION['enabled_modules'] = array_column($mods, 'code');
 
-        // Cache permissions
-        $roleId = $_SESSION['user']['role_id'] ?? 0;
-        if ($roleId) {
+        // Cache role permissions and user-specific overrides
+        $userId = (int)($_SESSION['user']['id'] ?? 0);
+        $roleId = (int)($_SESSION['user']['role_id'] ?? 0);
+        self::loadPermissions($userId, $roleId);
+
+        return true;
+    }
+
+    /**
+     * Load role defaults and user-specific granular overrides
+     */
+    public static function loadPermissions(int $userId, int $roleId): void {
+        // 1. Role-level permissions (defaults)
+        $roleMap = [];
+        if ($roleId > 0) {
             $perms = DB::fetchAll(
                 "SELECT m.code, rp.can_view, rp.can_add, rp.can_edit, rp.can_delete 
                  FROM role_permissions rp
                  JOIN modules m ON rp.module_id = m.id
                  WHERE rp.role_id = ?",
-                [(int)$roleId]
+                [$roleId]
             );
-            $pMap = [];
             foreach ($perms as $p) {
-                $pMap[$p['code']] = [
+                $roleMap[$p['code']] = [
                     'view'   => (bool)$p['can_view'],
                     'add'    => (bool)$p['can_add'],
                     'edit'   => (bool)$p['can_edit'],
                     'delete' => (bool)$p['can_delete'],
                 ];
             }
-            $_SESSION['role_permissions'] = $pMap;
         }
+        $_SESSION['role_permissions'] = $roleMap;
 
-        return true;
+        // 2. User-level permission overrides (NULL = inherit, 1 = grant, 0 = deny)
+        $userMap = [];
+        if ($userId > 0) {
+            $userPerms = DB::fetchAll(
+                "SELECT m.code, up.can_view, up.can_add, up.can_edit, up.can_delete 
+                 FROM user_permissions up
+                 JOIN modules m ON up.module_id = m.id
+                 WHERE up.user_id = ?",
+                [$userId]
+            );
+            foreach ($userPerms as $up) {
+                $userMap[$up['code']] = [
+                    'view'   => $up['can_view'] === null ? null : (int)$up['can_view'],
+                    'add'    => $up['can_add'] === null ? null : (int)$up['can_add'],
+                    'edit'   => $up['can_edit'] === null ? null : (int)$up['can_edit'],
+                    'delete' => $up['can_delete'] === null ? null : (int)$up['can_delete'],
+                ];
+            }
+        }
+        $_SESSION['user_permissions'] = $userMap;
     }
 
     public static function concern(): ?array {
@@ -234,28 +290,13 @@ class Auth {
             );
             $_SESSION['enabled_modules'] = array_column($mods, 'code');
 
-            // Cache permissions
-            $perms = DB::fetchAll(
-                "SELECT m.code, rp.can_view, rp.can_add, rp.can_edit, rp.can_delete 
-                 FROM role_permissions rp
-                 JOIN modules m ON rp.module_id = m.id
-                 WHERE rp.role_id = ?",
-                [(int)$user['role_id']]
-            );
-            $pMap = [];
-            foreach ($perms as $p) {
-                $pMap[$p['code']] = [
-                    'view'   => (bool)$p['can_view'],
-                    'add'    => (bool)$p['can_add'],
-                    'edit'   => (bool)$p['can_edit'],
-                    'delete' => (bool)$p['can_delete'],
-                ];
-            }
-            $_SESSION['role_permissions'] = $pMap;
+            // Cache permissions (role defaults + individual user overrides)
+            self::loadPermissions((int)$user['id'], (int)$user['role_id']);
         } else {
             $_SESSION['concern'] = null;
             $_SESSION['enabled_modules'] = [];
             $_SESSION['role_permissions'] = [];
+            $_SESSION['user_permissions'] = [];
         }
 
         // Update last login
@@ -289,6 +330,9 @@ class Auth {
         if (self::isSuperAdmin()) {
             return true;
         }
+        if ($moduleCode === 'cash') {
+            $moduleCode = 'cash_flow';
+        }
         $mods = $_SESSION['enabled_modules'] ?? [];
         return in_array($moduleCode, $mods, true);
     }
@@ -297,15 +341,40 @@ class Auth {
         if (self::isSuperAdmin()) {
             return true;
         }
+        if ($moduleCode === 'cash') {
+            $moduleCode = 'cash_flow';
+        }
         if (!self::hasModule($moduleCode)) {
             return false;
         }
-        $perms = $_SESSION['role_permissions'] ?? [];
-        if (!isset($perms[$moduleCode])) {
-            // Default allow view if module enabled unless explicitly restricted
-            return $action === 'view';
+
+        // Action normalization: support 'view', 'add'/'create', 'edit', 'delete'
+        $act = strtolower($action);
+        if ($act === 'create') {
+            $act = 'add';
         }
-        return !empty($perms[$moduleCode][$action]);
+
+        // 1. Check user-specific granular overrides
+        // NULL = inherit from role, 1 = explicitly granted, 0 = explicitly denied
+        $userPerms = $_SESSION['user_permissions'] ?? [];
+        if (isset($userPerms[$moduleCode]) && array_key_exists($act, $userPerms[$moduleCode])) {
+            $val = $userPerms[$moduleCode][$act];
+            if ($val === 1) {
+                return true; // Explicit grant overrides role default
+            }
+            if ($val === 0) {
+                return false; // Explicit denial overrides role default
+            }
+        }
+
+        // 2. Check role-level default permissions
+        $rolePerms = $_SESSION['role_permissions'] ?? [];
+        if (isset($rolePerms[$moduleCode]) && !empty($rolePerms[$moduleCode][$act])) {
+            return true;
+        }
+
+        // 3. Strict Default Deny: access is denied unless explicitly granted
+        return false;
     }
 
     public static function csrfToken(): string {

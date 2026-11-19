@@ -12,7 +12,7 @@ abstract class Controller {
         $currentConcern = Auth::concern();
         $isSuperAdmin = Auth::isSuperAdmin();
         $csrfToken = Auth::csrfToken();
-        $allConcerns = Auth::allConcerns();
+        $allConcerns = $data['allConcerns'] ?? Auth::allConcerns();
         $selectedConcernId = Auth::superAdminSelectedConcernId();
 
         // Flash messages

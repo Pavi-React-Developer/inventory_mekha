@@ -149,8 +149,11 @@ $router->post('/m/concern_damage/delete', [DamageController::class, 'delete'], '
 $router->get('/m/customers', [SalesController::class, 'customers'], 'customers', 'view');
 $router->get('/shop/customers', [SalesController::class, 'customers'], 'customers', 'view');
 $router->post('/m/customers/store', [SalesController::class, 'storeCustomer'], 'customers', 'add');
+$router->post('/shop/customers/store', [SalesController::class, 'storeCustomer'], 'customers', 'add');
 $router->post('/m/customers/update', [SalesController::class, 'updateCustomer'], 'customers', 'add');
+$router->post('/shop/customers/update', [SalesController::class, 'updateCustomer'], 'customers', 'add');
 $router->post('/m/customers/delete', [SalesController::class, 'deleteCustomer'], 'customers', 'delete');
+$router->post('/shop/customers/delete', [SalesController::class, 'deleteCustomer'], 'customers', 'delete');
 $router->get('/m/customers/export', [SalesController::class, 'exportCustomers'], 'customers', 'view');
 $router->get('/api/customers/details', [SalesController::class, 'customerProfile'], 'customers', 'view');
 $router->get('/m/request', [SalesController::class, 'request'], 'request', 'view');
@@ -264,11 +267,35 @@ $router->get('/production/cutting/wastage', [ProductionController::class, 'cutti
 $router->get('/production/wastage-selling', [ProductionController::class, 'cuttingWastageIndex'], 'cutting_wastage', 'view');
 $router->post('/production/cutting/wastage/sell', [ProductionController::class, 'storeWastageSale'], 'cutting_wastage', 'add');
 $router->post('/production/wastage-selling/store', [ProductionController::class, 'storeWastageSale'], 'cutting_wastage', 'add');
-$router->get('/m/stitching_wastage', [ProductionController::class, 'stitching'], 'stitching_wastage', 'view');
+$router->post('/production/cutting/wastage/update', [ProductionController::class, 'updateWastageSale'], 'cutting_wastage', 'edit');
+$router->post('/production/wastage-selling/update', [ProductionController::class, 'updateWastageSale'], 'cutting_wastage', 'edit');
+$router->post('/production/cutting/wastage/delete', [ProductionController::class, 'deleteWastageSale'], 'cutting_wastage', 'delete');
+$router->post('/production/wastage-selling/delete', [ProductionController::class, 'deleteWastageSale'], 'cutting_wastage', 'delete');
+$router->get('/api/cutting/wastage/details', [ProductionController::class, 'apiWastageSaleDetails'], 'cutting_wastage', 'view');
+
+// Stitching & Wastage Flow (Matching UI Images 1, 2, 3)
+$router->get('/production/stitching', [ProductionController::class, 'stitchingIndex'], 'stitching_wastage', 'view');
+$router->get('/m/stitching_wastage', [ProductionController::class, 'stitchingIndex'], 'stitching_wastage', 'view');
+$router->get('/production/stitching/create', [ProductionController::class, 'createStitching'], 'stitching_wastage', 'add');
+$router->post('/production/stitching/store', [ProductionController::class, 'storeStitchingBatch'], 'stitching_wastage', 'add');
+$router->get('/production/stitching/edit', [ProductionController::class, 'editStitchingBatch'], 'stitching_wastage', 'edit');
+$router->post('/production/stitching/update', [ProductionController::class, 'updateStitchingBatch'], 'stitching_wastage', 'edit');
+$router->get('/production/stitching/view', [ProductionController::class, 'viewStitchingBatch'], 'stitching_wastage', 'view');
+$router->post('/production/stitching/delete', [ProductionController::class, 'deleteStitchingBatch'], 'stitching_wastage', 'delete');
+
+// Stitching API Endpoints
+$router->get('/api/stitching/cutting-details', [ProductionController::class, 'apiCuttingDetailsForStitching'], 'stitching_wastage', 'view');
+$router->post('/api/stitching/quick-tailor', [ProductionController::class, 'apiQuickAddTailor'], 'stitching_wastage', 'add');
+
+// Stitching Wastage Selling (Image 2)
+$router->get('/production/stitching/wastage', [ProductionController::class, 'stitchingWastageIndex'], 'stitching_wastage', 'view');
+$router->post('/production/stitching/wastage/sell', [ProductionController::class, 'storeStitchingWastageSale'], 'stitching_wastage', 'add');
+
+// Legacy routes fallback
 $router->get('/m/stitching_wastage/export', [ProductionController::class, 'exportStitching'], 'stitching_wastage', 'view');
-$router->post('/m/stitching_wastage/store', [ProductionController::class, 'storeStitching'], 'stitching_wastage', 'add');
-$router->post('/m/stitching_wastage/update', [ProductionController::class, 'updateStitching'], 'stitching_wastage', 'edit');
-$router->post('/m/stitching_wastage/delete', [ProductionController::class, 'deleteStitching'], 'stitching_wastage', 'delete');
+$router->post('/m/stitching_wastage/store', [ProductionController::class, 'storeStitchingBatch'], 'stitching_wastage', 'add');
+$router->post('/m/stitching_wastage/update', [ProductionController::class, 'updateStitchingBatch'], 'stitching_wastage', 'edit');
+$router->post('/m/stitching_wastage/delete', [ProductionController::class, 'deleteStitchingBatch'], 'stitching_wastage', 'delete');
 $router->get('/m/qc_stocks', [ProductionController::class, 'qc'], 'qc_stocks', 'view');
 $router->get('/m/qc_stocks/export', [ProductionController::class, 'exportQc'], 'qc_stocks', 'view');
 $router->post('/m/qc_stocks/store', [ProductionController::class, 'storeQc'], 'qc_stocks', 'add');
@@ -297,6 +324,15 @@ $router->post('/m/cash/shift/close', [FinanceController::class, 'closeShift'], '
 
 // Staff Management
 $router->get('/m/staff', [StaffController::class, 'index'], 'staff', 'view');
+$router->get('/m/staff/create', [StaffController::class, 'create'], 'staff', 'add');
+$router->get('/m/staff/roles', [StaffController::class, 'roles'], 'staff', 'view');
+$router->post('/m/staff/assign-role', [StaffController::class, 'assignRole'], 'staff', 'edit');
+$router->post('/m/staff/save-role-permissions', [StaffController::class, 'saveRolePermissions'], 'staff', 'edit');
+$router->post('/m/staff/save-user-permissions', [StaffController::class, 'saveUserPermissions'], 'staff', 'edit');
+$router->post('/m/staff/toggle-status', [StaffController::class, 'toggleStatus'], 'staff', 'edit');
+$router->post('/m/staff/create-role', [StaffController::class, 'createRole'], 'staff', 'add');
+$router->get('/api/staff/role-permissions', [StaffController::class, 'apiGetRolePermissions'], 'staff', 'view');
+$router->get('/api/staff/user-permissions', [StaffController::class, 'apiGetUserPermissions'], 'staff', 'view');
 $router->get('/m/staff/export', [StaffController::class, 'export'], 'staff', 'view');
 $router->post('/m/staff/store', [StaffController::class, 'store'], 'staff', 'add');
 $router->post('/m/staff/update', [StaffController::class, 'update'], 'staff', 'edit');

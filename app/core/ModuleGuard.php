@@ -49,6 +49,15 @@ class ModuleGuard {
     }
 
     private static function render403(string $message): void {
+        $isAjaxOrApi = (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest')
+                    || (isset($_SERVER['HTTP_ACCEPT']) && str_contains($_SERVER['HTTP_ACCEPT'], 'application/json'))
+                    || (isset($_SERVER['REQUEST_URI']) && str_contains($_SERVER['REQUEST_URI'], '/api/'));
+        if ($isAjaxOrApi) {
+            header('Content-Type: application/json');
+            echo json_encode(['success' => false, 'error' => $message]);
+            exit;
+        }
+
         $viewPath = __DIR__ . '/../views/errors/403.php';
         if (file_exists($viewPath)) {
             require $viewPath;

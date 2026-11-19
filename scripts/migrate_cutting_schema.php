@@ -26,7 +26,8 @@ $existingCols = array_column(DB::fetchAll("DESCRIBE cutting_logs"), 'Field');
 
 $colsToAdd = [
     'batch_no' => "VARCHAR(50) NULL AFTER log_no",
-    'cutting_name' => "VARCHAR(255) NULL AFTER batch_no",
+    'lot_no' => "VARCHAR(50) NULL AFTER batch_no",
+    'cutting_name' => "VARCHAR(255) NULL AFTER lot_no",
     'status' => "ENUM('in_progress', 'planned', 'completed') DEFAULT 'in_progress' AFTER cutting_name",
     'cutting_master_id' => "INT NULL AFTER status",
     'cutting_master_name' => "VARCHAR(150) NULL AFTER cutting_master_id",

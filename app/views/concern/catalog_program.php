@@ -315,7 +315,6 @@ $isProgramsTab = (isset($activeTab) && $activeTab === 'programs') || (isset($_GE
                                                     <i class="bi bi-trash"></i>
                                                 </button>
                                             </div>
-                                            </div>
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>
@@ -523,66 +522,7 @@ $isProgramsTab = (isset($activeTab) && $activeTab === 'programs') || (isset($_GE
     </div>
 </div>
 
-<!-- Modal View Program -->
-<div class="modal fade" id="modalViewProgram" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0 shadow">
-            <div class="modal-header bg-light">
-                <h5 class="modal-title fw-bold"><i class="bi bi-eye text-info me-2"></i> Production Program Details</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body p-4">
-                <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
-                    <span class="text-muted small">Program No</span>
-                    <span class="font-monospace fw-bold fs-6 text-primary" id="view_program_no">-</span>
-                </div>
-                <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
-                    <span class="text-muted small">Target Variant</span>
-                    <span class="fw-semibold text-dark" id="view_program_variant">-</span>
-                </div>
-                <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
-                    <span class="text-muted small">Catalog / Season</span>
-                    <span class="fw-semibold text-dark" id="view_program_catalog">-</span>
-                </div>
-                <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
-                    <span class="text-muted small">Planned Quantity</span>
-                    <span class="fw-bold fs-6 text-success" id="view_program_qty">-</span>
-                </div>
-                <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
-                    <span class="text-muted small">Schedule Window</span>
-                    <span class="font-monospace text-secondary small" id="view_program_window">-</span>
-                </div>
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <span class="text-muted small">Status</span>
-                    <span class="badge" id="view_program_status">-</span>
-                </div>
-            </div>
-            <div class="modal-footer bg-light py-2">
-                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
-            </div>
-        </div>
-    </div>
-</div>
-
 <script>
-function openViewProgramModal(p) {
-    if (!p) return;
-    document.getElementById('view_program_no').innerText = p.program_no || '-';
-    document.getElementById('view_program_variant').innerText = (p.sku_code ? p.sku_code + ' - ' : '') + (p.variant_name || '-');
-    document.getElementById('view_program_catalog').innerText = p.catalog_name || '-';
-    document.getElementById('view_program_qty').innerText = (parseFloat(p.planned_qty || 0).toLocaleString()) + ' Units';
-    const sDate = p.start_date ? p.start_date.substring(0, 10) : '-';
-    const tDate = p.target_date ? p.target_date.substring(0, 10) : '-';
-    document.getElementById('view_program_window').innerText = sDate + ' -> ' + tDate;
-    
-    const badge = document.getElementById('view_program_status');
-    badge.innerText = (p.status || 'draft').toUpperCase();
-    badge.className = 'badge ' + (p.status === 'completed' ? 'bg-success' : (p.status === 'in_progress' ? 'bg-primary' : (p.status === 'cancelled' ? 'bg-danger' : 'bg-secondary')));
-
-    const modal = new bootstrap.Modal(document.getElementById('modalViewProgram'));
-    modal.show();
-}
-
 function openEditProgramModal(p) {
     if (!p) return;
     document.getElementById('edit_program_id').value = p.id || '';
@@ -594,6 +534,7 @@ function openEditProgramModal(p) {
 
     const modal = new bootstrap.Modal(document.getElementById('modalEditProgram'));
     modal.show();
+}
 
 function showStyleDetails(id) {
     const modal = new bootstrap.Modal(document.getElementById('modalViewStyle'));

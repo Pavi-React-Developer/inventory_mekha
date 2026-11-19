@@ -14,9 +14,13 @@
                 <i class="bi bi-chevron-down ms-1 small"></i>
             </button>
             <?php if ($activeConcern): ?>
-                <button class="btn btn-primary shadow-sm" data-bs-toggle="modal" data-bs-target="#modalAddStaff">
+                <a href="<?= \App\Core\Controller::url('/m/staff/create?concern_id=' . $selectedCid) ?>" class="btn btn-primary shadow-sm">
                     <i class="bi bi-person-plus-fill me-1"></i> Add New Staff
-                </button>
+                </a>
+            <?php else: ?>
+                <a href="<?= \App\Core\Controller::url('/m/staff/create') ?>" class="btn btn-primary shadow-sm">
+                    <i class="bi bi-person-plus-fill me-1"></i> Add New Staff
+                </a>
             <?php endif; ?>
         </div>
     </div>
@@ -60,6 +64,60 @@
     $prefix = 'staff_exp';
     include __DIR__ . '/../partials/export_card.php';
     ?>
+
+    <!-- Search & Filter Directory Toolbar -->
+    <div class="card border-0 shadow-sm rounded-3 mb-4">
+        <div class="card-body p-3">
+            <form method="GET" action="<?= \App\Core\Controller::url('/m/staff') ?>" class="row g-2 align-items-center">
+                <?php if ($selectedCid): ?>
+                    <input type="hidden" name="concern_id" value="<?= $selectedCid ?>">
+                <?php endif; ?>
+                <div class="col-md-3">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
+                        <input type="text" name="search" class="form-control border-start-0 ps-0" placeholder="Search name, code, phone, email..." value="<?= htmlspecialchars($filters['search'] ?? '') ?>">
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <select name="role_id" class="form-select form-select-sm" onchange="this.form.submit()">
+                        <option value="">-- All Roles --</option>
+                        <?php foreach ($allRoles as $r): ?>
+                            <option value="<?= $r['id'] ?>" <?= (($filters['role_id'] ?? null) == $r['id']) ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($r['name']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <select name="department" class="form-select form-select-sm" onchange="this.form.submit()">
+                        <option value="">-- All Departments --</option>
+                        <?php foreach ($allDepartments as $d): ?>
+                            <option value="<?= htmlspecialchars($d['department']) ?>" <?= (($filters['department'] ?? '') === $d['department']) ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($d['department']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
+                        <option value="">-- All Statuses --</option>
+                        <option value="active" <?= (($filters['status'] ?? '') === 'active') ? 'selected' : '' ?>>Active Only</option>
+                        <option value="inactive" <?= (($filters['status'] ?? '') === 'inactive') ? 'selected' : '' ?>>Inactive Only</option>
+                    </select>
+                </div>
+                <div class="col-md-3 d-flex gap-2">
+                    <button type="submit" class="btn btn-sm btn-primary px-3">
+                        <i class="bi bi-funnel me-1"></i> Filter
+                    </button>
+                    <?php if (!empty($filters['search']) || !empty($filters['role_id']) || !empty($filters['department']) || !empty($filters['status'])): ?>
+                        <a href="<?= \App\Core\Controller::url('/m/staff' . ($selectedCid ? '?concern_id=' . $selectedCid : '')) ?>" class="btn btn-sm btn-outline-secondary">
+                            <i class="bi bi-x-circle me-1"></i> Reset
+                        </a>
+                    <?php endif; ?>
+                </div>
+            </form>
+        </div>
+    </div>
 
     <!-- Staff Roster Table Card -->
     <div class="card border-0 shadow-sm rounded-3">
@@ -143,13 +201,38 @@
                                 </td>
                                 <td class="text-end pe-3">
                                     <div class="d-inline-flex align-items-center gap-1">
+                                        <!-- Quick Status Toggle (Activate/Deactivate) -->
+                                        <form action="<?= \App\Core\Controller::url('/m/staff/toggle-status') ?>" method="POST" class="d-inline" onsubmit="return confirm('<?= $stf['status'] === 'active' ? 'Deactivate' : 'Activate' ?> staff member <?= htmlspecialchars($stf['name']) ?>?');">
+                                            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
+                                            <input type="hidden" name="id" value="<?= $stf['id'] ?>">
+                                            <?php if ($stf['status'] === 'active'): ?>
+                                                <button type="submit" class="btn btn-sm btn-outline-warning" title="Deactivate Staff Account">
+                                                    <i class="bi bi-person-slash"></i>
+                                                </button>
+                                            <?php else: ?>
+                                                <button type="submit" class="btn btn-sm btn-outline-success" title="Activate Staff Account">
+                                                    <i class="bi bi-person-check"></i>
+                                                </button>
+                                            <?php endif; ?>
+                                        </form>
+
+                                        <!-- Roles & Custom Permissions Shortcut -->
+                                        <a href="<?= \App\Core\Controller::url('/m/staff/roles?search=' . urlencode($stf['staff_code'])) ?>" class="btn btn-sm btn-outline-secondary" title="Manage Role & Granular Access Matrix">
+                                            <i class="bi bi-shield-lock"></i>
+                                        </a>
+
+                                        <!-- View Profile -->
                                         <button type="button" class="btn btn-sm btn-outline-info" onclick='openViewStaffModal(<?= json_encode($stf, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>)' title="View Staff Profile">
                                             <i class="bi bi-eye"></i>
                                         </button>
+
+                                        <!-- Edit Staff -->
                                         <button type="button" class="btn btn-sm btn-outline-primary" onclick='openEditStaffModal(<?= json_encode($stf, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>)' title="Edit Staff Details">
                                             <i class="bi bi-pencil"></i>
                                         </button>
-                                        <form action="<?= \App\Core\Controller::url('/m/staff/delete') ?>" method="POST" class="d-inline" onsubmit="return confirm('Delete staff member <?= htmlspecialchars($stf['name']) ?> (<?= htmlspecialchars($stf['staff_code']) ?>)?');">
+
+                                        <!-- Delete Staff -->
+                                        <form action="<?= \App\Core\Controller::url('/m/staff/delete') ?>" method="POST" class="d-inline" onsubmit="return confirm('Delete staff member <?= htmlspecialchars($stf['name']) ?> (<?= htmlspecialchars($stf['staff_code']) ?>)? Note: Deactivation is usually preferred over permanent deletion.');">
                                             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
                                             <input type="hidden" name="id" value="<?= $stf['id'] ?>">
                                             <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete Staff">
@@ -202,7 +285,7 @@
                                         <?= htmlspecialchars($c['code']) ?>
                                     </span>
                                     <span class="badge bg-light text-dark border">
-                                        <i class="bi bi-people me-1"></i> <?= (int)$c['staff_count'] ?> Staff
+                                        <i class="bi bi-people me-1"></i> <?= (int)($c['staff_count'] ?? 0) ?> Staff
                                     </span>
                                 </div>
                                 <h6 class="fw-bold text-dark mb-1"><?= htmlspecialchars($c['name']) ?></h6>
@@ -248,18 +331,44 @@
             </div>
             <div class="modal-body p-4">
                 <!-- 1. WHICH CONCERN -->
-                <div class="mb-3">
+                <div class="mb-3 p-3 rounded-3" style="background: #f8fafc; border: 1px solid #e2e8f0;">
                     <label class="form-label small fw-bold text-secondary text-uppercase mb-1">
-                        <i class="bi bi-building me-1 text-primary"></i> Which Concern *
+                        <i class="bi bi-building me-1 text-primary"></i> Primary Home Concern *
                     </label>
-                    <select name="concern_id" id="add_staff_concern_id" class="form-select" required>
-                        <option value="">-- Choose Concern --</option>
+                    <select name="concern_id" id="add_staff_concern_id" class="form-select mb-2" required onchange="onModalAddConcernChanged(this.value)">
+                        <option value="">-- Choose Primary Concern --</option>
                         <?php foreach ($allConcerns as $c): ?>
                             <option value="<?= $c['id'] ?>" <?= ($selectedCid == $c['id']) ? 'selected' : '' ?>>
                                 <?= htmlspecialchars($c['name']) ?> (<?= htmlspecialchars($c['code']) ?>)
                             </option>
                         <?php endforeach; ?>
                     </select>
+
+                    <div class="pt-2 border-top">
+                        <div class="d-flex justify-content-between align-items-center mb-1.5">
+                            <label class="small fw-bold text-dark mb-0" style="font-size: 0.76rem;">
+                                <i class="bi bi-buildings-fill text-primary me-1"></i> Authorized Concerns Access Option
+                            </label>
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-secondary btn-xs py-0.5 px-1.5" style="font-size: 0.68rem;" onclick="selectAllModalConcerns(true)">Select All</button>
+                                <button type="button" class="btn btn-outline-secondary btn-xs py-0.5 px-1.5" style="font-size: 0.68rem;" onclick="selectAllModalConcerns(false)">Clear</button>
+                            </div>
+                        </div>
+                        <div class="row g-1.5" id="modal_add_concern_grid">
+                            <?php foreach ($allConcerns as $c): ?>
+                                <?php $isPrimary = ($selectedCid == $c['id']); ?>
+                                <div class="col-md-6">
+                                    <div class="border rounded-2 p-1.5 bg-white d-flex align-items-center gap-2">
+                                        <input class="form-check-input modal-concern-check m-0" type="checkbox" name="concern_ids[]" value="<?= (int)$c['id'] ?>" id="m_add_cid_<?= $c['id'] ?>" <?= $isPrimary ? 'checked' : '' ?> style="cursor: pointer;">
+                                        <label class="form-check-label flex-grow-1 cursor-pointer mb-0 small text-truncate" for="m_add_cid_<?= $c['id'] ?>" style="cursor: pointer; font-size: 0.75rem;">
+                                            <?= htmlspecialchars($c['name']) ?>
+                                            <span class="badge bg-light text-dark border font-monospace ms-1" style="font-size: 0.65rem;"><?= htmlspecialchars($c['code']) ?></span>
+                                        </label>
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- 2. FULL NAME & DESIGNATION -->
@@ -508,8 +617,30 @@ document.addEventListener('DOMContentLoaded', function() {
             const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
             modal.show();
         }
+    <?php elseif (!empty($openAddModal)): ?>
+        const addModalEl = document.getElementById('modalAddStaff');
+        if (addModalEl) {
+            const modal = bootstrap.Modal.getOrCreateInstance(addModalEl);
+            modal.show();
+        }
     <?php endif; ?>
 });
+
+function onModalAddConcernChanged(cid) {
+    if (cid) {
+        const cb = document.getElementById('m_add_cid_' + cid);
+        if (cb) cb.checked = true;
+    }
+}
+
+function selectAllModalConcerns(check) {
+    document.querySelectorAll('.modal-concern-check').forEach(cb => cb.checked = check);
+    const primaryId = document.getElementById('add_staff_concern_id')?.value;
+    if (primaryId && !check) {
+        const cb = document.getElementById('m_add_cid_' + primaryId);
+        if (cb) cb.checked = true;
+    }
+}
 
 function togglePasswordVisibility(inputId, btn) {
     const input = document.getElementById(inputId);
