@@ -3239,10 +3239,10 @@ class ProductionController extends Controller {
         $rawItems = DB::fetchAll(
             "SELECT ci.*, 
                     pr.catalog_id AS roll_catalog_id,
-                    c.id AS cat_id, c.name AS cat_name, c.style_code AS cat_code, c.mrp AS cat_mrp, c.selling_price AS cat_sp,
-                    v.id AS var_id, v.name AS var_name, v.sku_code AS var_sku, v.size AS var_size, v.color AS var_color,
-                    v.catalog_id AS var_cat_id, v.mrp AS var_mrp, v.selling_price AS var_sp,
-                    pbi.color AS roll_color
+                    c.id AS cat_id, c.name AS cat_name, c.style_code AS cat_code,
+                    v.id AS var_id, v.name AS var_name, v.sku_code AS var_sku, v.size AS var_size,
+                    v.catalog_id AS var_cat_id, v.mrp AS var_mrp, v.price AS var_sp,
+                    COALESCE(pr.color, pbi.color, 'Standard') AS roll_color
              FROM cutting_items ci
              LEFT JOIN program_rolls pr ON ci.program_roll_id = pr.id
              LEFT JOIN purchase_bill_items pbi ON pr.purchase_bill_item_id = pbi.id
@@ -3271,8 +3271,8 @@ class ProductionController extends Controller {
             $catId = $it['cat_id'] ?: ($it['var_cat_id'] ?: ($cutting['prog_catalog_id'] ?: 0));
             $catName = $it['cat_name'] ?: 'Catalog Item';
             $catCode = $it['cat_code'] ?: 'CAT';
-            $basePrice = (float)($it['var_mrp'] ?: ($it['cat_mrp'] ?: 0.00));
-            $discPrice = (float)($it['var_sp'] ?: ($it['cat_sp'] ?: 0.00));
+            $basePrice = (float)($it['var_mrp'] ?: 0.00);
+            $discPrice = (float)($it['var_sp'] ?: 0.00);
 
             if ($catId && !isset($catalogsMap[$catId])) {
                 $catalogsMap[$catId] = [
@@ -3296,7 +3296,7 @@ class ProductionController extends Controller {
                 'catalog_name'    => $catName,
                 'catalog_code'    => $catCode,
                 'size'            => $it['size'] ?: ($it['var_size'] ?: 'Free Size'),
-                'color'           => $it['var_color'] ?: ($it['roll_color'] ?: 'Standard'),
+                'color'           => $it['roll_color'] ?: 'Standard',
                 'sku_code'        => $it['sku_code'] ?: ($it['var_sku'] ?: 'SKU'),
                 'variant_name'    => $it['variant_name'] ?: ($it['var_name'] ?: 'Variant'),
                 'cut_qty'         => $cutQty,
@@ -3542,7 +3542,7 @@ class ProductionController extends Controller {
                         DB::query(
                             "UPDATE variants 
                              SET mrp = CASE WHEN ? > 0 THEN ? ELSE mrp END,
-                                 selling_price = CASE WHEN ? > 0 THEN ? ELSE selling_price END
+                                 price = CASE WHEN ? > 0 THEN ? ELSE price END
                              WHERE id = ?",
                             [
                                 $item['base_price'], $item['base_price'],
@@ -3728,7 +3728,7 @@ class ProductionController extends Controller {
                             DB::query(
                                 "UPDATE variants 
                                  SET mrp = CASE WHEN ? > 0 THEN ? ELSE mrp END,
-                                     selling_price = CASE WHEN ? > 0 THEN ? ELSE selling_price END
+                                     price = CASE WHEN ? > 0 THEN ? ELSE price END
                                  WHERE id = ?",
                                 [$basePrice, $basePrice, $discPrice, $discPrice, $existingItem['variant_id']]
                             );
