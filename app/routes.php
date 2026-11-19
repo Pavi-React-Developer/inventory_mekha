@@ -70,10 +70,10 @@ $router->get('/admin/reports/export', [AdminController::class, 'exportReports'],
 // ==========================================
 
 // Dashboard
-$router->get('/dashboard', [ConcernDashboardController::class, 'index'], 'concern_dashboard', 'view');
-$router->get('/dashboard/export', [ConcernDashboardController::class, 'exportDashboard'], 'concern_dashboard', 'view');
-$router->get('/m/concern_dashboard', [ConcernDashboardController::class, 'index'], 'concern_dashboard', 'view');
-$router->get('/m/concern_dashboard/export', [ConcernDashboardController::class, 'exportDashboard'], 'concern_dashboard', 'view');
+$router->get('/dashboard', [ConcernDashboardController::class, 'index']);
+$router->get('/dashboard/export', [ConcernDashboardController::class, 'exportDashboard']);
+$router->get('/m/concern_dashboard', [ConcernDashboardController::class, 'index']);
+$router->get('/m/concern_dashboard/export', [ConcernDashboardController::class, 'exportDashboard']);
 
 // Variants Catalog
 $router->get('/m/variants', [VariantController::class, 'index'], 'stocks', 'view');
