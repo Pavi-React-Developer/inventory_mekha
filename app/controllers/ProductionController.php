@@ -3480,15 +3480,19 @@ class ProductionController extends Controller {
 
         $batchNo = $this->generateStitchingBatchNo($cid);
 
-        // Fetch cutting batches ready for stitching
+        // Fetch cutting batches ready for stitching (excluding batches already assigned to active stitching)
         $cutSql = "SELECT cl.id, cl.concern_id, cl.batch_no, cl.cutting_name, cl.log_no,
                           cl.cut_pieces, cl.used_weight, cl.total_roll_weight, cl.wastage_qty,
                           cl.status,
-                          pp.id AS program_id, pp.program_no, pp.program_name,
-                          (SELECT COUNT(*) FROM stitching_logs WHERE cutting_id = cl.id) AS assigned_stitching_count
+                          pp.id AS program_id, pp.program_no, pp.program_name
                    FROM cutting_logs cl
                    LEFT JOIN production_programs pp ON cl.program_id = pp.id
-                   WHERE (cl.status IS NULL OR cl.status != 'cancelled')" .
+                   WHERE (cl.status IS NULL OR cl.status != 'cancelled')
+                     AND cl.id NOT IN (
+                         SELECT DISTINCT cutting_id 
+                         FROM stitching_logs 
+                         WHERE cutting_id IS NOT NULL AND (status IS NULL OR status != 'cancelled')
+                     )" .
                    ($cid ? " AND cl.concern_id = ?" : "") . "
                    ORDER BY cl.id DESC";
         $cuttingBatches = DB::fetchAll($cutSql, $cid ? [$cid] : []);
@@ -3501,6 +3505,18 @@ class ProductionController extends Controller {
         );
 
         $selectedCuttingId = (int)($_GET['cutting_id'] ?? 0);
+        if ($selectedCuttingId) {
+            $isAvailable = false;
+            foreach ($cuttingBatches as $cb) {
+                if ((int)$cb['id'] === $selectedCuttingId) {
+                    $isAvailable = true;
+                    break;
+                }
+            }
+            if (!$isAvailable) {
+                $selectedCuttingId = 0;
+            }
+        }
 
         $this->render('concern/stitching_create', [
             'pageTitle'         => 'New Stitching Batch',
@@ -3728,6 +3744,20 @@ class ProductionController extends Controller {
 
         if (!$cutting) {
             $this->flash('error', 'Selected Cutting Batch not found or access denied.');
+            $this->redirect('/production/stitching/create');
+        }
+
+        // Validate that this cutting batch hasn't already been assigned to an active stitching batch
+        $alreadyStitched = DB::fetch(
+            "SELECT sl.id, COALESCE(sl.batch_no, sl.log_no) AS stitching_batch_no, sl.stitching_name 
+             FROM stitching_logs sl 
+             WHERE sl.cutting_id = ? AND (sl.status IS NULL OR sl.status != 'cancelled') 
+             LIMIT 1",
+            [$cuttingId]
+        );
+        if ($alreadyStitched) {
+            $cBatchNo = $cutting['batch_no'] ?: $cutting['log_no'];
+            $this->flash('error', "Cutting Batch [{$cBatchNo}] has already been assigned to Stitching Batch '{$alreadyStitched['stitching_batch_no']}' and cannot be cut/stitched again.");
             $this->redirect('/production/stitching/create');
         }
 

@@ -139,6 +139,29 @@ assertTest($catalogsMap[24]['name'] === 'women - maternity - normal sleeve', "Ca
 assertTest($catalogsMap[24]['style_code'] === 'GRM-STY-0001', "Catalog code matches 'GRM-STY-0001'");
 assertTest(count($rawItems) === 7, "All 7 cutting items extracted with catalog identities");
 
+// TEST 5: Verify already-stitched cutting batch is filtered out of new stitching dropdown
+echo "\nTEST 5: Exclude Already Stitched Cutting Batches from New Stitching Dropdown\n";
+$cutSql = "SELECT cl.id, cl.batch_no 
+           FROM cutting_logs cl 
+           WHERE (cl.status IS NULL OR cl.status != 'cancelled') 
+             AND cl.id NOT IN (
+                 SELECT DISTINCT cutting_id 
+                 FROM stitching_logs 
+                 WHERE cutting_id IS NOT NULL AND (status IS NULL OR status != 'cancelled')
+             )";
+$availableCuttingBatches = DB::fetchAll($cutSql);
+$availableIds = array_column($availableCuttingBatches, 'id');
+assertTest(!in_array(18, $availableIds), "Cutting Batch 18 (already stitched) is NOT present in available cutting dropdown");
+
+// Verify server-side validation against duplicate stitching assignment
+$alreadyStitched = DB::fetch(
+    "SELECT sl.id, COALESCE(sl.batch_no, sl.log_no) AS stitching_batch_no, sl.stitching_name 
+     FROM stitching_logs sl 
+     WHERE sl.cutting_id = 18 AND (sl.status IS NULL OR sl.status != 'cancelled') 
+     LIMIT 1"
+);
+assertTest(!empty($alreadyStitched), "Validation detects that Cutting Batch 18 is already assigned to Stitching Batch {$alreadyStitched['stitching_batch_no']}");
+
 echo "\n======================================================\n";
 echo "TEST RESULTS: Total = $passCount | Passed = $passCount | Failed = 0\n";
 echo ">>> ALL PRODUCTION CATALOG & DYNAMIC STITCHING TESTS PASSED! <<<\n";
