@@ -57,6 +57,32 @@ $code
     return ['raw_output' => $output];
 }
 
+// Ensure test baseline exists in database
+$existingCat = DB::fetch("SELECT * FROM categories WHERE LOWER(TRIM(name)) = 'women'");
+if (!$existingCat) {
+    DB::query("INSERT INTO categories (concern_id, name, code, default_hsn, default_gst_rate, status) VALUES (1, 'Women', 'W', '6109', 5.00, 'active')");
+    $existingCat = DB::fetch("SELECT * FROM categories WHERE LOWER(TRIM(name)) = 'women'");
+}
+$catId = (int)$existingCat['id'];
+
+$existingSub = DB::fetch("SELECT * FROM subcategories WHERE category_id = ? AND LOWER(TRIM(name)) = 'maternity'", [$catId]);
+if (!$existingSub) {
+    DB::query("INSERT INTO subcategories (concern_id, category_id, name, code, status) VALUES (1, ?, 'Maternity', 'M', 'active')", [$catId]);
+    $existingSub = DB::fetch("SELECT * FROM subcategories WHERE category_id = ? AND LOWER(TRIM(name)) = 'maternity'", [$catId]);
+}
+$subId = (int)$existingSub['id'];
+
+$existingSubSub = DB::fetch("SELECT * FROM sub_subcategories WHERE subcategory_id = ? AND LOWER(TRIM(name)) = 'normal sleeve'", [$subId]);
+if (!$existingSubSub) {
+    DB::query("INSERT INTO sub_subcategories (concern_id, subcategory_id, name, code, status) VALUES (1, ?, 'Normal sleeve', 'NS', 'active')", [$subId]);
+    $existingSubSub = DB::fetch("SELECT * FROM sub_subcategories WHERE subcategory_id = ? AND LOWER(TRIM(name)) = 'normal sleeve'", [$subId]);
+}
+
+$existingAttr = DB::fetch("SELECT * FROM product_attributes WHERE attribute_type = 'size' AND LOWER(TRIM(attribute_value)) = '4xl'");
+if (!$existingAttr) {
+    DB::query("INSERT INTO product_attributes (concern_id, attribute_type, attribute_name, attribute_value, sort_order) VALUES (1, 'size', 'Size', '4XL', 10)");
+}
+
 // ----------------------------------------------------
 // TEST 1: ProductionController::quickAddCategoryAjax duplication check
 // ----------------------------------------------------
@@ -90,15 +116,15 @@ assertTest("Duplicate Category '  Women  ' rejected", isset($res1Trim['success']
 echo "\n--- 2. Testing ProductionController::quickAddSubcategoryAjax Duplication ---\n";
 
 $res2 = runPhpSnippet('
-    $_POST = ["category_id" => 14, "name" => "maternity", "code" => "M"];
+    $_POST = ["category_id" => ' . $catId . ', "name" => "maternity", "code" => "M"];
     $c = new ProductionController();
     $c->quickAddSubcategoryAjax();
 ');
-assertTest("Duplicate Subcategory 'maternity' under Category 14 rejected", isset($res2['success']) && $res2['success'] === false);
+assertTest("Duplicate Subcategory 'maternity' under Category '{$existingCat['name']}' rejected", isset($res2['success']) && $res2['success'] === false);
 assertTest("Subcategory error message contains 'already exists'", strpos($res2['message'] ?? '', 'already exists') !== false);
 
 $res2Upper = runPhpSnippet('
-    $_POST = ["category_id" => 14, "name" => "MATERNITY", "code" => "M"];
+    $_POST = ["category_id" => ' . $catId . ', "name" => "MATERNITY", "code" => "M"];
     $c = new ProductionController();
     $c->quickAddSubcategoryAjax();
 ');
@@ -110,15 +136,15 @@ assertTest("Duplicate Subcategory 'MATERNITY' rejected", isset($res2Upper['succe
 echo "\n--- 3. Testing ProductionController::quickAddSubSubcategoryAjax Duplication ---\n";
 
 $res3 = runPhpSnippet('
-    $_POST = ["subcategory_id" => 24, "name" => "normal sleeve", "code" => "NS"];
+    $_POST = ["subcategory_id" => ' . $subId . ', "name" => "normal sleeve", "code" => "NS"];
     $c = new ProductionController();
     $c->quickAddSubSubcategoryAjax();
 ');
-assertTest("Duplicate Sub-Subcategory 'normal sleeve' under Subcategory 24 rejected", isset($res3['success']) && $res3['success'] === false);
+assertTest("Duplicate Sub-Subcategory 'normal sleeve' rejected", isset($res3['success']) && $res3['success'] === false);
 assertTest("Sub-Subcategory error contains 'already exists'", strpos($res3['message'] ?? '', 'already exists') !== false);
 
 $res3Upper = runPhpSnippet('
-    $_POST = ["subcategory_id" => 24, "name" => "NORMAL SLEEVE", "code" => "NS"];
+    $_POST = ["subcategory_id" => ' . $subId . ', "name" => "NORMAL SLEEVE", "code" => "NS"];
     $c = new ProductionController();
     $c->quickAddSubSubcategoryAjax();
 ');
@@ -167,7 +193,7 @@ $res5Sub = runPhpSnippet('
     $_POST = [
         "csrf_token" => "test_token",
         "tier" => "subcategory",
-        "category_id" => 14,
+        "category_id" => ' . $catId . ',
         "name" => "maternity"
     ];
     $c = new CatalogMappingController();
@@ -181,7 +207,7 @@ $res5SubSub = runPhpSnippet('
     $_POST = [
         "csrf_token" => "test_token",
         "tier" => "subsubcategory",
-        "subcategory_id" => 24,
+        "subcategory_id" => ' . $subId . ',
         "name" => "normal sleeve"
     ];
     $c = new CatalogMappingController();

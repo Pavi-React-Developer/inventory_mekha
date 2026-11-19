@@ -260,7 +260,7 @@ class ProductionController extends Controller {
             $categories = DB::fetchAll("SELECT * FROM categories WHERE status = 'active' ORDER BY name ASC");
             $hsnList = DB::fetchAll("SELECT * FROM hsn_masters ORDER BY hsn_code ASC");
         }
-        $attributeSizes = DB::fetchAll("SELECT DISTINCT attribute_value FROM product_attributes WHERE attribute_type = 'size' AND (concern_id = ? OR concern_id = 1 OR concern_id IS NULL) AND is_active = 1 ORDER BY sort_order ASC, id ASC", [$cid ?: 1]);
+        $attributeSizes = DB::fetchAll("SELECT DISTINCT attribute_value FROM product_attributes WHERE attribute_type = 'size' AND (concern_id = ? OR concern_id = 1 OR concern_id IS NULL) ORDER BY sort_order ASC, id ASC", [$cid ?: 1]);
 
         $this->render('concern/catalog_create', [
             'pageTitle'      => 'Add Product Style',
@@ -312,7 +312,7 @@ class ProductionController extends Controller {
             $subSubcategories = $style['subcategory_id'] ? DB::fetchAll("SELECT * FROM sub_subcategories WHERE subcategory_id = ? ORDER BY name ASC", [$style['subcategory_id']]) : [];
         }
 
-        $attributeSizes = DB::fetchAll("SELECT DISTINCT attribute_value FROM product_attributes WHERE attribute_type = 'size' AND (concern_id = ? OR concern_id = 1 OR concern_id IS NULL) AND is_active = 1 ORDER BY sort_order ASC, id ASC", [$cid ?: 1]);
+        $attributeSizes = DB::fetchAll("SELECT DISTINCT attribute_value FROM product_attributes WHERE attribute_type = 'size' AND (concern_id = ? OR concern_id = 1 OR concern_id IS NULL) ORDER BY sort_order ASC, id ASC", [$cid ?: 1]);
 
         $this->render('concern/catalog_create', [
             'pageTitle'        => 'Edit Product Style',
