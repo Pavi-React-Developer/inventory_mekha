@@ -282,7 +282,7 @@
                                     $labelPrice = (float)($cr['last_item_unit_price'] ?: ($cr['last_item_mrp'] ?: 0));
                                     $labelHeader = 'ROLL #' . ($cr['last_item_code'] ?: $cr['last_item_id']);
                                     $labelRef = $cr['last_bill_no'] ?: ('PO-' . ($cr['last_item_bill_id'] ?? ''));
-                                    $labelConcern = \App\Core\Auth::concern()['name'] ?? 'INVENTO ERP';
+                                    $labelConcern = \App\Core\Auth::concern()['name'] ?? 'GRM Inventory';
                                     $qrPayload = \App\Services\QrService::generateTagCode(
                                         $cr['last_item_name'] ?: 'Fabric',
                                         $cr['last_item_color'] ?? '',
@@ -734,7 +734,7 @@
                                         (string)$g['id']
                                     );
                                     $labelPrice = '₹' . number_format($uPrice, 2);
-                                    $labelConcern = $g['concern_name'] ?: 'INVENTO ERP';
+                                    $labelConcern = $g['concern_name'] ?: 'GRM Inventory';
                                     $labelRef = $g['bill_no'] ?: ('PO-' . $g['purchase_bill_id']);
                                 ?>
                                     <tr>
@@ -898,7 +898,7 @@
                                     $labelProductName = $f['fg_label_title'] ?: $labelProductName;
                                     $labelCodeDisplay = $f['fg_label_code'] ?: $labelCode;
                                     $labelPrice = (float)($f['variant_mrp'] ?: ($f['mrp'] ?: $f['unit_price']));
-                                    $labelConcern = $f['concern_name'] ?: 'INVENTO ERP';
+                                    $labelConcern = $f['concern_name'] ?: 'GRM Inventory';
                                     $labelRef = $f['bill_no'] ?: ('PO-' . $f['purchase_bill_id']);
                                 ?>
                                     <tr>
@@ -1154,7 +1154,7 @@ function showRollQr(button) {
     }
 
     const payload = button.dataset.qr || '';
-    document.getElementById('rollQrConcern').textContent = button.dataset.labelConcern || 'INVENTO ERP';
+    document.getElementById('rollQrConcern').textContent = button.dataset.labelConcern || 'GRM Inventory';
     document.getElementById('rollQrRef').textContent = button.dataset.labelRef || '';
     document.getElementById('rollQrTitle').textContent = button.dataset.labelTitle || '';
     document.getElementById('rollQrField1Label').textContent = (button.dataset.labelField1Label || 'Fabric') + ':';

@@ -2,13 +2,13 @@
 // config/app.php - Application Configuration
 
 return [
-    'name'      => 'INVENTO',
-    'full_name' => 'INVENTO Multi-Concern Inventory Platform',
+    'name'      => 'GRM Inventory',
+    'full_name' => 'GRM Inventory',
     'version'   => '1.0.0',
     'timezone'  => 'Asia/Kolkata',
     'debug'     => true,
     'session'   => [
-        'name'     => 'INVENTO_SESSID',
+        'name'     => 'GRM_INVENTORY_SESSID',
         'lifetime' => 86400, // 24 hours
         'path'     => '/',
         'httponly' => true,

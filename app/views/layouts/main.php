@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= htmlspecialchars($pageTitle ?? 'Dashboard') ?> - INVENTO Multi-Concern</title>
+    <title><?= htmlspecialchars($pageTitle ?? 'Dashboard') ?> - GRM Inventory</title>
     
     <!-- Bootstrap CSS -->
     <link rel="stylesheet" href="<?= \App\Core\Controller::url('/assets/css/bootstrap.min.css') ?>">
@@ -217,7 +217,7 @@
             <a href="<?= \App\Core\Controller::url('/') ?>" class="text-white text-decoration-none d-flex align-items-center gap-2">
                 <i class="bi bi-box-seam-fill text-primary fs-4"></i>
                 <div>
-                    <div class="fw-bold tracking-tight lh-1 text-white">INVENTO</div>
+                    <div class="fw-bold tracking-tight lh-1 text-white">GRM Inventory</div>
                     <small class="text-secondary" style="font-size: 0.68rem; letter-spacing: 0.05em;">MULTI-CONCERN ERP</small>
                 </div>
             </a>

@@ -15,22 +15,75 @@ use App\Services\PurchaseStockItemOverrideService;
 use Exception;
 
 class LabelController extends Controller {
+    public function __construct() {
+        $this->ensureStitchingInwardSchema();
+    }
+
     /**
-     * Ensure schema columns for stitching inward tracking
+     * Ensure schema tables and columns for cutting and stitching inward tracking
      */
     protected function ensureStitchingInwardSchema(): void {
+        static $checked = false;
+        if ($checked) return;
+        $checked = true;
+
         try {
-            $cols = DB::fetchAll("SHOW COLUMNS FROM stitching_items LIKE 'inward_status'");
-            if (empty($cols)) {
+            DB::query("
+                CREATE TABLE IF NOT EXISTS `cutting_items` (
+                    `id` INT AUTO_INCREMENT PRIMARY KEY,
+                    `cutting_id` INT NOT NULL,
+                    `program_roll_id` INT NULL,
+                    `variant_id` INT NULL,
+                    `size` VARCHAR(50) NULL,
+                    `sku_code` VARCHAR(100) NULL,
+                    `variant_name` VARCHAR(255) NULL,
+                    `cut_pieces` INT NOT NULL DEFAULT 0,
+                    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    KEY `idx_ci_cutting` (`cutting_id`),
+                    KEY `idx_ci_roll` (`program_roll_id`),
+                    KEY `idx_ci_variant` (`variant_id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+            ");
+
+            DB::query("
+                CREATE TABLE IF NOT EXISTS `stitching_items` (
+                    `id` INT AUTO_INCREMENT PRIMARY KEY,
+                    `stitching_id` INT NOT NULL,
+                    `cutting_item_id` INT NULL,
+                    `catalog_id` INT NULL,
+                    `variant_id` INT NULL,
+                    `size` VARCHAR(50) NULL,
+                    `color` VARCHAR(100) NULL,
+                    `sku_code` VARCHAR(100) NULL,
+                    `variant_name` VARCHAR(255) NULL,
+                    `cut_qty` INT NOT NULL DEFAULT 0,
+                    `stitching_qty` INT NOT NULL DEFAULT 0,
+                    `per_pc_weight` DECIMAL(8,3) DEFAULT 0.000,
+                    `total_weight` DECIMAL(12,2) DEFAULT 0.00,
+                    `base_price` DECIMAL(12,2) DEFAULT 0.00,
+                    `discount_price` DECIMAL(12,2) DEFAULT 0.00,
+                    `inward_status` VARCHAR(30) DEFAULT 'pending',
+                    `inward_at` DATETIME NULL,
+                    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    KEY `idx_si_stitching` (`stitching_id`),
+                    KEY `idx_si_variant` (`variant_id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+            ");
+
+            $cols = array_column(DB::fetchAll("SHOW COLUMNS FROM stitching_items"), 'Field');
+            if (!in_array('inward_status', $cols)) {
                 DB::query("ALTER TABLE stitching_items ADD COLUMN inward_status VARCHAR(30) DEFAULT 'pending'");
+            }
+            if (!in_array('inward_at', $cols)) {
                 DB::query("ALTER TABLE stitching_items ADD COLUMN inward_at DATETIME NULL");
             }
-            $logCols = DB::fetchAll("SHOW COLUMNS FROM stitching_logs LIKE 'inward_status'");
-            if (empty($logCols)) {
+
+            $logCols = array_column(DB::fetchAll("SHOW COLUMNS FROM stitching_logs"), 'Field');
+            if (!in_array('inward_status', $logCols)) {
                 DB::query("ALTER TABLE stitching_logs ADD COLUMN inward_status VARCHAR(30) DEFAULT 'pending'");
             }
         } catch (\Throwable $e) {
-            // Ignore if schema already present
+            // Ignore if schema already present or DB error
         }
     }
 
@@ -378,7 +431,7 @@ class LabelController extends Controller {
         if (!$concern && $cid) {
             $concern = DB::fetch("SELECT * FROM concerns WHERE id = ?", [$cid]);
         }
-        $concernName = $concern['name'] ?? 'INVENTO ERP';
+        $concernName = $concern['name'] ?? 'GRM Inventory';
 
         $labelData = [
             'concern_name'   => $concernName,
@@ -546,7 +599,7 @@ class LabelController extends Controller {
                     $item['category_id']      = $v['category_id'];
                     $item['subcategory_id']   = $v['subcategory_id'];
                     $item['category_name']    = $v['category_name'] ?? 'Apparel';
-                    $item['brand_name']       = $v['brand_name'] ?? 'INVENTO';
+                    $item['brand_name']       = $v['brand_name'] ?? 'GRM';
                 }
             }
 
@@ -678,7 +731,7 @@ class LabelController extends Controller {
                             'category_id'         => $v['category_id'],
                             'subcategory_id'      => $v['subcategory_id'],
                             'category_name'       => $v['category_name'] ?? 'In-House Production',
-                            'brand_name'          => $v['brand_name'] ?? 'INVENTO Apparel',
+                            'brand_name'          => $v['brand_name'] ?? 'GRM Apparel',
                             'program_no'          => 'In-House Production'
                         ];
                     }

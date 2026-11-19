@@ -321,7 +321,7 @@ class ExportService {
                 <div class="d-flex justify-content-between align-items-start border-bottom pb-3 mb-3">
                     <div>
                         <div class="d-flex align-items-center gap-2 mb-1">
-                            <span class="badge bg-primary text-uppercase px-2 py-1" style="font-size: 0.75rem;">INVENTO ERP</span>
+                            <span class="badge bg-primary text-uppercase px-2 py-1" style="font-size: 0.75rem;">GRM Inventory</span>
                             <span class="text-muted small">&bull; Official Report</span>
                         </div>
                         <h4 class="fw-bold mb-1 text-dark"><?= htmlspecialchars($title) ?></h4>

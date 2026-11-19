@@ -523,7 +523,7 @@ class PurchaseController extends Controller {
         fwrite($out, "\xEF\xBB\xBF");
 
         // Bill Header Information
-        fputcsv($out, ['INVENTO MULTI-CONCERN ERP - PURCHASE BILL ITEMS']);
+        fputcsv($out, ['GRM INVENTORY - PURCHASE BILL ITEMS']);
         fputcsv($out, ['Bill No', $bill['bill_no'], 'Purchase Date', date('d-m-Y', strtotime($bill['bill_date']))]);
         fputcsv($out, ['Supplier Name', $bill['supplier_name'], 'Company', $bill['supplier_company'] ?: '-']);
         fputcsv($out, ['Supplier Invoice No', $bill['supplier_invoice_no'] ?: '-', 'GSTIN', $bill['supplier_gstin'] ?: '-']);

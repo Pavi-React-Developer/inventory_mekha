@@ -433,10 +433,10 @@ if (!function_exists('amountToWordsINR')) {
                     <div class="col-8">
                         <div class="d-flex align-items-center gap-2 mb-1">
                             <i class="bi bi-building fs-3 text-primary"></i>
-                            <h3 class="fw-bold mb-0 text-dark"><?= htmlspecialchars($bill['concern_name'] ?: 'INVENTO MULTI-CONCERN ERP') ?></h3>
+                            <h3 class="fw-bold mb-0 text-dark"><?= htmlspecialchars($bill['concern_name'] ?: 'GRM Inventory') ?></h3>
                         </div>
                         <div class="text-muted small">
-                            <strong>Concern Unit:</strong> <?= htmlspecialchars($bill['concern_code'] ?: 'INVENTO') ?> &bull; 
+                            <strong>Concern Unit:</strong> <?= htmlspecialchars($bill['concern_code'] ?: 'GRM') ?> &bull;
                             <strong>Receiving Facility:</strong> Central Production Unit & Warehousing &bull; Tamil Nadu
                         </div>
                         <div class="mt-2">
@@ -467,7 +467,7 @@ if (!function_exists('amountToWordsINR')) {
                     </div>
                     <div class="col-6 ps-3">
                         <div class="fw-bold text-uppercase text-muted mb-1" style="font-size: 0.72rem; letter-spacing: 0.05em;">Billed & Delivered To (Consignee)</div>
-                        <div class="fw-bold text-dark fs-6"><?= htmlspecialchars($bill['concern_name'] ?: 'INVENTO Enterprise') ?></div>
+                        <div class="fw-bold text-dark fs-6"><?= htmlspecialchars($bill['concern_name'] ?: 'GRM Inventory') ?></div>
                         <div class="text-muted mt-1">
                             Destination: Central Fabric & Trim Store, Inward Bay<br>
                             <strong>Payment Status:</strong> <span class="badge bg-light text-dark border text-uppercase"><?= htmlspecialchars($bill['payment_status']) ?></span> &bull; 

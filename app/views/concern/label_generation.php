@@ -7,7 +7,7 @@ $concern = Auth::concern();
 if (!$concern && !empty($selectedCid)) {
     $concern = DB::fetch("SELECT * FROM concerns WHERE id = ?", [$selectedCid]);
 }
-$concernName = $concern['name'] ?? 'INVENTO ERP';
+$concernName = $concern['name'] ?? 'GRM Inventory';
 ?>
 <div class="container-fluid px-0">
     <!-- Page Header -->
@@ -637,7 +637,7 @@ $concernName = $concern['name'] ?? 'INVENTO ERP';
                                                 data-size="<?= htmlspecialchars($size) ?>"
                                                 data-pattern="<?= htmlspecialchars($fg['pattern'] ?: ($fg['specification'] ?? 'STANDARD')) ?>"
                                                 data-cat="<?= htmlspecialchars($cat) ?>"
-                                                data-brand="<?= htmlspecialchars($fg['brand_name'] ?: ($fg['supplier_company'] ?: 'INVENTO')) ?>"
+                                                data-brand="<?= htmlspecialchars($fg['brand_name'] ?: ($fg['supplier_company'] ?: 'GRM')) ?>"
                                                 data-color="<?= htmlspecialchars($fg['color'] ?: 'STANDARD') ?>"
                                                 data-mapped="1"
                                                 data-varid="<?= htmlspecialchars($fg['variant_id'] ?? '') ?>"
@@ -667,7 +667,7 @@ $concernName = $concern['name'] ?? 'INVENTO ERP';
                                                         data-size="<?= htmlspecialchars($pfg['variant_size'] ?: 'Standard') ?>"
                                                         data-pattern="<?= htmlspecialchars($pfg['program_no'] ?: 'In-House') ?>"
                                                         data-cat="<?= htmlspecialchars($pfg['category_name'] ?: 'Apparel') ?>"
-                                                        data-brand="INVENTO Production"
+                                                        data-brand="GRM Production"
                                                         data-color="<?= htmlspecialchars($pfg['variant_color'] ?? ($pfg['color'] ?? 'Standard')) ?>"
                                                         data-mapped="1"
                                                         data-varid="<?= htmlspecialchars($pfg['variant_id'] ?? '') ?>"
@@ -919,7 +919,7 @@ $concernName = $concern['name'] ?? 'INVENTO ERP';
                                                 data-size="<?= htmlspecialchars($prod['variant_size'] ?: 'Standard') ?>"
                                                 data-color="<?= htmlspecialchars($prod['variant_color'] ?? ($prod['color'] ?? 'Standard')) ?>"
                                                 data-cat="<?= htmlspecialchars($prod['category_name'] ?: 'Apparel') ?>"
-                                                data-brand="<?= htmlspecialchars($prod['brand_name'] ?: 'INVENTO Production') ?>"
+                                                data-brand="<?= htmlspecialchars($prod['brand_name'] ?: 'GRM Production') ?>"
                                                 data-log="<?= htmlspecialchars($prod['log_no']) ?>"
                                                 data-pcs="<?= htmlspecialchars($prod['stitched_pieces']) ?>"
                                                 data-program="<?= htmlspecialchars($prod['program_no'] ?: 'Standard Program') ?>"

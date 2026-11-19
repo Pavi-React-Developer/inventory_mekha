@@ -8,7 +8,7 @@ class Auth {
         if (session_status() === PHP_SESSION_NONE) {
             $config = require __DIR__ . '/../../config/app.php';
             if (!headers_sent()) {
-                session_name($config['session']['name'] ?? 'INVENTO_SESSID');
+                session_name($config['session']['name'] ?? 'GRM_INVENTORY_SESSID');
                 session_set_cookie_params([
                     'lifetime' => $config['session']['lifetime'] ?? 86400,
                     'path'     => $config['session']['path'] ?? '/',
@@ -166,7 +166,10 @@ class Auth {
              WHERE cm.concern_id = ? AND cm.enabled = 1",
             [(int)$c['id']]
         );
-        $_SESSION['enabled_modules'] = array_column($mods, 'code');
+        $registeredModuleCount = (int)DB::fetchValue("SELECT COUNT(*) FROM modules");
+        $_SESSION['enabled_modules'] = $registeredModuleCount < 5
+            ? array_values(array_unique(array_merge(array_column($mods, 'code'), ModuleRegistry::concernCodes())))
+            : array_column($mods, 'code');
 
         // Cache role permissions and user-specific overrides
         $userId = (int)($_SESSION['user']['id'] ?? 0);
@@ -196,6 +199,20 @@ class Auth {
                     'add'    => (bool)$p['can_add'],
                     'edit'   => (bool)$p['can_edit'],
                     'delete' => (bool)$p['can_delete'],
+                ];
+            }
+        }
+
+        // If seeded role/module permissions have been cleared, keep Concern
+        // Administrators usable by granting the hardcoded master module set.
+        $roleName = (string)($_SESSION['user']['role_name'] ?? '');
+        if (empty($roleMap) && (stripos($roleName, 'Administrator') !== false || stripos($roleName, 'Admin') !== false)) {
+            foreach (ModuleRegistry::concernCodes() as $moduleCode) {
+                $roleMap[$moduleCode] = [
+                    'view'   => true,
+                    'add'    => true,
+                    'edit'   => true,
+                    'delete' => true,
                 ];
             }
         }
@@ -288,7 +305,10 @@ class Auth {
                  WHERE cm.concern_id = ? AND cm.enabled = 1",
                 [(int)$user['concern_id']]
             );
-            $_SESSION['enabled_modules'] = array_column($mods, 'code');
+            $registeredModuleCount = (int)DB::fetchValue("SELECT COUNT(*) FROM modules");
+            $_SESSION['enabled_modules'] = $registeredModuleCount < 5
+                ? array_values(array_unique(array_merge(array_column($mods, 'code'), ModuleRegistry::concernCodes())))
+                : array_column($mods, 'code');
 
             // Cache permissions (role defaults + individual user overrides)
             self::loadPermissions((int)$user['id'], (int)$user['role_id']);

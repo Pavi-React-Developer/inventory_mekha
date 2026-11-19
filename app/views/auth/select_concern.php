@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= htmlspecialchars($pageTitle ?? 'Select Concern / Shop') ?> - INVENTO ERP</title>
+    <title><?= htmlspecialchars($pageTitle ?? 'Select Concern / Shop') ?> - GRM Inventory</title>
     <link rel="stylesheet" href="<?= \App\Core\Controller::url('/assets/css/bootstrap.min.css') ?>">
     <link rel="stylesheet" href="<?= \App\Core\Controller::url('/assets/css/bootstrap-icons.min.css') ?>">
     <link rel="stylesheet" href="<?= \App\Core\Controller::url('/assets/css/style.css') ?>">
@@ -61,7 +61,7 @@
         <div class="d-inline-flex p-3 rounded-circle bg-primary bg-opacity-10 text-primary mb-2">
             <i class="bi bi-box-seam-fill fs-2"></i>
         </div>
-        <h4 class="fw-bold mb-1 tracking-tight text-white">INVENTO</h4>
+        <h4 class="fw-bold mb-1 tracking-tight text-white">GRM Inventory</h4>
         <p class="text-secondary small mb-3">Multi-Concern Enterprise Inventory System</p>
 
         <div class="d-inline-flex align-items-center gap-2 px-3 py-1.5 rounded-pill bg-white bg-opacity-10 text-white-50 small">

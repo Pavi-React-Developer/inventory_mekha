@@ -12,6 +12,76 @@ use App\Services\AuditLog;
 use Exception;
 
 class AdminController extends Controller {
+    private static bool $schemaEnsured = false;
+
+    protected function ensureSchema(): void {
+        if (self::$schemaEnsured) {
+            return;
+        }
+
+        try {
+            // 1. Ensure user_concerns table
+            DB::query("CREATE TABLE IF NOT EXISTS `user_concerns` (
+                `id` INT AUTO_INCREMENT PRIMARY KEY,
+                `user_id` INT NOT NULL,
+                `concern_id` INT NOT NULL,
+                `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY `uk_user_concern` (`user_id`, `concern_id`),
+                INDEX `idx_uc_user` (`user_id`),
+                INDEX `idx_uc_concern` (`concern_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+            // 2. Ensure user_permissions table
+            DB::query("CREATE TABLE IF NOT EXISTS `user_permissions` (
+                `id` INT AUTO_INCREMENT PRIMARY KEY,
+                `user_id` INT NOT NULL,
+                `module_id` INT NOT NULL,
+                `can_view` TINYINT(1) NOT NULL DEFAULT 1,
+                `can_add` TINYINT(1) NOT NULL DEFAULT 0,
+                `can_edit` TINYINT(1) NOT NULL DEFAULT 0,
+                `can_delete` TINYINT(1) NOT NULL DEFAULT 0,
+                `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY `uk_user_module` (`user_id`, `module_id`),
+                INDEX `idx_up_user` (`user_id`),
+                INDEX `idx_up_module` (`module_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+            // 3. Ensure staff table and columns
+            DB::query("CREATE TABLE IF NOT EXISTS `staff` (
+                `id` INT AUTO_INCREMENT PRIMARY KEY,
+                `concern_id` INT NOT NULL,
+                `staff_code` VARCHAR(50) NOT NULL,
+                `name` VARCHAR(100) NOT NULL,
+                `phone` VARCHAR(30) NULL,
+                `email` VARCHAR(120) NULL,
+                `designation` VARCHAR(100) NULL,
+                `department` VARCHAR(100) NULL,
+                `salary_type` ENUM('monthly','daily','piece_rate','hourly') NOT NULL DEFAULT 'monthly',
+                `base_salary` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+                `address` TEXT NULL,
+                `status` ENUM('active','inactive') NOT NULL DEFAULT 'active',
+                `joining_date` DATE NULL,
+                `created_by` INT NULL,
+                `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                `updated_at` TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+                INDEX `idx_staff_concern` (`concern_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+            $staffCols = array_column(DB::fetchAll('DESCRIBE `staff`'), 'Field');
+            if (!in_array('user_id', $staffCols, true)) {
+                DB::query('ALTER TABLE `staff` ADD COLUMN `user_id` INT NULL AFTER `concern_id`');
+                DB::query('ALTER TABLE `staff` ADD INDEX `idx_staff_user` (`user_id`)');
+            }
+            if (!in_array('password_hash', $staffCols, true)) {
+                DB::query('ALTER TABLE `staff` ADD COLUMN `password_hash` VARCHAR(255) NULL AFTER `email`');
+            }
+
+            self::$schemaEnsured = true;
+        } catch (\Throwable $e) {
+            error_log('AdminController ensureSchema error: ' . $e->getMessage());
+        }
+    }
+
     public function switchConcern(): void {
         $concernId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
         Auth::switchConcern($concernId > 0 ? $concernId : null);
@@ -58,6 +128,7 @@ class AdminController extends Controller {
     }
 
     public function concerns(): void {
+        $this->ensureSchema();
         $concerns = DB::fetchAll(
             "SELECT c.*, 
                     (SELECT COUNT(*) FROM concern_modules cm WHERE cm.concern_id = c.id AND cm.enabled = 1) AS active_modules_count,
@@ -78,6 +149,7 @@ class AdminController extends Controller {
     }
 
     public function storeConcern(): void {
+        $this->ensureSchema();
         $this->validateCsrf();
 
         $errors = [];
@@ -996,7 +1068,7 @@ class AdminController extends Controller {
                 <div class="dossier-header d-flex justify-content-between align-items-start">
                     <div>
                         <div class="text-uppercase tracking-wider small fw-bold text-primary mb-1">
-                            <i class="bi bi-shield-check me-1"></i> INVENTO Multi-Concern Enterprise Management System
+                            <i class="bi bi-shield-check me-1"></i> GRM Inventory
                         </div>
                         <h3 class="fw-bold text-dark mb-1">Concern Creation & Onboarding Dossier</h3>
                         <p class="text-muted small mb-0">Official Business Unit Provisioning Certificate & Tenant Configuration Record</p>
@@ -1189,7 +1261,7 @@ class AdminController extends Controller {
                             <div>
                                 <div class="prop-label">Provisioned & Authorized By</div>
                                 <div class="fw-bold text-dark mt-1">Enterprise Super Administrator</div>
-                                <div class="small text-muted">INVENTO Central Management System</div>
+                                <div class="small text-muted">GRM Inventory Central Management</div>
                             </div>
                             <div class="pt-4 border-top mt-3 d-flex justify-content-between small text-muted">
                                 <span>Signature: ______________________</span>
@@ -1214,7 +1286,7 @@ class AdminController extends Controller {
 
                 <!-- Document Footer Note -->
                 <div class="border-top pt-3 text-center text-muted small">
-                    <span>INVENTO Multi-Concern ERP System &bull; Confidential Business Unit Provisioning Dossier &bull; Generated <?= date('d M Y, h:i A') ?></span>
+                    <span>GRM Inventory &bull; Confidential Business Unit Provisioning Dossier &bull; Generated <?= date('d M Y, h:i A') ?></span>
                 </div>
             </div>
         </body>
@@ -1312,7 +1384,7 @@ class AdminController extends Controller {
         }
 
         $metadata = [
-            'Template' => 'INVENTO ERP - Concern Creation & Tenant Onboarding Specification Sheet',
+            'Template' => 'GRM Inventory - Concern Creation & Tenant Onboarding Specification Sheet',
             'Purpose' => 'Offline concern setup data collection, drafting and onboarding specification',
             'Instructions' => 'Fill the required fields marked with *. For Assigned Module Codes, enter ALL or comma-separated module codes from the directory below.',
             'Available Modules Count' => count($allModules) . ' Modules available for provisioning',
@@ -1325,7 +1397,7 @@ class AdminController extends Controller {
         if ($format === 'csv') {
             \App\Services\ExportService::downloadCsv($filename, $headers, array_slice($rows, 0, 3), []);
         } else {
-            \App\Services\ExportService::downloadExcel($filename, 'INVENTO ERP - Concern Creation Onboarding Template', $metadata, $headers, $rows, $totals);
+            \App\Services\ExportService::downloadExcel($filename, 'GRM Inventory - Concern Creation Onboarding Template', $metadata, $headers, $rows, $totals);
         }
     }
 

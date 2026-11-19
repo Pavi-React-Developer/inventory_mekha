@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= htmlspecialchars($pageTitle ?? 'Print Labels - INVENTO') ?></title>
+    <title><?= htmlspecialchars($pageTitle ?? 'Print Labels - GRM Inventory') ?></title>
     <link rel="stylesheet" href="<?= \App\Core\Controller::url('/assets/css/bootstrap.min.css') ?>">
     <link rel="stylesheet" href="<?= \App\Core\Controller::url('/assets/css/bootstrap-icons.min.css') ?>">
     <style>
@@ -191,7 +191,7 @@
 
 <?php
 $concern = \App\Core\Auth::concern();
-$concernName = $labelData['concern_name'] ?? ($concern['name'] ?? 'INVENTO ERP');
+$concernName = $labelData['concern_name'] ?? ($concern['name'] ?? 'GRM Inventory');
 $refNo       = $labelData['ref_no'] ?? ($labelData['cost_or_ref'] ?? 'REF-001');
 $headerTitle = $labelData['header_title'] ?? ($labelData['item_title'] ?? 'Garment Item');
 $label1Name  = $labelData['label_1_name'] ?? 'Item';

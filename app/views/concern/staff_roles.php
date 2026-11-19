@@ -529,7 +529,7 @@ $activeTab = $activeTab ?? 'staff';
                         <div class="col-md-6">
                             <label class="form-label small fw-semibold text-secondary">Login Email <span class="text-danger">*</span></label>
                             <input type="email" name="email" id="assign_email" class="form-control" required placeholder="user@invento.com">
-                            <small class="text-muted">Username used to sign in to INVENTO.</small>
+                            <small class="text-muted">Username used to sign in to GRM Inventory.</small>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label small fw-semibold text-secondary">Password</label>

@@ -26,18 +26,23 @@ abstract class Controller {
         if (Auth::check()) {
             if ($isSuperAdmin) {
                 // Super Admin sees both Super Admin management and ALL operational concern modules
-                $sidebarModules = DB::fetchAll(
+                $databaseModules = DB::fetchAll(
                     "SELECT * FROM modules ORDER BY is_super_admin_only DESC, sort_order ASC"
                 );
+                $sidebarModules = ModuleRegistry::merge($databaseModules, true);
             } else {
                 $cid = Auth::concernId();
-                $sidebarModules = DB::fetchAll(
+                $databaseModules = DB::fetchAll(
                     "SELECT m.* FROM concern_modules cm 
                      JOIN modules m ON cm.module_id = m.id 
                      WHERE cm.concern_id = ? AND cm.enabled = 1 
                      ORDER BY m.sort_order ASC",
                     [$cid]
                 );
+                $registeredModuleCount = (int)DB::fetchValue("SELECT COUNT(*) FROM modules");
+                $sidebarModules = $registeredModuleCount < 5
+                    ? ModuleRegistry::merge($databaseModules)
+                    : $databaseModules;
             }
         }
 

@@ -12,8 +12,75 @@ use App\Services\AuditLog;
 use Exception;
 
 class StaffController extends Controller {
+    private static bool $schemaEnsured = false;
+
+    protected function ensureSchema(): void {
+        if (self::$schemaEnsured) {
+            return;
+        }
+
+        try {
+            DB::query("CREATE TABLE IF NOT EXISTS `user_concerns` (
+                `id` INT AUTO_INCREMENT PRIMARY KEY,
+                `user_id` INT NOT NULL,
+                `concern_id` INT NOT NULL,
+                `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY `uk_user_concern` (`user_id`, `concern_id`),
+                INDEX `idx_uc_user` (`user_id`),
+                INDEX `idx_uc_concern` (`concern_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+            DB::query("CREATE TABLE IF NOT EXISTS `user_permissions` (
+                `id` INT AUTO_INCREMENT PRIMARY KEY,
+                `user_id` INT NOT NULL,
+                `module_id` INT NOT NULL,
+                `can_view` TINYINT(1) NOT NULL DEFAULT 1,
+                `can_add` TINYINT(1) NOT NULL DEFAULT 0,
+                `can_edit` TINYINT(1) NOT NULL DEFAULT 0,
+                `can_delete` TINYINT(1) NOT NULL DEFAULT 0,
+                `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY `uk_user_module` (`user_id`, `module_id`),
+                INDEX `idx_up_user` (`user_id`),
+                INDEX `idx_up_module` (`module_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+            DB::query("CREATE TABLE IF NOT EXISTS `staff` (
+                `id` INT AUTO_INCREMENT PRIMARY KEY,
+                `concern_id` INT NOT NULL,
+                `staff_code` VARCHAR(50) NOT NULL,
+                `name` VARCHAR(100) NOT NULL,
+                `phone` VARCHAR(30) NULL,
+                `email` VARCHAR(120) NULL,
+                `designation` VARCHAR(100) NULL,
+                `department` VARCHAR(100) NULL,
+                `salary_type` ENUM('monthly','daily','piece_rate','hourly') NOT NULL DEFAULT 'monthly',
+                `base_salary` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+                `address` TEXT NULL,
+                `status` ENUM('active','inactive') NOT NULL DEFAULT 'active',
+                `joining_date` DATE NULL,
+                `created_by` INT NULL,
+                `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                `updated_at` TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+                INDEX `idx_staff_concern` (`concern_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+            $staffCols = array_column(DB::fetchAll('DESCRIBE `staff`'), 'Field');
+            if (!in_array('user_id', $staffCols, true)) {
+                DB::query('ALTER TABLE `staff` ADD COLUMN `user_id` INT NULL AFTER `concern_id`');
+                DB::query('ALTER TABLE `staff` ADD INDEX `idx_staff_user` (`user_id`)');
+            }
+            if (!in_array('password_hash', $staffCols, true)) {
+                DB::query('ALTER TABLE `staff` ADD COLUMN `password_hash` VARCHAR(255) NULL AFTER `email`');
+            }
+
+            self::$schemaEnsured = true;
+        } catch (\Throwable $e) {
+            error_log('StaffController ensureSchema error: ' . $e->getMessage());
+        }
+    }
 
     public function index(): void {
+        $this->ensureSchema();
         $allConcerns = DB::fetchAll(
             "SELECT c.id, c.name, c.code, c.status,
                     (SELECT COUNT(*) FROM staff s WHERE s.concern_id = c.id) AS staff_count
