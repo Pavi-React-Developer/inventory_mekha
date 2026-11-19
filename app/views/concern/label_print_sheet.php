@@ -229,12 +229,13 @@ $badge       = $labelData['section_badge'] ?? 'STANDARD';
         </div>
         <button class="btn btn-outline-secondary btn-sm" onclick="window.close()">Close</button>
         <?php if (!empty($labelData['item_id'])): ?>
+            <?php $isProdStock = ($labelData['stock_tab'] ?? '') === 'production'; ?>
             <form action="<?= \App\Core\Controller::url('/m/label/add_to_stock') ?>" method="POST" class="d-inline" target="_self">
                 <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'] ?? '') ?>">
                 <input type="hidden" name="item_id" value="<?= (int)$labelData['item_id'] ?>">
                 <input type="hidden" name="tab" value="<?= htmlspecialchars($labelData['stock_tab'] ?? 'rolls') ?>">
-                <button type="submit" class="btn btn-success btn-sm fw-bold px-3 shadow-sm d-flex align-items-center gap-1.5" title="Add this item to Purchase Stocks">
-                    <i class="bi bi-box-arrow-in-down"></i> Add to Stock &rarr; Purchase Stocks
+                <button type="submit" class="btn btn-success btn-sm fw-bold px-3 shadow-sm d-flex align-items-center gap-1.5" title="Add this item to <?= $isProdStock ? 'Live Inventory Stocks' : 'Purchase Stocks' ?>">
+                    <i class="bi bi-box-arrow-in-down"></i> Add to Stock &rarr; <?= $isProdStock ? 'Live Stocks' : 'Purchase Stocks' ?>
                 </button>
             </form>
         <?php elseif (!empty($labelData['bill_id'])): ?>

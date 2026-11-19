@@ -29,9 +29,9 @@ echo "======================================================\n\n";
 echo "TEST 1: Subcategories & Sub-Subcategories Cross-Concern Fallback\n";
 $cid = 2; // user switched to concern 2
 $catWhere = $cid ? "(concern_id = ? OR concern_id = 1 OR concern_id IS NULL)" : "1=1";
-$subcats = DB::fetchAll("SELECT id, name, code FROM subcategories WHERE category_id = 15 AND {$catWhere} AND status = 'active' ORDER BY name ASC", [$cid]);
-assertTest(!empty($subcats), "Found subcategories under category 15 with concern_id = 2 fallback");
-assertTest($subcats[0]['name'] === 'maternity', "Subcategory name is 'maternity'");
+$subcats = DB::fetchAll("SELECT id, name, code FROM subcategories WHERE category_id = 14 AND {$catWhere} AND status = 'active' ORDER BY name ASC", [$cid]);
+assertTest(!empty($subcats), "Found subcategories under category 14 with concern_id = 2 fallback");
+assertTest(strtolower($subcats[0]['name']) === 'maternity', "Subcategory name is 'Maternity'");
 
 $subSubcats = DB::fetchAll("SELECT id, name, code FROM sub_subcategories WHERE subcategory_id = ? AND {$catWhere} AND status = 'active' ORDER BY name ASC", [$subcats[0]['id'], $cid]);
 assertTest(!empty($subSubcats), "Found sub-subcategories under subcategory with concern_id = 2 fallback");

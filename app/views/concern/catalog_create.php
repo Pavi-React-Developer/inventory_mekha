@@ -269,6 +269,14 @@ if (!$isEdit) {
                 <div class="d-flex align-items-center gap-2 flex-wrap" id="sizeChipsContainer">
                     <?php
                     $availableSizes = ['S', 'M', 'L', 'XS', 'XL', 'XXL'];
+                    if (!empty($attributeSizes)) {
+                        foreach ($attributeSizes as $as) {
+                            $val = is_array($as) ? ($as['attribute_value'] ?? '') : (string)$as;
+                            if ($val !== '' && !in_array($val, $availableSizes)) {
+                                $availableSizes[] = $val;
+                            }
+                        }
+                    }
                     foreach ($selectedSizes as $ss) {
                         if (!in_array($ss, $availableSizes)) {
                             $availableSizes[] = $ss;
@@ -815,28 +823,71 @@ document.addEventListener('DOMContentLoaded', function() {
         const val = customSizeInput.value.trim().toUpperCase();
         if (!val) return;
 
-        // Check if already exists
-        const existing = chipsContainer.querySelector(`[data-size="${val}"]`);
-        if (existing) {
-            const cb = existing.querySelector('.size-checkbox');
-            cb.checked = true;
-            existing.querySelector('.size-chip').classList.add('active');
-        } else {
-            const div = document.createElement('div');
-            div.className = 'size-chip-wrapper';
-            div.setAttribute('data-size', val);
-            div.innerHTML = `
-                <label class="size-chip active">
-                    <input type="checkbox" name="sizes[]" value="${val}" class="size-checkbox" checked>
-                    <span class="size-label">${val}</span>
-                    <button type="button" class="btn-remove-size" title="Remove size"><i class="bi bi-trash"></i></button>
-                </label>
-            `;
-            chipsContainer.appendChild(div);
-            bindChipEvents();
+        // Check if already exists in existing chips (case-insensitive)
+        let alreadyExistsInChips = false;
+        chipsContainer.querySelectorAll('.size-chip-wrapper').forEach(wrap => {
+            const sz = (wrap.getAttribute('data-size') || '').trim();
+            if (sz.toUpperCase() === val) {
+                alreadyExistsInChips = true;
+                const cb = wrap.querySelector('.size-checkbox');
+                if (cb) cb.checked = true;
+                const chip = wrap.querySelector('.size-chip');
+                if (chip) chip.classList.add('active');
+            }
+        });
+
+        if (alreadyExistsInChips) {
+            alert("Attribute '" + val + "' already exists.");
+            modalAddSize.hide();
+            validateSizes(false);
+            return;
         }
-        modalAddSize.hide();
-        validateSizes(false);
+
+        // Call server to validate uniqueness & persist in product_attributes
+        const fd = new FormData();
+        fd.append('attribute_type', 'size');
+        fd.append('attribute_value', val);
+        fd.append('attribute_name', 'Size');
+
+        fetch('<?= \App\Core\Controller::url('/api/attributes/quick-add') ?>', { method: 'POST', body: fd })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    const div = document.createElement('div');
+                    div.className = 'size-chip-wrapper';
+                    div.setAttribute('data-size', val);
+                    div.innerHTML = `
+                        <label class="size-chip active">
+                            <input type="checkbox" name="sizes[]" value="${val}" class="size-checkbox" checked>
+                            <span class="size-label">${val}</span>
+                            <button type="button" class="btn-remove-size" title="Remove size"><i class="bi bi-trash"></i></button>
+                        </label>
+                    `;
+                    chipsContainer.appendChild(div);
+                    bindChipEvents();
+                    modalAddSize.hide();
+                    validateSizes(false);
+                } else {
+                    alert(res.message || ("Attribute '" + val + "' already exists."));
+                }
+            })
+            .catch(() => {
+                // Fallback client append if offline
+                const div = document.createElement('div');
+                div.className = 'size-chip-wrapper';
+                div.setAttribute('data-size', val);
+                div.innerHTML = `
+                    <label class="size-chip active">
+                        <input type="checkbox" name="sizes[]" value="${val}" class="size-checkbox" checked>
+                        <span class="size-label">${val}</span>
+                        <button type="button" class="btn-remove-size" title="Remove size"><i class="bi bi-trash"></i></button>
+                    </label>
+                `;
+                chipsContainer.appendChild(div);
+                bindChipEvents();
+                modalAddSize.hide();
+                validateSizes(false);
+            });
     });
 
     // ========================================================

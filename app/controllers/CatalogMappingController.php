@@ -713,6 +713,18 @@ class CatalogMappingController extends Controller {
                 $hsn = trim($_POST['default_hsn'] ?? '6109');
                 $gst = (float)($_POST['default_gst_rate'] ?? 5.00);
                 if (empty($code)) $code = strtoupper(substr($name, 0, 2));
+
+                // Check duplicate Main Category (case-insensitive)
+                $existing = DB::fetch(
+                    "SELECT id, name FROM categories 
+                     WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) 
+                     AND (concern_id = ? OR concern_id = 1 OR concern_id IS NULL)",
+                    [$name, $cid]
+                );
+                if ($existing) {
+                    throw new Exception("Category '{$existing['name']}' already exists.");
+                }
+
                 DB::query(
                     "INSERT INTO categories (concern_id, name, code, default_hsn, default_gst_rate, status, created_at)
                      VALUES (?, ?, ?, ?, ?, 'active', NOW())",
@@ -724,6 +736,18 @@ class CatalogMappingController extends Controller {
                 $catId = (int)($_POST['category_id'] ?? 0);
                 if (!$catId) throw new Exception('Parent Main Category is required.');
                 if (empty($code)) $code = strtoupper(substr($name, 0, 2));
+
+                // Check duplicate Subcategory under parent category (case-insensitive)
+                $existing = DB::fetch(
+                    "SELECT id, name FROM subcategories 
+                     WHERE category_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?)) 
+                     AND (concern_id = ? OR concern_id = 1 OR concern_id IS NULL)",
+                    [$catId, $name, $cid]
+                );
+                if ($existing) {
+                    throw new Exception("Subcategory '{$existing['name']}' already exists under this Category.");
+                }
+
                 DB::query(
                     "INSERT INTO subcategories (concern_id, category_id, name, code, status, created_at)
                      VALUES (?, ?, ?, ?, 'active', NOW())",
@@ -735,6 +759,18 @@ class CatalogMappingController extends Controller {
                 $subcatId = (int)($_POST['subcategory_id'] ?? 0);
                 if (!$subcatId) throw new Exception('Parent Subcategory is required for Tier-3 category.');
                 if (empty($code)) $code = strtoupper(substr($name, 0, 2));
+
+                // Check duplicate Sub-Subcategory under parent subcategory (case-insensitive)
+                $existing = DB::fetch(
+                    "SELECT id, name FROM sub_subcategories 
+                     WHERE subcategory_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?)) 
+                     AND (concern_id = ? OR concern_id = 1 OR concern_id IS NULL)",
+                    [$subcatId, $name, $cid]
+                );
+                if ($existing) {
+                    throw new Exception("Sub-Subcategory '{$existing['name']}' already exists under this Subcategory.");
+                }
+
                 DB::query(
                     "INSERT INTO sub_subcategories (concern_id, subcategory_id, name, code, status, created_at)
                      VALUES (?, ?, ?, ?, 'active', NOW())",
@@ -770,7 +806,7 @@ class CatalogMappingController extends Controller {
                 echo json_encode(['success' => false, 'message' => $e->getMessage()]);
                 exit;
             }
-            $this->flash('error', 'Failed to create category: ' . $e->getMessage());
+            $this->flash('error', $e->getMessage());
         }
 
         $returnUrl = $_POST['return_url'] ?? '/production/catalog-mapping?tab=hierarchy';
@@ -784,6 +820,9 @@ class CatalogMappingController extends Controller {
         $this->ensureSchema();
         $this->validateCsrf();
         $cid = Auth::concernId() ?: 1;
+        $isAjax = (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest')
+            || (isset($_SERVER['HTTP_ACCEPT']) && strpos($_SERVER['HTTP_ACCEPT'], 'application/json') !== false)
+            || (isset($_POST['is_ajax']) && $_POST['is_ajax'] == '1');
 
         $type = trim($_POST['attribute_type'] ?? '');
         if ($type === '__create_new__' || !empty($_POST['new_attribute_type'])) {
@@ -797,7 +836,32 @@ class CatalogMappingController extends Controller {
         $name = trim($_POST['attribute_name'] ?? ucfirst($type));
 
         if (empty($val)) {
-            $this->flash('error', 'Attribute value cannot be empty.');
+            $msg = 'Attribute value cannot be empty.';
+            if ($isAjax) {
+                header('Content-Type: application/json');
+                echo json_encode(['success' => false, 'message' => $msg]);
+                exit;
+            }
+            $this->flash('error', $msg);
+            $this->redirect($_POST['return_url'] ?? '/production/catalog-mapping?tab=hierarchy');
+            return;
+        }
+
+        // Validate uniqueness under attribute_type (case-insensitive)
+        $existing = DB::fetch(
+            "SELECT id, attribute_value FROM product_attributes 
+             WHERE attribute_type = ? AND LOWER(TRIM(attribute_value)) = LOWER(TRIM(?)) 
+             AND (concern_id = ? OR concern_id = 1 OR concern_id IS NULL)",
+            [$type, $val, $cid]
+        );
+        if ($existing) {
+            $msg = "Attribute '{$existing['attribute_value']}' already exists for '" . ucfirst($type) . "'.";
+            if ($isAjax) {
+                header('Content-Type: application/json');
+                echo json_encode(['success' => false, 'message' => $msg, 'existing_id' => $existing['id']]);
+                exit;
+            }
+            $this->flash('error', $msg);
             $this->redirect($_POST['return_url'] ?? '/production/catalog-mapping?tab=hierarchy');
             return;
         }
@@ -808,8 +872,20 @@ class CatalogMappingController extends Controller {
                  VALUES (?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM product_attributes pa WHERE pa.concern_id = ?))",
                 [$cid, $type, $name, $val, $cid]
             );
-            $this->flash('success', "Attribute '{$val}' for '" . ucfirst($type) . "' added successfully.");
+            $newId = (int)DB::lastInsertId();
+            $msg = "Attribute '{$val}' for '" . ucfirst($type) . "' added successfully.";
+            if ($isAjax) {
+                header('Content-Type: application/json');
+                echo json_encode(['success' => true, 'id' => $newId, 'attribute_type' => $type, 'attribute_value' => $val, 'message' => $msg]);
+                exit;
+            }
+            $this->flash('success', $msg);
         } catch (Exception $e) {
+            if ($isAjax) {
+                header('Content-Type: application/json');
+                echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+                exit;
+            }
             $this->flash('error', 'Failed to add attribute: ' . $e->getMessage());
         }
 

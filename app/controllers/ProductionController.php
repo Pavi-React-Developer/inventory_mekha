@@ -260,15 +260,17 @@ class ProductionController extends Controller {
             $categories = DB::fetchAll("SELECT * FROM categories WHERE status = 'active' ORDER BY name ASC");
             $hsnList = DB::fetchAll("SELECT * FROM hsn_masters ORDER BY hsn_code ASC");
         }
+        $attributeSizes = DB::fetchAll("SELECT DISTINCT attribute_value FROM product_attributes WHERE attribute_type = 'size' AND (concern_id = ? OR concern_id = 1 OR concern_id IS NULL) AND is_active = 1 ORDER BY sort_order ASC, id ASC", [$cid ?: 1]);
 
         $this->render('concern/catalog_create', [
-            'pageTitle'     => 'Add Product Style',
-            'currentModule' => 'catalog_program',
-            'categories'    => $categories,
-            'hsnList'       => $hsnList,
-            'selectedCid'   => $cid,
-            'isEdit'        => false,
-            'style'         => null,
+            'pageTitle'      => 'Add Product Style',
+            'currentModule'  => 'catalog_program',
+            'categories'     => $categories,
+            'hsnList'        => $hsnList,
+            'attributeSizes' => $attributeSizes,
+            'selectedCid'    => $cid,
+            'isEdit'         => false,
+            'style'          => null,
         ]);
     }
 
@@ -310,6 +312,8 @@ class ProductionController extends Controller {
             $subSubcategories = $style['subcategory_id'] ? DB::fetchAll("SELECT * FROM sub_subcategories WHERE subcategory_id = ? ORDER BY name ASC", [$style['subcategory_id']]) : [];
         }
 
+        $attributeSizes = DB::fetchAll("SELECT DISTINCT attribute_value FROM product_attributes WHERE attribute_type = 'size' AND (concern_id = ? OR concern_id = 1 OR concern_id IS NULL) AND is_active = 1 ORDER BY sort_order ASC, id ASC", [$cid ?: 1]);
+
         $this->render('concern/catalog_create', [
             'pageTitle'        => 'Edit Product Style',
             'currentModule'    => 'catalog_program',
@@ -317,6 +321,7 @@ class ProductionController extends Controller {
             'subcategories'    => $subcategories,
             'subSubcategories' => $subSubcategories,
             'hsnList'          => $hsnList,
+            'attributeSizes'   => $attributeSizes,
             'selectedCid'      => $cid,
             'isEdit'           => true,
             'style'            => $style,
@@ -777,6 +782,22 @@ class ProductionController extends Controller {
             $code = strtoupper(substr($name, 0, 2));
         }
 
+        // Validate uniqueness (case-insensitive)
+        $existing = DB::fetch(
+            "SELECT id, name FROM categories 
+             WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) 
+             AND (concern_id = ? OR concern_id = 1 OR concern_id IS NULL)",
+            [$name, $cid]
+        );
+        if ($existing) {
+            echo json_encode([
+                'success' => false, 
+                'message' => "Category '{$existing['name']}' already exists.",
+                'existing_id' => $existing['id']
+            ]);
+            exit;
+        }
+
         try {
             DB::query(
                 "INSERT INTO categories (concern_id, name, code, default_hsn, default_gst_rate, status) VALUES (?, ?, ?, ?, ?, 'active')",
@@ -813,6 +834,22 @@ class ProductionController extends Controller {
             $code = strtoupper(substr($name, 0, 2));
         }
 
+        // Validate uniqueness under parent Category (case-insensitive)
+        $existing = DB::fetch(
+            "SELECT id, name FROM subcategories 
+             WHERE category_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?)) 
+             AND (concern_id = ? OR concern_id = 1 OR concern_id IS NULL)",
+            [$catId, $name, $cid]
+        );
+        if ($existing) {
+            echo json_encode([
+                'success' => false, 
+                'message' => "Subcategory '{$existing['name']}' already exists under this Category.",
+                'existing_id' => $existing['id']
+            ]);
+            exit;
+        }
+
         try {
             DB::query(
                 "INSERT INTO subcategories (concern_id, category_id, name, code, status) VALUES (?, ?, ?, ?, 'active')",
@@ -842,6 +879,22 @@ class ProductionController extends Controller {
             $code = strtoupper(substr($name, 0, 2));
         }
 
+        // Validate uniqueness under parent Subcategory (case-insensitive)
+        $existing = DB::fetch(
+            "SELECT id, name FROM sub_subcategories 
+             WHERE subcategory_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?)) 
+             AND (concern_id = ? OR concern_id = 1 OR concern_id IS NULL)",
+            [$subcatId, $name, $cid]
+        );
+        if ($existing) {
+            echo json_encode([
+                'success' => false, 
+                'message' => "Sub-Subcategory '{$existing['name']}' already exists under this Subcategory.",
+                'existing_id' => $existing['id']
+            ]);
+            exit;
+        }
+
         try {
             DB::query(
                 "INSERT INTO sub_subcategories (concern_id, subcategory_id, name, code, status) VALUES (?, ?, ?, ?, 'active')",
@@ -849,6 +902,54 @@ class ProductionController extends Controller {
             );
             $id = (int)DB::lastInsertId();
             echo json_encode(['success' => true, 'id' => $id, 'name' => $name, 'code' => $code]);
+        } catch (Exception $e) {
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    public function quickAddAttributeAjax(): void {
+        header('Content-Type: application/json');
+        $cid = Auth::concernId() ?: 1;
+        $type = strtolower(trim($_POST['attribute_type'] ?? 'size'));
+        $val = trim($_POST['attribute_value'] ?? '');
+        $name = trim($_POST['attribute_name'] ?? ucfirst($type));
+
+        if (empty($val)) {
+            echo json_encode(['success' => false, 'message' => 'Attribute value cannot be empty.']);
+            exit;
+        }
+
+        // Validate uniqueness under attribute type (case-insensitive)
+        $existing = DB::fetch(
+            "SELECT id, attribute_value FROM product_attributes 
+             WHERE attribute_type = ? AND LOWER(TRIM(attribute_value)) = LOWER(TRIM(?)) 
+             AND (concern_id = ? OR concern_id = 1 OR concern_id IS NULL)",
+            [$type, $val, $cid]
+        );
+        if ($existing) {
+            echo json_encode([
+                'success' => false, 
+                'message' => "Attribute '{$existing['attribute_value']}' already exists for '" . ucfirst($type) . "'.",
+                'existing_id' => $existing['id']
+            ]);
+            exit;
+        }
+
+        try {
+            DB::query(
+                "INSERT INTO product_attributes (concern_id, attribute_type, attribute_name, attribute_value, sort_order)
+                 VALUES (?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM product_attributes pa WHERE pa.concern_id = ?))",
+                [$cid, $type, $name, $val, $cid]
+            );
+            $id = (int)DB::lastInsertId();
+            echo json_encode([
+                'success' => true, 
+                'id' => $id, 
+                'attribute_type' => $type, 
+                'attribute_value' => $val, 
+                'message' => "Attribute '{$val}' added successfully."
+            ]);
         } catch (Exception $e) {
             echo json_encode(['success' => false, 'message' => $e->getMessage()]);
         }
