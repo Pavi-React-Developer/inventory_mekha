@@ -2267,17 +2267,26 @@ class ProductionController extends Controller {
 
         $batchNo = $this->generateCuttingBatchNo($cid);
 
-        // Fetch active production programs that have assigned fabric rolls
+        // Fetch active production programs that have UNCUT assigned fabric rolls
+        $params = [];
         $progSql = "SELECT pp.id, pp.concern_id, pp.program_no, pp.program_name, pp.planned_qty,
                            COUNT(pr.id) AS rolls_count,
                            COALESCE(SUM(pr.roll_weight), 0.00) AS total_rolls_weight,
                            COALESCE(SUM(pr.roll_price), 0.00) AS total_rolls_price
                     FROM production_programs pp
                     JOIN program_rolls pr ON pp.id = pr.program_id
-                    WHERE pp.status != 'cancelled'" . ($cid ? " AND pp.concern_id = ?" : "") . "
-                    GROUP BY pp.id
-                    ORDER BY pp.id DESC";
-        $programs = DB::fetchAll($progSql, $cid ? [$cid] : []);
+                    WHERE pp.status != 'cancelled'
+                      AND pr.id NOT IN (
+                          SELECT DISTINCT program_roll_id 
+                          FROM cutting_items 
+                          WHERE program_roll_id IS NOT NULL AND cut_pieces > 0
+                      )";
+        if ($cid) {
+            $progSql .= " AND pp.concern_id = ?";
+            $params[] = $cid;
+        }
+        $progSql .= " GROUP BY pp.id HAVING rolls_count > 0 ORDER BY pp.id DESC";
+        $programs = DB::fetchAll($progSql, $params);
 
         // Fetch active cutting masters
         $masterSql = "SELECT * FROM cutting_masters WHERE status = 'active'" . ($cid ? " AND concern_id = ?" : "") . " ORDER BY name ASC";
@@ -2328,9 +2337,22 @@ class ProductionController extends Controller {
              LEFT JOIN purchase_bill_items pbi ON pr.purchase_bill_item_id = pbi.id
              LEFT JOIN catalogs c ON pr.catalog_id = c.id
              WHERE pr.program_id = ?
+               AND pr.id NOT IN (
+                   SELECT DISTINCT program_roll_id 
+                   FROM cutting_items 
+                   WHERE program_roll_id IS NOT NULL AND cut_pieces > 0
+               )
              ORDER BY pr.id ASC",
             [$progId]
         );
+
+        if (empty($rolls)) {
+            echo json_encode([
+                'success' => false,
+                'message' => 'All fabric rolls in this production program have already been cut into batches.'
+            ]);
+            exit;
+        }
 
         $totalWeight = 0.00;
         $totalPrice = 0.00;
@@ -2494,10 +2516,19 @@ class ProductionController extends Controller {
             $masterName = $cm['name'] ?? null;
         }
 
-        // Fetch rolls belonging to this program
-        $rolls = DB::fetchAll("SELECT * FROM program_rolls WHERE program_id = ?", [$progId]);
+        // Fetch uncut rolls belonging to this program
+        $rolls = DB::fetchAll(
+            "SELECT * FROM program_rolls 
+             WHERE program_id = ?
+               AND id NOT IN (
+                   SELECT DISTINCT program_roll_id 
+                   FROM cutting_items 
+                   WHERE program_roll_id IS NOT NULL AND cut_pieces > 0
+               )",
+            [$progId]
+        );
         if (empty($rolls)) {
-            $this->flash('error', 'The selected Production Program has no assigned fabric rolls.');
+            $this->flash('error', 'All assigned fabric rolls in this Production Program have already been cut into batches.');
             $this->redirect('/production/cutting/create');
         }
 
@@ -2533,6 +2564,23 @@ class ProductionController extends Controller {
 
         if (is_array($submittedRolls)) {
             foreach ($submittedRolls as $rollId => $rollData) {
+                $rollIdInt = (int)$rollId;
+
+                // Validate that this roll hasn't already been cut
+                $alreadyCut = DB::fetch(
+                    "SELECT pr.roll_piece_tag, cl.batch_no 
+                     FROM program_rolls pr
+                     JOIN cutting_items ci ON pr.id = ci.program_roll_id
+                     JOIN cutting_logs cl ON ci.cutting_id = cl.id
+                     WHERE pr.id = ? AND ci.cut_pieces > 0
+                     LIMIT 1",
+                    [$rollIdInt]
+                );
+                if ($alreadyCut) {
+                    $this->flash('error', "Fabric Roll '{$alreadyCut['roll_piece_tag']}' has already been cut in Batch [{$alreadyCut['batch_no']}] and cannot be cut again.");
+                    $this->redirect('/production/cutting/create');
+                }
+
                 $varList = $rollData['variants'] ?? [];
                 if (is_array($varList)) {
                     foreach ($varList as $vData) {

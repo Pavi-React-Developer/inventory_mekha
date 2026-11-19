@@ -78,7 +78,7 @@
                                     <option value="<?= $prog['id'] ?>" 
                                             data-planned="<?= $prog['planned_qty'] ?>"
                                             data-rolls="<?= $prog['rolls_count'] ?>">
-                                        <?= htmlspecialchars($prog['program_no']) ?> • <?= htmlspecialchars($prog['program_name']) ?> (<?= $prog['rolls_count'] ?> Roll<?= $prog['rolls_count'] > 1 ? 's' : '' ?>)
+                                        <?= htmlspecialchars($prog['program_no']) ?> • <?= htmlspecialchars($prog['program_name']) ?> (<?= $prog['rolls_count'] ?> Uncut Roll<?= $prog['rolls_count'] > 1 ? 's' : '' ?>)
                                     </option>
                                 <?php endforeach; ?>
                             </select>
