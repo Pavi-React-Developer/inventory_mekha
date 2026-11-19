@@ -301,6 +301,10 @@
                 <i class="bi bi-people-fill"></i>
                 <span>All Staff</span>
             </a>
+            <a href="<?= \App\Core\Controller::url('/m/staff/create') ?>" class="nav-link <?= (isset($currentModule) && $currentModule === 'staff' && isset($currentSubModule) && $currentSubModule === 'create') ? 'active' : '' ?>">
+                <i class="bi bi-person-plus-fill"></i>
+                <span>Add New Staff</span>
+            </a>
             <a href="<?= \App\Core\Controller::url('/m/staff/roles') ?>" class="nav-link <?= (isset($currentSubModule) && $currentSubModule === 'roles') ? 'active' : '' ?>">
                 <i class="bi bi-person-badge-fill"></i>
                 <span>Role Assign</span>

@@ -8,6 +8,7 @@ use App\Core\DB;
 use App\Core\Auth;
 use App\Services\NumberSeries;
 use App\Services\ExportService;
+use App\Services\AuditLog;
 use Exception;
 
 class StaffController extends Controller {
@@ -21,9 +22,12 @@ class StaffController extends Controller {
              ORDER BY c.name ASC"
         );
 
+        $allRoles = DB::fetchAll("SELECT id, name FROM roles ORDER BY (concern_id IS NULL) DESC, id ASC");
+        $allDepartments = DB::fetchAll("SELECT DISTINCT department FROM staff WHERE department IS NOT NULL AND department != '' ORDER BY department ASC");
+
         // Concern selection logic
         $selectedCid = null;
-        if (!empty($_GET['concern_id'])) {
+        if (isset($_GET['concern_id']) && $_GET['concern_id'] !== '') {
             $selectedCid = (int)$_GET['concern_id'];
             $_SESSION['staff_selected_concern_id'] = $selectedCid;
         } elseif (!empty($_SESSION['staff_selected_concern_id'])) {
@@ -39,34 +43,142 @@ class StaffController extends Controller {
         }
 
         $activeConcern = null;
-        $staffMembers = [];
-
         if ($selectedCid) {
             $activeConcern = DB::fetch("SELECT id, name, code FROM concerns WHERE id = ?", [$selectedCid]);
-            if ($activeConcern) {
-                $staffMembers = DB::fetchAll(
-                    "SELECT s.*, c.name AS concern_name, c.code AS concern_code
-                     FROM staff s
-                     JOIN concerns c ON s.concern_id = c.id
-                     WHERE s.concern_id = ?
-                     ORDER BY s.id DESC",
-                    [$selectedCid]
-                );
-            } else {
+            if (!$activeConcern) {
                 $selectedCid = null;
                 $showConcernModal = true;
             }
         }
+
+        // Filters: search, role_id, department, status
+        $search = trim($_GET['search'] ?? '');
+        $roleFilter = isset($_GET['role_id']) && $_GET['role_id'] !== '' ? (int)$_GET['role_id'] : null;
+        $deptFilter = trim($_GET['department'] ?? '');
+        $statusFilter = trim($_GET['status'] ?? '');
+
+        $sql = "SELECT s.*, c.name AS concern_name, c.code AS concern_code,
+                       u.email AS user_email, u.role_id, u.status AS user_status,
+                       r.name AS role_name
+                FROM staff s
+                JOIN concerns c ON s.concern_id = c.id
+                LEFT JOIN users u ON s.user_id = u.id
+                LEFT JOIN roles r ON u.role_id = r.id
+                WHERE 1=1";
+        $params = [];
+
+        if ($selectedCid) {
+            $sql .= " AND s.concern_id = ?";
+            $params[] = $selectedCid;
+        }
+        if ($search !== '') {
+            $sql .= " AND (s.name LIKE ? OR s.staff_code LIKE ? OR s.phone LIKE ? OR s.email LIKE ? OR s.designation LIKE ?)";
+            $term = "%{$search}%";
+            $params[] = $term;
+            $params[] = $term;
+            $params[] = $term;
+            $params[] = $term;
+            $params[] = $term;
+        }
+        if ($roleFilter) {
+            $sql .= " AND u.role_id = ?";
+            $params[] = $roleFilter;
+        }
+        if ($deptFilter !== '') {
+            $sql .= " AND s.department = ?";
+            $params[] = $deptFilter;
+        }
+        if ($statusFilter !== '') {
+            $sql .= " AND s.status = ?";
+            $params[] = $statusFilter;
+        }
+
+        $sql .= " ORDER BY s.id DESC";
+        $staffMembers = DB::fetchAll($sql, $params);
+
+        $openAddModal = !empty($_GET['action']) && $_GET['action'] === 'add';
 
         $this->render('concern/staff', [
             'pageTitle'        => 'Staff Management & Register',
             'currentModule'    => 'staff',
             'currentSubModule' => 'all',
             'allConcerns'      => $allConcerns,
+            'allRoles'         => $allRoles,
+            'allDepartments'   => $allDepartments,
             'selectedCid'      => $selectedCid,
             'activeConcern'    => $activeConcern,
             'staffMembers'     => $staffMembers,
             'showConcernModal' => $showConcernModal,
+            'openAddModal'     => $openAddModal,
+            'filters'          => [
+                'search'     => $search,
+                'role_id'    => $roleFilter,
+                'department' => $deptFilter,
+                'status'     => $statusFilter,
+            ],
+        ]);
+    }
+
+    public function create(): void {
+        $allConcerns = DB::fetchAll(
+            "SELECT c.id, c.name, c.code, c.status
+             FROM concerns c
+             WHERE c.status = 'active'
+             ORDER BY c.name ASC"
+        );
+
+        $selectedCid = null;
+        if (!empty($_GET['concern_id'])) {
+            $selectedCid = (int)$_GET['concern_id'];
+            $_SESSION['staff_selected_concern_id'] = $selectedCid;
+        } elseif (!empty($_SESSION['staff_selected_concern_id'])) {
+            $selectedCid = (int)$_SESSION['staff_selected_concern_id'];
+        } else {
+            $selectedCid = Auth::concernId();
+        }
+
+        $activeConcern = null;
+        if ($selectedCid) {
+            $activeConcern = DB::fetch("SELECT id, name, code FROM concerns WHERE id = ?", [$selectedCid]);
+        }
+
+        $roles = DB::fetchAll("SELECT id, name, description FROM roles ORDER BY id ASC");
+
+        // Operational modules matching sidebar (Images 1 & 2)
+        $modules = DB::fetchAll(
+            "SELECT * FROM modules WHERE is_super_admin_only = 0 AND code != 'cash' ORDER BY group_name ASC, sort_order ASC, id ASC"
+        );
+
+        // Concern enabled modules mapping
+        $concernModules = [];
+        $cmRows = DB::fetchAll("SELECT concern_id, module_id FROM concern_modules WHERE enabled = 1");
+        foreach ($cmRows as $cm) {
+            $concernModules[(int)$cm['concern_id']][] = (int)$cm['module_id'];
+        }
+
+        // Role permissions map for instant pre-fill upon role selection
+        $allRolePerms = [];
+        $rpRows = DB::fetchAll("SELECT role_id, module_id, can_view, can_add, can_edit, can_delete FROM role_permissions");
+        foreach ($rpRows as $rp) {
+            $allRolePerms[(int)$rp['role_id']][(int)$rp['module_id']] = [
+                'view'   => (int)$rp['can_view'],
+                'add'    => (int)$rp['can_add'],
+                'edit'   => (int)$rp['can_edit'],
+                'delete' => (int)$rp['can_delete'],
+            ];
+        }
+
+        $this->render('concern/staff_create', [
+            'pageTitle'        => 'Add New Staff Member',
+            'currentModule'    => 'staff',
+            'currentSubModule' => 'create',
+            'allConcerns'      => $allConcerns,
+            'selectedCid'      => $selectedCid,
+            'activeConcern'    => $activeConcern,
+            'roles'            => $roles,
+            'modules'          => $modules,
+            'concernModules'   => $concernModules,
+            'allRolePerms'     => $allRolePerms,
         ]);
     }
 
@@ -82,6 +194,13 @@ class StaffController extends Controller {
             $this->redirect('/m/staff?choose=1');
         }
 
+        // Verify concern exists and is active
+        $concern = DB::fetch("SELECT id, name FROM concerns WHERE id = ? AND status = 'active'", [$cid]);
+        if (!$concern) {
+            $this->flash('error', 'Invalid or inactive business concern selected.');
+            $this->redirect('/m/staff?choose=1');
+        }
+
         $name        = trim($_POST['name'] ?? '');
         $email       = trim($_POST['email'] ?? '');
         $password    = trim($_POST['password'] ?? '');
@@ -89,59 +208,140 @@ class StaffController extends Controller {
         $designation = trim($_POST['designation'] ?? '');
         $status      = ($_POST['status'] ?? 'active') === 'inactive' ? 'inactive' : 'active';
         $department  = trim($_POST['department'] ?? 'General');
+        $salaryType  = trim($_POST['salary_type'] ?? 'monthly');
+        $baseSalary  = (float)($_POST['base_salary'] ?? 0);
+        $joiningDate = !empty($_POST['joining_date']) ? $_POST['joining_date'] : null;
+        $address     = trim($_POST['address'] ?? '');
+        $selectedRole = !empty($_POST['role_id']) ? (int)$_POST['role_id'] : null;
 
-        if (!$name) {
-            $this->flash('error', 'Staff member name is required.');
-            $this->redirect('/m/staff?concern_id=' . $cid);
+        // Server-side validation
+        if (mb_strlen($name) < 2) {
+            $this->flash('error', 'Staff member full name is required (minimum 2 characters).');
+            $this->redirect('/m/staff/create?concern_id=' . $cid);
         }
 
+        if ($email !== '') {
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                $this->flash('error', 'Please provide a valid email address.');
+                $this->redirect('/m/staff/create?concern_id=' . $cid);
+            }
+            $dupUser = DB::fetch("SELECT id FROM users WHERE email = ?", [$email]);
+            $dupStaff = DB::fetch("SELECT id FROM staff WHERE email = ?", [$email]);
+            if ($dupUser || $dupStaff) {
+                $this->flash('error', "The email '{$email}' is already registered with another account.");
+                $this->redirect('/m/staff/create?concern_id=' . $cid);
+            }
+        }
+
+        if ($phone !== '') {
+            $cleanPhone = preg_replace('/[^0-9]/', '', $phone);
+            if (strlen($cleanPhone) < 10 || strlen($cleanPhone) > 15) {
+                $this->flash('error', 'Phone / mobile number must be 10 digits.');
+                $this->redirect('/m/staff/create?concern_id=' . $cid);
+            }
+            $dupPhone = DB::fetch("SELECT id FROM staff WHERE phone = ? AND concern_id = ?", [$phone, $cid]);
+            if ($dupPhone) {
+                $this->flash('error', "A staff member with phone number '{$phone}' already exists in this concern.");
+                $this->redirect('/m/staff/create?concern_id=' . $cid);
+            }
+        }
+
+        if ($password !== '' && strlen($password) < 6) {
+            $this->flash('error', 'Password must be at least 6 characters long.');
+            $this->redirect('/m/staff/create?concern_id=' . $cid);
+        }
+
+        DB::beginTransaction();
         try {
-            $passwordHash = $password ? password_hash($password, PASSWORD_BCRYPT) : null;
+            $passwordHash = $password !== '' ? password_hash($password, PASSWORD_BCRYPT) : null;
             $staffCode = trim($_POST['staff_code'] ?? '');
             if (!$staffCode) {
                 $staffCode = NumberSeries::getNext($cid, 'STAFF');
             }
 
             $userId = null;
-            // If email and password provided, also create/sync login user account
-            if ($email && $password) {
-                $existingUser = DB::fetch("SELECT id FROM users WHERE email = ?", [$email]);
-                if ($existingUser) {
-                    $userId = (int)$existingUser['id'];
-                    DB::query(
-                        "UPDATE users SET name = ?, concern_id = ?, password_hash = ?, phone = ?, status = ? WHERE id = ?",
-                        [$name, $cid, $passwordHash, $phone, $status, $userId]
-                    );
-                } else {
-                    $roleId = (int)DB::fetchValue("SELECT id FROM roles WHERE concern_id = ? LIMIT 1", [$cid]);
-                    if (!$roleId) {
-                        $roleId = (int)DB::fetchValue("SELECT id FROM roles WHERE id != 1 LIMIT 1") ?: 3;
+            $concernIds = array_map('intval', (array)($_POST['concern_ids'] ?? []));
+            if (!in_array($cid, $concernIds, true)) {
+                $concernIds[] = $cid;
+            }
+
+            // If email and password (or role) provided, create login user account
+            if ($email !== '' && ($passwordHash || $selectedRole)) {
+                $passHash = $passwordHash ?: password_hash('password123', PASSWORD_BCRYPT);
+                $roleId = $selectedRole ?: (int)DB::fetchValue("SELECT id FROM roles WHERE concern_id = ? LIMIT 1", [$cid]);
+                if (!$roleId) {
+                    $roleId = (int)DB::fetchValue("SELECT id FROM roles WHERE id != 1 LIMIT 1") ?: 3;
+                }
+
+                DB::query(
+                    "INSERT INTO users (concern_id, role_id, name, email, password_hash, phone, status, created_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, NOW())",
+                    [$cid, $roleId, $name, $email, $passHash, $phone, $status]
+                );
+                $userId = (int)DB::lastInsertId();
+
+                $stmtUc = DB::pdo()->prepare("INSERT IGNORE INTO user_concerns (user_id, concern_id) VALUES (?, ?)");
+                foreach ($concernIds as $authCid) {
+                    if ($authCid > 0) {
+                        $stmtUc->execute([$userId, $authCid]);
                     }
-                    DB::query(
-                        "INSERT INTO users (concern_id, role_id, name, email, password_hash, phone, status, created_at)
-                         VALUES (?, ?, ?, ?, ?, ?, ?, NOW())",
-                        [$cid, $roleId, $name, $email, $passwordHash, $phone, $status]
+                }
+
+                // Save module-level CRUD permissions (View, Create, Edit, Delete) for this staff account
+                if (!empty($_POST['perms'])) {
+                    $stmtUp = DB::pdo()->prepare(
+                        "INSERT INTO user_permissions (user_id, module_id, can_view, can_add, can_edit, can_delete)
+                         VALUES (?, ?, ?, ?, ?, ?)
+                         ON DUPLICATE KEY UPDATE can_view = VALUES(can_view), can_add = VALUES(can_add), can_edit = VALUES(can_edit), can_delete = VALUES(can_delete)"
                     );
-                    $userId = (int)DB::lastInsertId();
+                    $allMods = DB::fetchAll("SELECT id, code FROM modules WHERE is_super_admin_only = 0");
+                    $perms = (array)$_POST['perms'];
+                    // Auto-mirror cash_flow permissions to cash module for transparent consistency
+                    $cashModId = null;
+                    $cashFlowModId = null;
+                    foreach ($allMods as $m) {
+                        if ($m['code'] === 'cash') $cashModId = (int)$m['id'];
+                        if ($m['code'] === 'cash_flow') $cashFlowModId = (int)$m['id'];
+                    }
+                    if ($cashModId && $cashFlowModId && isset($perms[$cashFlowModId])) {
+                        $perms[$cashModId] = $perms[$cashFlowModId];
+                    }
+                    foreach ($allMods as $m) {
+                        $mid = (int)$m['id'];
+                        $v = !empty($perms[$mid]['view']) ? 1 : 0;
+                        $a = !empty($perms[$mid]['add']) ? 1 : 0;
+                        $e = !empty($perms[$mid]['edit']) ? 1 : 0;
+                        $d = !empty($perms[$mid]['delete']) ? 1 : 0;
+                        $stmtUp->execute([$userId, $mid, $v, $a, $e, $d]);
+                    }
                 }
             }
 
             DB::query(
-                "INSERT INTO staff (concern_id, user_id, staff_code, name, email, password_hash, phone, designation, department, status, created_by, created_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())",
-                [$cid, $userId, $staffCode, $name, $email, $passwordHash, $phone, $designation, $department, $status, Auth::id()]
+                "INSERT INTO staff (concern_id, user_id, staff_code, name, email, password_hash, phone, designation, department, salary_type, base_salary, address, status, joining_date, created_by, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())",
+                [$cid, $userId, $staffCode, $name, $email, $passwordHash, $phone, $designation, $department, $salaryType, $baseSalary, $address, $status, $joiningDate, Auth::id()]
+            );
+            $staffId = (int)DB::lastInsertId();
+
+            AuditLog::record(
+                $cid,
+                'staff',
+                $staffId,
+                'STAFF_CREATE',
+                null,
+                ['name' => $name, 'staff_code' => $staffCode, 'email' => $email, 'phone' => $phone, 'status' => $status, 'user_id' => $userId],
+                "Registered staff member {$name} [{$staffCode}]"
             );
 
-            if ($userId && $cid) {
-                DB::query("INSERT IGNORE INTO user_concerns (user_id, concern_id) VALUES (?, ?)", [$userId, $cid]);
-            }
-
+            DB::commit();
             $this->flash('success', "Staff member '{$name}' [{$staffCode}] registered successfully.");
+            $this->redirect('/m/staff?concern_id=' . $cid);
         } catch (Exception $e) {
+            DB::rollBack();
             $this->flash('error', 'Failed to register staff: ' . $e->getMessage());
+            $this->redirect('/m/staff/create?concern_id=' . $cid);
         }
-
-        $this->redirect('/m/staff?concern_id=' . $cid);
     }
 
     public function update(): void {
@@ -155,57 +355,181 @@ class StaffController extends Controller {
 
         $cid         = (int)($_POST['concern_id'] ?? $staff['concern_id']);
         $name        = trim($_POST['name'] ?? $staff['name']);
-        $email       = trim($_POST['email'] ?? $staff['email']);
+        $email       = trim($_POST['email'] ?? ($staff['email'] ?? ''));
         $password    = trim($_POST['password'] ?? '');
-        $phone       = trim($_POST['phone'] ?? $staff['phone']);
-        $designation = trim($_POST['designation'] ?? $staff['designation']);
+        $phone       = trim($_POST['phone'] ?? ($staff['phone'] ?? ''));
+        $designation = trim($_POST['designation'] ?? ($staff['designation'] ?? ''));
         $status      = ($_POST['status'] ?? $staff['status']) === 'inactive' ? 'inactive' : 'active';
-        $department  = trim($_POST['department'] ?? $staff['department']);
+        $department  = trim($_POST['department'] ?? ($staff['department'] ?? 'General'));
+        $salaryType  = trim($_POST['salary_type'] ?? ($staff['salary_type'] ?? 'monthly'));
+        $baseSalary  = (float)($_POST['base_salary'] ?? $staff['base_salary']);
+        $joiningDate = !empty($_POST['joining_date']) ? $_POST['joining_date'] : $staff['joining_date'];
+        $address     = trim($_POST['address'] ?? ($staff['address'] ?? ''));
+        $roleId      = !empty($_POST['role_id']) ? (int)$_POST['role_id'] : null;
 
+        // Server-side validation
+        if (mb_strlen($name) < 2) {
+            $this->flash('error', 'Staff member full name is required (minimum 2 characters).');
+            $this->redirect('/m/staff?concern_id=' . $cid);
+        }
+
+        if ($email !== '') {
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                $this->flash('error', 'Please provide a valid email address.');
+                $this->redirect('/m/staff?concern_id=' . $cid);
+            }
+            $existingUser = DB::fetch("SELECT id FROM users WHERE email = ? AND id != ?", [$email, (int)($staff['user_id'] ?? 0)]);
+            $existingStaff = DB::fetch("SELECT id FROM staff WHERE email = ? AND id != ?", [$email, $id]);
+            if ($existingUser || $existingStaff) {
+                $this->flash('error', "The email '{$email}' is already in use by another account.");
+                $this->redirect('/m/staff?concern_id=' . $cid);
+            }
+        }
+
+        if ($phone !== '') {
+            $cleanPhone = preg_replace('/[^0-9]/', '', $phone);
+            if (strlen($cleanPhone) < 10 || strlen($cleanPhone) > 15) {
+                $this->flash('error', 'Phone / mobile number must be 10 digits.');
+                $this->redirect('/m/staff?concern_id=' . $cid);
+            }
+            $dupPhone = DB::fetch("SELECT id FROM staff WHERE phone = ? AND concern_id = ? AND id != ?", [$phone, $cid, $id]);
+            if ($dupPhone) {
+                $this->flash('error', "A staff member with phone number '{$phone}' already exists in this concern.");
+                $this->redirect('/m/staff?concern_id=' . $cid);
+            }
+        }
+
+        if ($password !== '' && strlen($password) < 6) {
+            $this->flash('error', 'Password must be at least 6 characters long.');
+            $this->redirect('/m/staff?concern_id=' . $cid);
+        }
+
+        DB::beginTransaction();
         try {
-            $passwordHash = $password ? password_hash($password, PASSWORD_BCRYPT) : $staff['password_hash'];
+            $passwordHash = $password !== '' ? password_hash($password, PASSWORD_BCRYPT) : $staff['password_hash'];
 
-            // Sync with users login table if applicable
-            if (!empty($staff['user_id'])) {
-                if ($password) {
-                    DB::query(
-                        "UPDATE users SET name = ?, email = ?, concern_id = ?, password_hash = ?, phone = ?, status = ? WHERE id = ?",
-                        [$name, $email, $cid, $passwordHash, $phone, $status, $staff['user_id']]
-                    );
-                } else {
-                    DB::query(
-                        "UPDATE users SET name = ?, email = ?, concern_id = ?, phone = ?, status = ? WHERE id = ?",
-                        [$name, $email, $cid, $phone, $status, $staff['user_id']]
-                    );
+            // Sync with users login table
+            $userId = !empty($staff['user_id']) ? (int)$staff['user_id'] : null;
+            if ($userId) {
+                $uSql = "UPDATE users SET name = ?, email = ?, concern_id = ?, phone = ?, status = ?";
+                $uParams = [$name, $email, $cid, $phone, $status];
+                if ($password !== '') {
+                    $uSql .= ", password_hash = ?";
+                    $uParams[] = $passwordHash;
                 }
-            } elseif ($email && $password) {
-                $roleId = (int)DB::fetchValue("SELECT id FROM roles WHERE concern_id = ? LIMIT 1", [$cid]) ?: 3;
+                if ($roleId) {
+                    $uSql .= ", role_id = ?";
+                    $uParams[] = $roleId;
+                }
+                $uSql .= " WHERE id = ?";
+                $uParams[] = $userId;
+                DB::query($uSql, $uParams);
+            } elseif ($email !== '' && ($password !== '' || $roleId)) {
+                $assignedRole = $roleId ?: (int)DB::fetchValue("SELECT id FROM roles WHERE concern_id = ? LIMIT 1", [$cid]) ?: 3;
+                $passHash = $passwordHash ?: password_hash('password123', PASSWORD_BCRYPT);
                 DB::query(
                     "INSERT INTO users (concern_id, role_id, name, email, password_hash, phone, status, created_at)
                      VALUES (?, ?, ?, ?, ?, ?, ?, NOW())",
-                    [$cid, $roleId, $name, $email, $passwordHash, $phone, $status]
+                    [$cid, $assignedRole, $name, $email, $passHash, $phone, $status]
                 );
                 $userId = (int)DB::lastInsertId();
-                DB::query("UPDATE staff SET user_id = ? WHERE id = ?", [$userId, $id]);
             }
 
             DB::query(
-                "UPDATE staff SET concern_id = ?, name = ?, email = ?, password_hash = ?, phone = ?, designation = ?, department = ?, status = ?
+                "UPDATE staff SET concern_id = ?, user_id = ?, name = ?, email = ?, password_hash = ?, phone = ?, designation = ?, department = ?, salary_type = ?, base_salary = ?, address = ?, status = ?, joining_date = ?
                  WHERE id = ?",
-                [$cid, $name, $email, $passwordHash, $phone, $designation, $department, $status, $id]
+                [$cid, $userId, $name, $email, $passwordHash, $phone, $designation, $department, $salaryType, $baseSalary, $address, $status, $joiningDate, $id]
             );
 
-            $effectiveUserId = !empty($staff['user_id']) ? (int)$staff['user_id'] : ($userId ?? null);
-            if ($effectiveUserId && $cid) {
-                DB::query("INSERT IGNORE INTO user_concerns (user_id, concern_id) VALUES (?, ?)", [$effectiveUserId, $cid]);
+            if ($userId) {
+                if (isset($_POST['concern_ids'])) {
+                    $updCids = array_map('intval', (array)$_POST['concern_ids']);
+                    if (!in_array($cid, $updCids, true)) {
+                        $updCids[] = $cid;
+                    }
+                    DB::query("DELETE FROM user_concerns WHERE user_id = ?", [$userId]);
+                    $stmtUc = DB::pdo()->prepare("INSERT IGNORE INTO user_concerns (user_id, concern_id) VALUES (?, ?)");
+                    foreach ($updCids as $authCid) {
+                        if ($authCid > 0) {
+                            $stmtUc->execute([$userId, $authCid]);
+                        }
+                    }
+                } elseif ($cid) {
+                    DB::query("INSERT IGNORE INTO user_concerns (user_id, concern_id) VALUES (?, ?)", [$userId, $cid]);
+                }
             }
 
+            AuditLog::record(
+                $cid,
+                'staff',
+                $id,
+                'STAFF_UPDATE',
+                $staff,
+                ['name' => $name, 'email' => $email, 'phone' => $phone, 'designation' => $designation, 'department' => $department, 'status' => $status, 'user_id' => $userId],
+                "Updated staff record {$name}"
+            );
+
+            DB::commit();
             $this->flash('success', "Staff member '{$name}' updated successfully.");
         } catch (Exception $e) {
+            DB::rollBack();
             $this->flash('error', 'Failed to update staff: ' . $e->getMessage());
         }
 
         $this->redirect('/m/staff?concern_id=' . $cid);
+    }
+
+    public function toggleStatus(): void {
+        $this->validateCsrf();
+        $id = (int)($_POST['id'] ?? 0);
+        $staff = DB::fetch("SELECT * FROM staff WHERE id = ?", [$id]);
+        if (!$staff) {
+            if ($this->isAjax()) {
+                $this->json(['success' => false, 'error' => 'Staff record not found.'], 404);
+                return;
+            }
+            $this->flash('error', 'Staff record not found.');
+            $this->redirect('/m/staff');
+        }
+
+        $newStatus = $staff['status'] === 'active' ? 'inactive' : 'active';
+
+        DB::beginTransaction();
+        try {
+            DB::query("UPDATE staff SET status = ? WHERE id = ?", [$newStatus, $id]);
+
+            if (!empty($staff['user_id'])) {
+                DB::query("UPDATE users SET status = ? WHERE id = ?", [$newStatus, (int)$staff['user_id']]);
+            }
+
+            AuditLog::record(
+                (int)$staff['concern_id'],
+                'staff',
+                $id,
+                'STAFF_STATUS_CHANGE',
+                ['status' => $staff['status']],
+                ['status' => $newStatus],
+                "Staff member '{$staff['name']}' status changed from {$staff['status']} to {$newStatus}"
+            );
+
+            DB::commit();
+
+            $msg = "Staff member '{$staff['name']}' has been " . ($newStatus === 'active' ? 'activated' : 'deactivated') . ".";
+            if ($this->isAjax()) {
+                $this->json(['success' => true, 'new_status' => $newStatus, 'message' => $msg]);
+                return;
+            }
+            $this->flash('success', $msg);
+        } catch (Exception $e) {
+            DB::rollBack();
+            if ($this->isAjax()) {
+                $this->json(['success' => false, 'error' => $e->getMessage()], 500);
+                return;
+            }
+            $this->flash('error', 'Failed to change staff status: ' . $e->getMessage());
+        }
+
+        $this->redirect('/m/staff?concern_id=' . $staff['concern_id']);
     }
 
     public function delete(): void {
@@ -343,7 +667,7 @@ class StaffController extends Controller {
 
         // Operational modules for CRUD permissions matrix
         $modules = DB::fetchAll(
-            "SELECT * FROM modules WHERE is_super_admin_only = 0 ORDER BY group_name ASC, sort_order ASC, id ASC"
+            "SELECT * FROM modules WHERE is_super_admin_only = 0 AND code != 'cash' ORDER BY group_name ASC, sort_order ASC, id ASC"
         );
 
         $activeTab = ($_GET['tab'] ?? 'staff') === 'matrix' ? 'matrix' : 'staff';
@@ -397,6 +721,7 @@ class StaffController extends Controller {
             $this->redirect('/m/staff/roles');
         }
 
+        DB::beginTransaction();
         try {
             $userId = !empty($staff['user_id']) ? (int)$staff['user_id'] : null;
 
@@ -408,7 +733,7 @@ class StaffController extends Controller {
                 if ($existingUser) {
                     $userId = (int)$existingUser['id'];
                     $updateSql = "UPDATE users SET role_id = ?, status = 'active'";
-                    $uParams = [$roleId ?: 10];
+                    $uParams = [$roleId ?: 3];
                     if ($password) {
                         $updateSql .= ", password_hash = ?";
                         $uParams[] = password_hash($password, PASSWORD_BCRYPT);
@@ -422,7 +747,7 @@ class StaffController extends Controller {
                     DB::query(
                         "INSERT INTO users (concern_id, role_id, name, email, password_hash, phone, status, created_at)
                          VALUES (?, ?, ?, ?, ?, ?, 'active', NOW())",
-                        [$staff['concern_id'], $roleId ?: 10, $staff['name'], $email, $passwordHash, $staff['phone']]
+                        [$staff['concern_id'], $roleId ?: 3, $staff['name'], $email, $passwordHash, $staff['phone']]
                     );
                     $userId = (int)DB::lastInsertId();
                 }
@@ -449,34 +774,29 @@ class StaffController extends Controller {
             }
 
             if ($userId) {
-                // If custom permissions submitted for this staff member
+                // If custom permissions submitted for this staff member, save to user_permissions
                 if (!empty($_POST['is_custom_perms']) && !empty($_POST['custom_perms'])) {
-                    $customRoleName = "Custom: " . $staff['name'];
-                    $customRoleId = (int)DB::fetchValue("SELECT id FROM roles WHERE name = ? AND concern_id = ?", [$customRoleName, $staff['concern_id']]);
-                    if (!$customRoleId) {
-                        DB::query(
-                            "INSERT INTO roles (concern_id, name, description, created_at) VALUES (?, ?, ?, NOW())",
-                            [$staff['concern_id'], $customRoleName, "Custom granular permissions for " . $staff['name']]
-                        );
-                        $customRoleId = (int)DB::lastInsertId();
-                    }
-                    $roleId = $customRoleId;
-                    DB::query("UPDATE users SET role_id = ? WHERE id = ?", [$roleId, $userId]);
-
-                    $allMods = DB::fetchAll("SELECT id FROM modules WHERE is_super_admin_only = 0");
-                    $stmtRp = DB::pdo()->prepare(
-                        "INSERT INTO role_permissions (role_id, module_id, can_view, can_add, can_edit, can_delete)
+                    $stmtUp = DB::pdo()->prepare(
+                        "INSERT INTO user_permissions (user_id, module_id, can_view, can_add, can_edit, can_delete)
                          VALUES (?, ?, ?, ?, ?, ?)
                          ON DUPLICATE KEY UPDATE can_view = VALUES(can_view), can_add = VALUES(can_add), can_edit = VALUES(can_edit), can_delete = VALUES(can_delete)"
                     );
+                    $stmtDel = DB::pdo()->prepare("DELETE FROM user_permissions WHERE user_id = ? AND module_id = ?");
+                    $allMods = DB::fetchAll("SELECT id FROM modules WHERE is_super_admin_only = 0");
                     $customPerms = (array)$_POST['custom_perms'];
+
                     foreach ($allMods as $m) {
                         $mid = (int)$m['id'];
-                        $v = !empty($customPerms[$mid]['view']) ? 1 : 0;
-                        $a = !empty($customPerms[$mid]['add']) ? 1 : 0;
-                        $e = !empty($customPerms[$mid]['edit']) ? 1 : 0;
-                        $d = !empty($customPerms[$mid]['delete']) ? 1 : 0;
-                        $stmtRp->execute([$roleId, $mid, $v, $a, $e, $d]);
+                        $v = isset($customPerms[$mid]['view']) ? self::parseOverrideValue($customPerms[$mid]['view']) : null;
+                        $a = isset($customPerms[$mid]['add']) ? self::parseOverrideValue($customPerms[$mid]['add']) : null;
+                        $e = isset($customPerms[$mid]['edit']) ? self::parseOverrideValue($customPerms[$mid]['edit']) : null;
+                        $d = isset($customPerms[$mid]['delete']) ? self::parseOverrideValue($customPerms[$mid]['delete']) : null;
+
+                        if ($v === null && $a === null && $e === null && $d === null) {
+                            $stmtDel->execute([$userId, $mid]);
+                        } else {
+                            $stmtUp->execute([$userId, $mid, $v, $a, $e, $d]);
+                        }
                     }
                 }
 
@@ -494,12 +814,241 @@ class StaffController extends Controller {
                 }
             }
 
+            AuditLog::record(
+                (int)$staff['concern_id'],
+                'users',
+                $userId,
+                'ROLE_ASSIGN',
+                null,
+                ['staff_id' => $staffId, 'role_id' => $roleId, 'concern_ids' => $concernIds],
+                "Assigned role #{$roleId} and location access for staff {$staff['name']}"
+            );
+
+            DB::commit();
             $this->flash('success', "Role and concern access updated successfully for '{$staff['name']}'.");
         } catch (Exception $e) {
+            DB::rollBack();
             $this->flash('error', 'Failed to assign role: ' . $e->getMessage());
         }
 
         $this->redirect('/m/staff/roles');
+    }
+
+    public function apiGetUserPermissions(): void {
+        $staffId = (int)($_GET['staff_id'] ?? 0);
+        $userId = (int)($_GET['user_id'] ?? 0);
+
+        $staff = null;
+        if ($staffId) {
+            $staff = DB::fetch("SELECT s.*, c.name AS concern_name, c.code AS concern_code FROM staff s JOIN concerns c ON s.concern_id = c.id WHERE s.id = ?", [$staffId]);
+            if ($staff && !empty($staff['user_id'])) {
+                $userId = (int)$staff['user_id'];
+            }
+        }
+
+        $user = null;
+        if ($userId) {
+            $user = DB::fetch("SELECT u.*, r.name AS role_name FROM users u LEFT JOIN roles r ON u.role_id = r.id WHERE u.id = ?", [$userId]);
+            if (!$staff && $user) {
+                $staff = DB::fetch("SELECT * FROM staff WHERE user_id = ?", [$userId]);
+            }
+        }
+
+        if (!$user) {
+            if (!headers_sent()) {
+                header('Content-Type: application/json');
+            }
+            echo json_encode([
+                'success' => true,
+                'has_user_account' => false,
+                'staff' => $staff,
+                'message' => 'This staff member does not have an active system login account yet. Please assign a role first.'
+            ]);
+            exit;
+        }
+
+        $roleId = (int)$user['role_id'];
+
+        // 1. Role permissions
+        $rolePerms = [];
+        $rpRows = DB::fetchAll("SELECT module_id, can_view, can_add, can_edit, can_delete FROM role_permissions WHERE role_id = ?", [$roleId]);
+        foreach ($rpRows as $rp) {
+            $rolePerms[(int)$rp['module_id']] = [
+                'view'   => (int)$rp['can_view'],
+                'add'    => (int)$rp['can_add'],
+                'edit'   => (int)$rp['can_edit'],
+                'delete' => (int)$rp['can_delete'],
+            ];
+        }
+
+        // 2. User specific overrides (null = inherit, 1 = grant, 0 = deny)
+        $userOverrides = [];
+        $upRows = DB::fetchAll("SELECT module_id, can_view, can_add, can_edit, can_delete FROM user_permissions WHERE user_id = ?", [$userId]);
+        foreach ($upRows as $up) {
+            $userOverrides[(int)$up['module_id']] = [
+                'view'   => $up['can_view'] === null ? null : (int)$up['can_view'],
+                'add'    => $up['can_add'] === null ? null : (int)$up['can_add'],
+                'edit'   => $up['can_edit'] === null ? null : (int)$up['can_edit'],
+                'delete' => $up['can_delete'] === null ? null : (int)$up['can_delete'],
+            ];
+        }
+
+        // 3. Compute effective permissions
+        $modules = DB::fetchAll("SELECT id, name, code, group_name FROM modules WHERE is_super_admin_only = 0 AND code != 'cash' ORDER BY group_name, sort_order, id");
+        $effective = [];
+        foreach ($modules as $m) {
+            $mid = (int)$m['id'];
+            $r = $rolePerms[$mid] ?? ['view' => 0, 'add' => 0, 'edit' => 0, 'delete' => 0];
+            $u = $userOverrides[$mid] ?? ['view' => null, 'add' => null, 'edit' => null, 'delete' => null];
+
+            $actions = ['view', 'add', 'edit', 'delete'];
+            $eff = [];
+            foreach ($actions as $act) {
+                if (isset($u[$act]) && $u[$act] !== null) {
+                    $eff[$act] = [
+                        'allowed' => (bool)$u[$act],
+                        'source'  => $u[$act] == 1 ? 'granted_override' : 'denied_override',
+                    ];
+                } else {
+                    $eff[$act] = [
+                        'allowed' => !empty($r[$act]),
+                        'source'  => 'inherited_role',
+                    ];
+                }
+            }
+            $effective[$mid] = $eff;
+        }
+
+        if (!headers_sent()) {
+            header('Content-Type: application/json');
+        }
+        echo json_encode([
+            'success'          => true,
+            'has_user_account' => true,
+            'staff'            => $staff,
+            'user'             => [
+                'id'        => (int)$user['id'],
+                'name'      => $user['name'],
+                'email'     => $user['email'],
+                'role_id'   => $roleId,
+                'role_name' => $user['role_name'],
+                'status'    => $user['status'],
+            ],
+            'modules'          => $modules,
+            'role_permissions' => $rolePerms,
+            'user_overrides'   => $userOverrides,
+            'effective'        => $effective,
+        ]);
+        exit;
+    }
+
+    public function saveUserPermissions(): void {
+        $this->validateCsrf();
+
+        $userId = (int)($_POST['user_id'] ?? 0);
+        $staffId = (int)($_POST['staff_id'] ?? 0);
+
+        if (!$userId && $staffId) {
+            $userId = (int)DB::fetchValue("SELECT user_id FROM staff WHERE id = ?", [$staffId]);
+        }
+
+        if (!$userId) {
+            if ($this->isAjax()) {
+                if (!headers_sent()) header('Content-Type: application/json');
+                http_response_code(400);
+                echo json_encode(['success' => false, 'error' => 'A valid user login account is required to assign custom permissions.']);
+                exit;
+            }
+            $this->flash('error', 'A valid user login account is required to assign custom permissions.');
+            $this->redirect('/m/staff/roles');
+        }
+
+        $overrides = (array)($_POST['overrides'] ?? []);
+
+        DB::beginTransaction();
+        try {
+            $stmtInsert = DB::pdo()->prepare(
+                "INSERT INTO user_permissions (user_id, module_id, can_view, can_add, can_edit, can_delete)
+                 VALUES (?, ?, ?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE can_view = VALUES(can_view), can_add = VALUES(can_add), can_edit = VALUES(can_edit), can_delete = VALUES(can_delete)"
+            );
+            $stmtDelete = DB::pdo()->prepare("DELETE FROM user_permissions WHERE user_id = ? AND module_id = ?");
+
+            $modules = DB::fetchAll("SELECT id FROM modules WHERE is_super_admin_only = 0");
+            $savedOverrides = [];
+
+            foreach ($modules as $m) {
+                $mid = (int)$m['id'];
+                $modOv = $overrides[$mid] ?? [];
+
+                $v = self::parseOverrideValue($modOv['view'] ?? null);
+                $a = self::parseOverrideValue($modOv['add'] ?? null);
+                $e = self::parseOverrideValue($modOv['edit'] ?? null);
+                $d = self::parseOverrideValue($modOv['delete'] ?? null);
+
+                if ($v === null && $a === null && $e === null && $d === null) {
+                    $stmtDelete->execute([$userId, $mid]);
+                } else {
+                    $stmtInsert->execute([$userId, $mid, $v, $a, $e, $d]);
+                    $savedOverrides[$mid] = ['view' => $v, 'add' => $a, 'edit' => $e, 'delete' => $d];
+                }
+            }
+
+            AuditLog::record(
+                Auth::concernId(),
+                'user_permissions',
+                $userId,
+                'PERMISSIONS_UPDATE',
+                null,
+                $savedOverrides,
+                "Updated individual permission overrides for user #{$userId}"
+            );
+
+            DB::commit();
+
+            // If the current user's own permissions were modified, refresh session
+            if ($userId === Auth::id()) {
+                $roleId = (int)($_SESSION['user']['role_id'] ?? 0);
+                Auth::loadPermissions($userId, $roleId);
+            }
+
+            $msg = "Individual permissions updated successfully.";
+            if ($this->isAjax()) {
+                if (!headers_sent()) header('Content-Type: application/json');
+                echo json_encode(['success' => true, 'message' => $msg]);
+                exit;
+            }
+            $this->flash('success', $msg);
+        } catch (Exception $e) {
+            DB::rollBack();
+            if ($this->isAjax()) {
+                if (!headers_sent()) header('Content-Type: application/json');
+                http_response_code(500);
+                echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+                exit;
+            }
+            $this->flash('error', 'Failed to save individual permissions: ' . $e->getMessage());
+        }
+
+        $this->redirect('/m/staff/roles');
+    }
+
+    public static function parseOverrideValue($val): ?int {
+        if ($val === null || $val === '' || $val === 'inherit') {
+            return null;
+        }
+        if ($val === 1 || $val === '1' || $val === 'grant') {
+            return 1;
+        }
+        if ($val === 0 || $val === '0' || $val === 'deny') {
+            return 0;
+        }
+        return null;
+    }
+
+    private function isAjax(): bool {
+        return (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest')
+            || (isset($_SERVER['HTTP_ACCEPT']) && str_contains($_SERVER['HTTP_ACCEPT'], 'application/json'));
     }
 
     public function apiGetRolePermissions(): void {
@@ -533,6 +1082,7 @@ class StaffController extends Controller {
             $this->redirect('/m/staff/roles?tab=matrix');
         }
 
+        DB::beginTransaction();
         try {
             $modules = DB::fetchAll("SELECT id FROM modules WHERE is_super_admin_only = 0");
             $stmt = DB::pdo()->prepare(
@@ -552,8 +1102,27 @@ class StaffController extends Controller {
             }
 
             $roleName = DB::fetchValue("SELECT name FROM roles WHERE id = ?", [$roleId]) ?: "Role #{$roleId}";
+
+            AuditLog::record(
+                Auth::concernId(),
+                'role_permissions',
+                $roleId,
+                'ROLE_PERMISSIONS_UPDATE',
+                null,
+                ['role_id' => $roleId, 'permissions' => $permissions],
+                "Updated CRUD permissions for role {$roleName}"
+            );
+
+            DB::commit();
+
+            // If the current user has this role, refresh session
+            if ((int)($_SESSION['user']['role_id'] ?? 0) === $roleId) {
+                Auth::loadPermissions((int)Auth::id(), $roleId);
+            }
+
             $this->flash('success', "CRUD permissions updated successfully for '{$roleName}'.");
         } catch (Exception $e) {
+            DB::rollBack();
             $this->flash('error', 'Failed to update permissions: ' . $e->getMessage());
         }
 
@@ -571,6 +1140,7 @@ class StaffController extends Controller {
             $this->redirect('/m/staff/roles?tab=matrix');
         }
 
+        DB::beginTransaction();
         try {
             DB::query(
                 "INSERT INTO roles (concern_id, name, description, created_at) VALUES (?, ?, ?, NOW())",
@@ -587,9 +1157,22 @@ class StaffController extends Controller {
                 $stmt->execute([$newRoleId, (int)$m['id']]);
             }
 
+            AuditLog::record(
+                $concernId,
+                'roles',
+                $newRoleId,
+                'ROLE_CREATE',
+                null,
+                ['name' => $name, 'concern_id' => $concernId],
+                "Created role {$name}"
+            );
+
+            DB::commit();
+
             $this->flash('success', "Role '{$name}' created successfully. Now configure its CRUD permissions below.");
             $this->redirect('/m/staff/roles?tab=matrix&matrix_role_id=' . $newRoleId);
         } catch (Exception $e) {
+            DB::rollBack();
             $this->flash('error', 'Failed to create role: ' . $e->getMessage());
             $this->redirect('/m/staff/roles?tab=matrix');
         }

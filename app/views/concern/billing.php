@@ -59,15 +59,26 @@
             <div class="col-lg-4 col-md-5">
                 <!-- Scan Product QR Code Card -->
                 <div class="card border-0 shadow-sm rounded-4 p-3 bg-white mb-3" style="border: 1px solid #e2e8f0 !important;">
-                    <div class="d-flex align-items-center gap-2 mb-3">
-                        <i class="bi bi-upc-scan text-primary fs-5"></i>
-                        <h6 class="fw-bold text-dark mb-0">Scan Product QR Code</h6>
+                    <!-- Header with Title & Scanner Options Buttons -->
+                    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="bi bi-upc-scan text-primary fs-5"></i>
+                            <h6 class="fw-bold text-dark mb-0">Scan Product QR Code</h6>
+                        </div>
+                        <div class="d-flex align-items-center gap-1.5">
+                            <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-2.5 py-1 d-flex align-items-center gap-1 shadow-sm" id="btnLaunchCamModal" style="font-size: 0.76rem;" title="Scan with camera">
+                                <i class="bi bi-camera-fill"></i> Camera
+                            </button>
+                            <button type="button" class="btn btn-sm btn-light border rounded-pill px-2.5 py-1 d-flex align-items-center gap-1 shadow-sm text-secondary" id="btnOpenScannerOptions" style="font-size: 0.76rem;" title="Configure scanner options & audio">
+                                <i class="bi bi-sliders2"></i> Scanner Options
+                            </button>
+                        </div>
                     </div>
 
                     <!-- Large Input Box with Blue Add Button -->
                     <div class="d-flex align-items-stretch mb-2" style="border: 1.5px solid #3b82f6; border-radius: 12px; overflow: hidden; background: #ffffff;">
-                        <div style="background: #2563eb; color: #ffffff; width: 48px; display: flex; align-items: center; justify-content: center; font-size: 1.35rem; flex-shrink: 0;">
-                            <i class="bi bi-qr-code"></i>
+                        <div style="background: #2563eb; color: #ffffff; width: 48px; display: flex; align-items: center; justify-content: center; font-size: 1.35rem; flex-shrink: 0;" id="qr_icon_box" title="Barcode / QR input">
+                            <i class="bi bi-qr-code" id="active_input_icon"></i>
                         </div>
                         <input type="text" id="pos_qr_input" list="pos_catalog_list" class="form-control border-0 shadow-none px-3 text-dark" placeholder="Point QR scanner or type SKU / name" style="font-size: 0.95rem; border-radius: 0;" autocomplete="off" autofocus>
                         <datalist id="pos_catalog_list">
@@ -78,6 +89,23 @@
                         <button type="button" id="btn_add_qr" class="btn text-white px-3 fw-bold d-flex align-items-center gap-1" style="background: #4f46e5; border-radius: 0; border: none; font-size: 0.92rem; white-space: nowrap;">
                             <i class="bi bi-arrow-right-circle"></i> Add
                         </button>
+                    </div>
+
+                    <!-- Scanner Status & Interactive Options Toolbar -->
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 py-1.5 px-2.5 mb-2 rounded-3" style="background: #f8fafc; border: 1px solid #e2e8f0; font-size: 0.75rem;">
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="badge rounded-pill bg-white text-dark border px-2 py-1 d-flex align-items-center gap-1 shadow-sm" id="badge_scanner_mode" style="cursor: pointer;" title="Active scan input mode - Click to change">
+                                <i class="bi bi-upc text-primary" id="icon_active_mode"></i> <span id="label_active_mode">Barcode Gun</span>
+                            </span>
+                            <button type="button" class="btn btn-sm p-0 text-decoration-none d-flex align-items-center gap-1" id="btn_quick_toggle_beep" title="Click to mute/unmute scan beep">
+                                <i class="bi bi-volume-up-fill text-success" id="icon_quick_beep"></i> <span class="text-secondary fw-semibold" id="label_quick_beep">Beep ON</span>
+                            </button>
+                        </div>
+                        <div class="d-flex align-items-center gap-1.5">
+                            <button type="button" class="btn btn-sm p-0 text-decoration-none d-flex align-items-center gap-1" id="btn_quick_toggle_qty" title="Click to toggle quantity mode">
+                                <i class="bi bi-123 text-primary"></i> <span class="badge bg-light text-dark border" id="badge_quick_qty">+1 / Scan</span>
+                            </button>
+                        </div>
                     </div>
 
                     <!-- Subtext below scanner input -->
@@ -598,6 +626,169 @@
 <?php endif; ?>
 
 <!-- ======================================================== -->
+<!-- MODAL: SCANNER OPTIONS & SETTINGS                         -->
+<!-- ======================================================== -->
+<div class="modal fade" id="modalScannerOptions" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 490px;">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 18px;">
+            <div class="modal-header border-0 pb-0 pt-4 px-4">
+                <div class="d-flex align-items-center gap-2.5">
+                    <div style="width: 42px; height: 42px; background: #eff6ff; color: #2563eb; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.35rem;">
+                        <i class="bi bi-sliders2"></i>
+                    </div>
+                    <div>
+                        <h5 class="modal-title fw-bold text-dark mb-0">POS Scanner Options</h5>
+                        <small class="text-muted">Configure scanning hardware, audio feedback & behaviors</small>
+                    </div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <!-- 1. Preferred Scanner Mode -->
+                <div class="mb-4">
+                    <label class="form-label small fw-bold text-secondary text-uppercase mb-2" style="letter-spacing: 0.05em; font-size: 0.72rem;">Default Input Device</label>
+                    <div class="row g-2">
+                        <div class="col-4">
+                            <div class="card h-100 p-2.5 text-center border scanner-opt-card active" id="card_opt_gun">
+                                <i class="bi bi-upc-scan fs-3 text-primary mb-1"></i>
+                                <span class="fw-bold small text-dark d-block" style="font-size: 0.8rem;">Barcode Gun</span>
+                                <small class="text-muted" style="font-size: 0.68rem;">USB / Wireless</small>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="card h-100 p-2.5 text-center border scanner-opt-card" id="card_opt_cam">
+                                <i class="bi bi-camera-video fs-3 text-info mb-1"></i>
+                                <span class="fw-bold small text-dark d-block" style="font-size: 0.8rem;">Camera</span>
+                                <small class="text-muted" style="font-size: 0.68rem;">Webcam / Mobile</small>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="card h-100 p-2.5 text-center border scanner-opt-card" id="card_opt_manual">
+                                <i class="bi bi-keyboard fs-3 text-secondary mb-1"></i>
+                                <span class="fw-bold small text-dark d-block" style="font-size: 0.8rem;">Manual</span>
+                                <small class="text-muted" style="font-size: 0.68rem;">Type SKU / Code</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. Audio & Beep Feedback -->
+                <div class="mb-3 p-3 rounded-3 bg-light border">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div>
+                            <span class="fw-bold text-dark d-block small">Scan Audio Feedback (Beep)</span>
+                            <small class="text-muted" style="font-size: 0.72rem;">Play cashier confirmation tone when product barcode is detected</small>
+                        </div>
+                        <div class="form-check form-switch fs-5 m-0">
+                            <input class="form-check-input" type="checkbox" id="opt_sound_enabled" checked>
+                        </div>
+                    </div>
+                    <div class="pt-2 border-top d-flex justify-content-between align-items-center">
+                        <small class="text-muted" style="font-size: 0.74rem;">Test Speaker Output:</small>
+                        <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-2.5 py-0.5" id="btnTestSound" style="font-size: 0.75rem;">
+                            <i class="bi bi-volume-up-fill me-1 text-success"></i> Test Beep
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 3. Quantity Increment Behavior -->
+                <div class="mb-3 p-3 rounded-3 bg-light border">
+                    <label class="form-label small fw-bold text-dark mb-1">Quantity Increment Rule</label>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="radio" name="opt_qty_rule" id="qty_rule_auto" value="auto" checked>
+                        <label class="form-check-label small" for="qty_rule_auto">
+                            <strong>Continuous Scanning (+1 Piece automatically)</strong>
+                            <div class="text-muted" style="font-size: 0.72rem;">Best for high-volume retail. Each barcode scan increases quantity by 1.</div>
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="opt_qty_rule" id="qty_rule_prompt" value="prompt">
+                        <label class="form-check-label small" for="qty_rule_prompt">
+                            <strong>Prompt for Quantity on Scan</strong>
+                            <div class="text-muted" style="font-size: 0.72rem;">Prompts for pieces after scanning each unique garment.</div>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- 4. Continuous Auto-Focus -->
+                <div class="p-3 rounded-3 bg-light border">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <span class="fw-bold text-dark d-block small">Continuous Auto-Focus</span>
+                            <small class="text-muted" style="font-size: 0.72rem;">Keep cursor locked on barcode box for hands-free scanner guns</small>
+                        </div>
+                        <div class="form-check form-switch fs-5 m-0">
+                            <input class="form-check-input" type="checkbox" id="opt_auto_focus" checked>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer border-0 pt-0 pb-4 px-4">
+                <button type="button" class="btn btn-light rounded-pill px-3" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary rounded-pill px-4 fw-bold" id="btnSaveScannerOptions" style="background: #4f46e5;">Save Options</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ======================================================== -->
+<!-- MODAL: LIVE CAMERA BARCODE & QR SCANNER                   -->
+<!-- ======================================================== -->
+<div class="modal fade" id="modalCameraScanner" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 540px;">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 18px; overflow: hidden; background: #0f172a;">
+            <div class="modal-header border-0 pb-2 pt-3 px-4 text-white" style="background: #020617;">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-camera-video-fill text-info fs-5"></i>
+                    <div>
+                        <h6 class="modal-title fw-bold text-white mb-0">Live Camera Scanner</h6>
+                        <small class="text-white-50" style="font-size: 0.72rem;">Align QR code or 1D barcode inside the viewfinder</small>
+                    </div>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <select id="modal_cam_select" class="form-select form-select-sm bg-dark text-white border-secondary" style="font-size: 0.75rem; width: 145px; border-radius: 8px;">
+                        <option value="">Default Camera</option>
+                    </select>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" id="btnCloseCameraModal"></button>
+                </div>
+            </div>
+            <div class="modal-body p-3">
+                <!-- Camera Viewport Box with Laser Line -->
+                <div class="position-relative border border-secondary rounded-3 overflow-hidden bg-black text-center" style="min-height: 280px; max-height: 320px; display: flex; align-items: center; justify-content: center;">
+                    <div id="modal_qr_reader" style="width: 100%; height: 100%;"></div>
+                    <div class="scanner-laser-line" id="cam_laser_line"></div>
+                </div>
+
+                <!-- Live Status & Feedback -->
+                <div class="d-flex justify-content-between align-items-center px-2 pt-2.5 text-white-50" style="font-size: 0.76rem;">
+                    <span id="cam_status_display"><i class="bi bi-broadcast text-warning me-1"></i> Initializing camera...</span>
+                    <span id="cam_session_scanned" class="badge bg-success bg-opacity-25 text-success border border-success">0 items scanned</span>
+                </div>
+
+                <!-- Recently Scanned Items List in Modal -->
+                <div class="mt-2 p-2 rounded-3" style="background: rgba(255,255,255,0.06); max-height: 95px; overflow-y: auto;">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <small class="text-white-50" style="font-size: 0.7rem; text-transform: uppercase;">Session Scans:</small>
+                        <small class="text-white-50" id="cam_last_scan_time" style="font-size: 0.68rem;"></small>
+                    </div>
+                    <div class="d-flex flex-wrap gap-1" id="cam_scanned_chips">
+                        <span class="text-white-50 small fst-italic" style="font-size: 0.74rem;">Ready for first scan...</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer border-0 p-3 d-flex justify-content-between" style="background: #020617;">
+                <div class="text-white-50 small" style="font-size: 0.74rem;">
+                    <i class="bi bi-volume-up text-success me-1"></i> Beep sound active
+                </div>
+                <button type="button" class="btn btn-sm btn-primary rounded-pill px-4 fw-bold" data-bs-dismiss="modal" style="background: #4f46e5;">
+                    <i class="bi bi-check-lg me-1"></i> Done Scanning
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ======================================================== -->
 <!-- INTERACTIVE POS JAVASCRIPT LOGIC                         -->
 <!-- ======================================================== -->
 <style>
@@ -615,6 +806,37 @@
     background: #eff6ff !important;
     color: #1d4ed8 !important;
     box-shadow: 0 0 0 1px #3b82f6;
+}
+.scanner-opt-card {
+    transition: all 0.2s;
+    border-radius: 12px;
+    background: #ffffff;
+    cursor: pointer;
+}
+.scanner-opt-card:hover {
+    border-color: #3b82f6 !important;
+    background: #f8fafc;
+}
+.scanner-opt-card.active {
+    border-color: #3b82f6 !important;
+    background: #eff6ff !important;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+}
+@keyframes laserScan {
+    0% { top: 5%; opacity: 0.9; }
+    50% { top: 90%; opacity: 1; }
+    100% { top: 5%; opacity: 0.9; }
+}
+.scanner-laser-line {
+    position: absolute;
+    left: 8%;
+    width: 84%;
+    height: 2px;
+    background: #22c55e;
+    box-shadow: 0 0 10px 2px #22c55e;
+    animation: laserScan 2.4s infinite ease-in-out;
+    pointer-events: none;
+    z-index: 10;
 }
 </style>
 
@@ -684,8 +906,363 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // -----------------------------------------------------------------
+    // SCANNER OPTIONS & HARDWARE CONFIGURATION
+    // -----------------------------------------------------------------
+    let scannerSettings = {
+        mode: 'gun', // 'gun', 'camera', 'manual'
+        sound: true,
+        qtyRule: 'auto', // 'auto', 'prompt'
+        autoFocus: true
+    };
+
+    try {
+        const saved = localStorage.getItem('invento_pos_scanner_settings');
+        if (saved) {
+            scannerSettings = Object.assign(scannerSettings, JSON.parse(saved));
+        }
+    } catch(e) {}
+
+    function playPosBeep(type = 'success') {
+        if (!scannerSettings.sound) return;
+        try {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (!AudioCtx) return;
+            const ctx = new AudioCtx();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            if (type === 'success') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(1400, ctx.currentTime);
+                gain.gain.setValueAtTime(0.2, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.12);
+            } else {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(280, ctx.currentTime);
+                gain.gain.setValueAtTime(0.25, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.25);
+            }
+        } catch(e) {}
+    }
+
+    function updateScannerUI() {
+        const lblMode = document.getElementById('label_active_mode');
+        const iconMode = document.getElementById('icon_active_mode');
+        const activeIcon = document.getElementById('active_input_icon');
+
+        if (scannerSettings.mode === 'camera') {
+            if (lblMode) lblMode.textContent = 'Camera Mode';
+            if (iconMode) iconMode.className = 'bi bi-camera-video text-info';
+            if (activeIcon) activeIcon.className = 'bi bi-camera-video';
+        } else if (scannerSettings.mode === 'manual') {
+            if (lblMode) lblMode.textContent = 'Manual Typing';
+            if (iconMode) iconMode.className = 'bi bi-keyboard text-secondary';
+            if (activeIcon) activeIcon.className = 'bi bi-keyboard';
+        } else {
+            if (lblMode) lblMode.textContent = 'Barcode Gun';
+            if (iconMode) iconMode.className = 'bi bi-upc text-primary';
+            if (activeIcon) activeIcon.className = 'bi bi-qr-code';
+        }
+
+        const iconBeep = document.getElementById('icon_quick_beep');
+        const lblBeep = document.getElementById('label_quick_beep');
+        if (iconBeep && lblBeep) {
+            if (scannerSettings.sound) {
+                iconBeep.className = 'bi bi-volume-up-fill text-success';
+                lblBeep.textContent = 'Beep ON';
+                lblBeep.className = 'text-success fw-semibold';
+            } else {
+                iconBeep.className = 'bi bi-volume-mute-fill text-muted';
+                lblBeep.textContent = 'Muted';
+                lblBeep.className = 'text-muted fw-normal';
+            }
+        }
+
+        const badgeQty = document.getElementById('badge_quick_qty');
+        if (badgeQty) {
+            badgeQty.textContent = (scannerSettings.qtyRule === 'prompt') ? 'Ask Qty' : '+1 / Scan';
+            badgeQty.className = (scannerSettings.qtyRule === 'prompt') ? 'badge bg-warning text-dark border' : 'badge bg-light text-dark border';
+        }
+
+        const optSound = document.getElementById('opt_sound_enabled');
+        if (optSound) optSound.checked = scannerSettings.sound;
+        const optFocus = document.getElementById('opt_auto_focus');
+        if (optFocus) optFocus.checked = scannerSettings.autoFocus;
+
+        const qtyAuto = document.getElementById('qty_rule_auto');
+        const qtyPrompt = document.getElementById('qty_rule_prompt');
+        if (scannerSettings.qtyRule === 'prompt') {
+            if (qtyPrompt) qtyPrompt.checked = true;
+        } else {
+            if (qtyAuto) qtyAuto.checked = true;
+        }
+
+        ['gun', 'cam', 'manual'].forEach(k => {
+            const card = document.getElementById('card_opt_' + k);
+            if (card) {
+                if ((k === 'cam' && scannerSettings.mode === 'camera') ||
+                    (k === 'gun' && scannerSettings.mode === 'gun') ||
+                    (k === 'manual' && scannerSettings.mode === 'manual')) {
+                    card.classList.add('active');
+                } else {
+                    card.classList.remove('active');
+                }
+            }
+        });
+    }
+
+    function saveSettings() {
+        try {
+            localStorage.setItem('invento_pos_scanner_settings', JSON.stringify(scannerSettings));
+        } catch(e) {}
+    }
+
+    window.selectScannerDevice = function(mode) {
+        scannerSettings.mode = mode;
+        saveSettings();
+        updateScannerUI();
+        if (mode === 'camera') {
+            const optModalEl = document.getElementById('modalScannerOptions');
+            if (optModalEl && window.bootstrap) {
+                const optModal = bootstrap.Modal.getInstance(optModalEl);
+                if (optModal) optModal.hide();
+            }
+            openCameraScannerModal();
+        }
+    };
+
+    ['gun', 'cam', 'manual'].forEach(k => {
+        const card = document.getElementById('card_opt_' + k);
+        if (card) {
+            card.addEventListener('click', () => {
+                selectScannerDevice(k === 'cam' ? 'camera' : (k === 'gun' ? 'gun' : 'manual'));
+            });
+        }
+    });
+
+    const btnQuickToggleBeep = document.getElementById('btn_quick_toggle_beep');
+    if (btnQuickToggleBeep) {
+        btnQuickToggleBeep.addEventListener('click', function() {
+            scannerSettings.sound = !scannerSettings.sound;
+            playPosBeep('success');
+            saveSettings();
+            updateScannerUI();
+        });
+    }
+
+    const btnQuickToggleQty = document.getElementById('btn_quick_toggle_qty');
+    if (btnQuickToggleQty) {
+        btnQuickToggleQty.addEventListener('click', function() {
+            scannerSettings.qtyRule = (scannerSettings.qtyRule === 'prompt') ? 'auto' : 'prompt';
+            saveSettings();
+            updateScannerUI();
+        });
+    }
+
+    const badgeModeClick = document.getElementById('badge_scanner_mode');
+    const btnOpenOptions = document.getElementById('btnOpenScannerOptions');
+    function showScannerOptionsModal() {
+        const modalEl = document.getElementById('modalScannerOptions');
+        if (modalEl && window.bootstrap) {
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        }
+    }
+    if (badgeModeClick) badgeModeClick.addEventListener('click', showScannerOptionsModal);
+    if (btnOpenOptions) btnOpenOptions.addEventListener('click', showScannerOptionsModal);
+
+    const btnTestSound = document.getElementById('btnTestSound');
+    if (btnTestSound) {
+        btnTestSound.addEventListener('click', function() {
+            const prev = scannerSettings.sound;
+            scannerSettings.sound = true;
+            playPosBeep('success');
+            scannerSettings.sound = prev;
+        });
+    }
+
+    const btnSaveOpts = document.getElementById('btnSaveScannerOptions');
+    if (btnSaveOpts) {
+        btnSaveOpts.addEventListener('click', function() {
+            const optSound = document.getElementById('opt_sound_enabled');
+            if (optSound) scannerSettings.sound = optSound.checked;
+            const optFocus = document.getElementById('opt_auto_focus');
+            if (optFocus) scannerSettings.autoFocus = optFocus.checked;
+            const qtyPrompt = document.getElementById('qty_rule_prompt');
+            if (qtyPrompt) scannerSettings.qtyRule = qtyPrompt.checked ? 'prompt' : 'auto';
+
+            saveSettings();
+            updateScannerUI();
+
+            const modalEl = document.getElementById('modalScannerOptions');
+            if (modalEl && window.bootstrap) {
+                const inst = bootstrap.Modal.getInstance(modalEl);
+                if (inst) inst.hide();
+            }
+        });
+    }
+
+    // -----------------------------------------------------------------
+    // CAMERA SCANNER MODAL (Html5Qrcode)
+    // -----------------------------------------------------------------
+    let modalQrScanner = null;
+    let cameraSessionCount = 0;
+    let lastCameraScanCode = null;
+    let lastCameraScanTime = 0;
+
+    const btnLaunchCamModal = document.getElementById('btnLaunchCamModal');
+    const modalCameraScannerEl = document.getElementById('modalCameraScanner');
+    const modalCamSelect = document.getElementById('modal_cam_select');
+    const camStatusDisplay = document.getElementById('cam_status_display');
+    const camSessionScanned = document.getElementById('cam_session_scanned');
+    const camScannedChips = document.getElementById('cam_scanned_chips');
+    const camLastScanTime = document.getElementById('cam_last_scan_time');
+
+    window.openCameraScannerModal = function() {
+        if (modalCameraScannerEl && window.bootstrap) {
+            bootstrap.Modal.getOrCreateInstance(modalCameraScannerEl).show();
+        }
+    };
+
+    if (btnLaunchCamModal) {
+        btnLaunchCamModal.addEventListener('click', openCameraScannerModal);
+    }
+
+    function startModalCamera(cameraId = null) {
+        if (typeof Html5Qrcode === 'undefined') {
+            if (camStatusDisplay) camStatusDisplay.innerHTML = '<span class="text-danger">Camera scanner library not available.</span>';
+            return;
+        }
+
+        if (camStatusDisplay) camStatusDisplay.innerHTML = '<i class="bi bi-camera text-info me-1"></i> Starting camera viewfinder...';
+
+        if (modalQrScanner) {
+            modalQrScanner.stop().catch(() => {}).then(() => {
+                initScannerInstance(cameraId);
+            });
+        } else {
+            initScannerInstance(cameraId);
+        }
+    }
+
+    function initScannerInstance(cameraId) {
+        try {
+            modalQrScanner = new Html5Qrcode("modal_qr_reader");
+            const config = {
+                fps: 12,
+                qrbox: { width: 240, height: 240 }
+            };
+
+            const cameraConfig = cameraId ? { deviceId: { exact: cameraId } } : { facingMode: "environment" };
+
+            modalQrScanner.start(
+                cameraConfig,
+                config,
+                (decodedText) => {
+                    handleCameraCodeDetected(decodedText);
+                },
+                () => {}
+            ).then(() => {
+                if (camStatusDisplay) camStatusDisplay.innerHTML = '<i class="bi bi-broadcast text-success me-1"></i> Camera scanning active';
+            }).catch(err => {
+                if (camStatusDisplay) camStatusDisplay.innerHTML = '<span class="text-danger"><i class="bi bi-exclamation-octagon me-1"></i> Camera error: ' + (err.message || err) + '</span>';
+            });
+        } catch(e) {
+            console.error('Camera init error', e);
+        }
+    }
+
+    function handleCameraCodeDetected(code) {
+        if (!code) return;
+        code = code.trim();
+        const now = Date.now();
+        if (code === lastCameraScanCode && (now - lastCameraScanTime < 1800)) {
+            return;
+        }
+        lastCameraScanCode = code;
+        lastCameraScanTime = now;
+
+        if (camStatusDisplay) {
+            camStatusDisplay.innerHTML = '<span class="text-warning fw-bold"><i class="bi bi-lightning-fill"></i> Scanned: ' + code + '</span>';
+        }
+
+        addProductByQuery(code, true);
+    }
+
+    function logCameraScanChip(variant, isSuccess = true) {
+        if (!camScannedChips) return;
+        if (camScannedChips.querySelector('.fst-italic')) {
+            camScannedChips.innerHTML = '';
+        }
+
+        cameraSessionCount++;
+        if (camSessionScanned) camSessionScanned.textContent = cameraSessionCount + ' items scanned';
+        if (camLastScanTime) camLastScanTime.textContent = 'Last: ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+        const chip = document.createElement('span');
+        if (isSuccess && variant) {
+            chip.className = 'badge bg-success bg-opacity-25 text-white border border-success d-inline-flex align-items-center gap-1';
+            chip.style.fontSize = '0.72rem';
+            chip.innerHTML = `<i class="bi bi-check2"></i> ${variant.sku_code} (₹${parseFloat(variant.price || 0).toFixed(0)})`;
+        } else {
+            chip.className = 'badge bg-danger bg-opacity-25 text-danger border border-danger d-inline-flex align-items-center gap-1';
+            chip.style.fontSize = '0.72rem';
+            chip.innerHTML = `<i class="bi bi-x"></i> Not Found`;
+        }
+        camScannedChips.prepend(chip);
+
+        setTimeout(() => {
+            if (camStatusDisplay) camStatusDisplay.innerHTML = '<i class="bi bi-broadcast text-success me-1"></i> Ready for next barcode...';
+        }, 1500);
+    }
+
+    if (modalCameraScannerEl) {
+        modalCameraScannerEl.addEventListener('shown.bs.modal', function() {
+            if (typeof Html5Qrcode !== 'undefined') {
+                Html5Qrcode.getCameras().then(devices => {
+                    if (devices && devices.length && modalCamSelect) {
+                        modalCamSelect.innerHTML = '';
+                        devices.forEach((dev, idx) => {
+                            const opt = document.createElement('option');
+                            opt.value = dev.id;
+                            opt.text = dev.label || ('Camera ' + (idx + 1));
+                            modalCamSelect.appendChild(opt);
+                        });
+                    }
+                    startModalCamera(modalCamSelect ? modalCamSelect.value : null);
+                }).catch(() => {
+                    startModalCamera(null);
+                });
+            }
+        });
+
+        if (modalCamSelect) {
+            modalCamSelect.addEventListener('change', function() {
+                startModalCamera(this.value);
+            });
+        }
+
+        modalCameraScannerEl.addEventListener('hidden.bs.modal', function() {
+            if (modalQrScanner) {
+                modalQrScanner.stop().catch(() => {}).then(() => {
+                    modalQrScanner = null;
+                });
+            }
+            if (scannerSettings.autoFocus && qrInput) {
+                qrInput.focus();
+            }
+        });
+    }
+
+    updateScannerUI();
+
     // 3. Scan & Add Product Function
-    function addProductByQuery(query) {
+    function addProductByQuery(query, fromCamera = false) {
         if (!query) return;
         query = query.trim();
         if (!query) return;
@@ -698,10 +1275,18 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(data => {
                 if (data.success && data.variant) {
                     const v = data.variant;
+                    let qtyToAdd = 1;
+                    if (scannerSettings.qtyRule === 'prompt') {
+                        const ans = prompt("Enter quantity for '" + v.name + "' (" + v.sku_code + "):", "1");
+                        if (ans === null) return;
+                        qtyToAdd = parseInt(ans) || 1;
+                        if (qtyToAdd <= 0) qtyToAdd = 1;
+                    }
+
                     // Check if already in cart
                     const existingIndex = cart.findIndex(item => item.id === v.id);
                     if (existingIndex > -1) {
-                        cart[existingIndex].qty += 1;
+                        cart[existingIndex].qty += qtyToAdd;
                     } else {
                         cart.push({
                             id: v.id,
@@ -713,24 +1298,50 @@ document.addEventListener('DOMContentLoaded', function() {
                             mrp: v.mrp,
                             gst_pct: v.gst_pct || 5.0,
                             discount: 0.00,
-                            qty: 1
+                            qty: qtyToAdd
                         });
                     }
 
+                    playPosBeep('success');
+
+                    if (fromCamera) {
+                        logCameraScanChip(v, true);
+                    }
+
                     if (scannerStatus) {
-                        scannerStatus.textContent = 'Added: ' + v.sku_code;
+                        scannerStatus.textContent = 'Added: ' + v.sku_code + ' (+' + qtyToAdd + ')';
                         setTimeout(() => { scannerStatus.textContent = 'Ready for next scan...'; }, 2000);
                     }
 
                     qrInput.value = '';
                     renderCart();
+
+                    if (scannerSettings.autoFocus && !fromCamera) {
+                        qrInput.focus();
+                    }
                 } else {
-                    alert(data.message || 'Product not found in this concern catalog.');
+                    playPosBeep('error');
+                    if (fromCamera) {
+                        logCameraScanChip(null, false);
+                        if (camStatusDisplay) {
+                            camStatusDisplay.innerHTML = '<span class="text-danger fw-bold"><i class="bi bi-x-circle"></i> Not found: ' + query + '</span>';
+                        }
+                    } else {
+                        alert(data.message || 'Product not found in this concern catalog.');
+                    }
                     if (scannerStatus) scannerStatus.textContent = 'Item not found.';
+                    if (scannerSettings.autoFocus && !fromCamera) {
+                        qrInput.focus();
+                    }
                 }
             })
             .catch(err => {
-                alert('Failed to lookup product: ' + err);
+                playPosBeep('error');
+                if (fromCamera) {
+                    if (camStatusDisplay) camStatusDisplay.innerHTML = '<span class="text-danger">Lookup error: ' + err + '</span>';
+                } else {
+                    alert('Failed to lookup product: ' + err);
+                }
             });
     }
 
@@ -1010,34 +1621,12 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // 9. Camera Scanner Toggle
-    let html5QrScanner = null;
+    // 9. Camera Scanner Toggle Link
     const btnToggleCam = document.getElementById('btnToggleCam');
-    const camBox = document.getElementById('cam_scanner_box');
-
-    if (btnToggleCam && camBox) {
-        btnToggleCam.addEventListener('click', function() {
-            if (camBox.classList.contains('d-none')) {
-                camBox.classList.remove('d-none');
-                if (typeof Html5Qrcode !== 'undefined') {
-                    html5QrScanner = new Html5Qrcode("qr_reader");
-                    html5QrScanner.start(
-                        { facingMode: "environment" },
-                        { fps: 10, qrbox: { width: 200, height: 200 } },
-                        (decodedText) => {
-                            addProductByQuery(decodedText);
-                        },
-                        () => {}
-                    ).catch(err => {
-                        console.log("Camera access error:", err);
-                    });
-                }
-            } else {
-                camBox.classList.add('d-none');
-                if (html5QrScanner) {
-                    html5QrScanner.stop().catch(() => {});
-                }
-            }
+    if (btnToggleCam) {
+        btnToggleCam.addEventListener('click', function(e) {
+            e.preventDefault();
+            openCameraScannerModal();
         });
     }
 

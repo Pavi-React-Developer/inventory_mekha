@@ -13,6 +13,7 @@ $totalRoles = count($allRoles);
 // Group modules by category
 $groupedModules = [];
 foreach ($modules as $m) {
+    if ($m['code'] === 'cash') continue; // Unified under 'Cash & Cash Flow'
     $grp = $m['group_name'] ?: 'General';
     $groupedModules[$grp][] = $m;
 }
@@ -254,20 +255,64 @@ $activeTab = $activeTab ?? 'staff';
                                             <?php endif; ?>
                                         </td>
                                         <td class="text-end pe-4">
-                                            <button type="button" class="btn btn-sm btn-primary shadow-xs" 
-                                                    onclick="openRoleAssignModal(<?= htmlspecialchars(json_encode([
-                                                        'id'            => $stf['id'],
-                                                        'name'          => $stf['name'],
-                                                        'staff_code'    => $stf['staff_code'],
-                                                        'concern_id'    => $stf['concern_id'],
-                                                        'concern_name'  => $stf['concern_name'],
-                                                        'concern_code'  => $stf['concern_code'],
-                                                        'email'         => $stf['user_email'] ?: $stf['email'],
-                                                        'role_id'       => $stf['role_id'] ?? 0,
-                                                        'assigned_cids' => array_column($assignedConcerns, 'id')
-                                                    ])) ?>)">
-                                                <i class="bi bi-pencil-square me-1"></i> Assign Role & Access
-                                            </button>
+                                            <div class="d-inline-flex align-items-center gap-1.5 flex-wrap justify-content-end">
+                                                <!-- 1. Quick Status Toggle -->
+                                                <form action="<?= \App\Core\Controller::url('/m/staff/toggle-status') ?>" method="POST" class="d-inline" onsubmit="return confirm('<?= $stf['status'] === 'active' ? 'Deactivate' : 'Activate' ?> <?= htmlspecialchars($stf['name']) ?>?');">
+                                                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken ?? '') ?>">
+                                                    <input type="hidden" name="id" value="<?= $stf['id'] ?>">
+                                                    <?php if ($stf['status'] === 'active'): ?>
+                                                        <button type="submit" class="btn btn-xs btn-outline-warning" title="Deactivate Staff Account">
+                                                            <i class="bi bi-person-slash"></i>
+                                                        </button>
+                                                    <?php else: ?>
+                                                        <button type="submit" class="btn btn-xs btn-outline-success" title="Activate Staff Account">
+                                                            <i class="bi bi-person-check"></i>
+                                                        </button>
+                                                    <?php endif; ?>
+                                                </form>
+
+                                                <!-- 2. Assign Role & Locations -->
+                                                <button type="button" class="btn btn-xs btn-primary shadow-xs" 
+                                                        title="Assign Role & Locations"
+                                                        onclick="openRoleAssignModal(<?= htmlspecialchars(json_encode([
+                                                            'id'            => $stf['id'],
+                                                            'name'          => $stf['name'],
+                                                            'staff_code'    => $stf['staff_code'],
+                                                            'concern_id'    => $stf['concern_id'],
+                                                            'concern_name'  => $stf['concern_name'],
+                                                            'concern_code'  => $stf['concern_code'],
+                                                            'email'         => $stf['user_email'] ?: $stf['email'],
+                                                            'role_id'       => $stf['role_id'] ?? 0,
+                                                            'assigned_cids' => array_column($assignedConcerns, 'id')
+                                                        ])) ?>)">
+                                                    <i class="bi bi-person-gear me-1"></i> Role
+                                                </button>
+
+                                                <!-- 3. Granular Access Matrix (Overrides) -->
+                                                <?php if ($hasLogin): ?>
+                                                    <button type="button" class="btn btn-xs btn-outline-dark shadow-xs" 
+                                                            title="Configure Individual Custom Permissions"
+                                                            onclick="openCustomUserPermissionsModal(<?= (int)$stf['id'] ?>, <?= (int)$stf['user_id'] ?>, '<?= htmlspecialchars(addslashes($stf['name'])) ?>')">
+                                                        <i class="bi bi-shield-lock me-1"></i> Permissions
+                                                    </button>
+                                                <?php else: ?>
+                                                    <button type="button" class="btn btn-xs btn-outline-secondary opacity-75" 
+                                                            title="Assign a login account/role first"
+                                                            onclick="openRoleAssignModal(<?= htmlspecialchars(json_encode([
+                                                                'id'            => $stf['id'],
+                                                                'name'          => $stf['name'],
+                                                                'staff_code'    => $stf['staff_code'],
+                                                                'concern_id'    => $stf['concern_id'],
+                                                                'concern_name'  => $stf['concern_name'],
+                                                                'concern_code'  => $stf['concern_code'],
+                                                                'email'         => $stf['user_email'] ?: $stf['email'],
+                                                                'role_id'       => $stf['role_id'] ?? 0,
+                                                                'assigned_cids' => array_column($assignedConcerns, 'id')
+                                                            ])) ?>)">
+                                                        <i class="bi bi-plus me-1"></i> Set Access
+                                                    </button>
+                                                <?php endif; ?>
+                                            </div>
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>
@@ -373,10 +418,7 @@ $activeTab = $activeTab ?? 'staff';
                                                 <td class="ps-4">
                                                     <div class="d-flex align-items-center gap-2.5">
                                                         <i class="bi <?= htmlspecialchars($m['icon'] ?: 'bi-app') ?> text-primary fs-5"></i>
-                                                        <div>
-                                                            <span class="fw-semibold text-dark d-block"><?= htmlspecialchars($m['name']) ?></span>
-                                                            <small class="text-muted font-monospace" style="font-size: 0.72rem;"><?= htmlspecialchars($m['code']) ?></small>
-                                                        </div>
+                                                        <span class="fw-semibold text-dark"><?= htmlspecialchars($m['name']) ?></span>
                                                     </div>
                                                 </td>
                                                 <!-- View Checkbox -->
@@ -670,6 +712,107 @@ $activeTab = $activeTab ?? 'staff';
     </div>
 </div>
 
+<!-- ======================================================== -->
+<!-- MODAL: INDIVIDUAL USER GRANULAR PERMISSIONS MATRIX -->
+<!-- ======================================================== -->
+<div class="modal fade" id="modalUserCustomPermissions" tabindex="-1" aria-labelledby="modalUserCustomPermissionsLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
+            <div class="modal-header border-bottom px-4 py-3 bg-light">
+                <div class="d-flex align-items-center gap-2">
+                    <span style="width: 40px; height: 40px; background: #e0f2fe; color: #0284c7; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.3rem;">
+                        <i class="bi bi-shield-lock-fill"></i>
+                    </span>
+                    <div>
+                        <h5 class="modal-title fw-bold text-dark mb-0">Custom Module Access & Overrides</h5>
+                        <small class="text-secondary" id="ucp_header_subtitle">Configure granular overrides for this specific staff account.</small>
+                    </div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <form method="POST" action="<?= \App\Core\Controller::url('/m/staff/save-user-permissions') ?>" id="formUserCustomPerms">
+                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken ?? '') ?>">
+                <input type="hidden" name="user_id" id="ucp_user_id" value="">
+                <input type="hidden" name="staff_id" id="ucp_staff_id" value="">
+
+                <div class="modal-body p-4">
+                    <!-- Staff & Role Overview Banner -->
+                    <div class="alert alert-light border rounded-3 p-3 mb-3 d-flex flex-wrap justify-content-between align-items-center gap-2" style="background: #f8fafc;">
+                        <div>
+                            <span class="fw-bold text-dark fs-6" id="ucp_staff_name">-</span>
+                            <span class="badge bg-secondary font-monospace ms-2" id="ucp_staff_email">-</span>
+                        </div>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="text-muted small">Assigned Base Role:</span>
+                            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 px-2.5 py-1" id="ucp_role_name">-</span>
+                        </div>
+                    </div>
+
+                    <!-- Visual Legend & Explanation -->
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 p-2.5 bg-light rounded-3 mb-3 border small">
+                        <div class="d-flex align-items-center gap-3 flex-wrap">
+                            <span class="fw-bold text-secondary text-uppercase" style="font-size: 0.72rem;">Legend:</span>
+                            <span class="badge bg-light text-dark border">
+                                <i class="bi bi-circle me-1 text-secondary"></i> Inherit (Role Default)
+                            </span>
+                            <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">
+                                <i class="bi bi-check-circle-fill me-1"></i> Explicit Grant (Allow)
+                            </span>
+                            <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">
+                                <i class="bi bi-x-circle-fill me-1"></i> Explicit Deny (Block)
+                            </span>
+                        </div>
+                        <div class="d-flex align-items-center gap-1.5">
+                            <button type="button" class="btn btn-xs btn-outline-secondary" onclick="setAllUserOverrides('inherit')">
+                                <i class="bi bi-arrow-counterclockwise me-1"></i> Reset All to Inherit
+                            </button>
+                            <button type="button" class="btn btn-xs btn-outline-success" onclick="setAllUserOverrides('grant')">
+                                <i class="bi bi-check-all me-1"></i> Grant All
+                            </button>
+                            <button type="button" class="btn btn-xs btn-outline-danger" onclick="setAllUserOverrides('deny')">
+                                <i class="bi bi-dash-circle me-1"></i> Deny All
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Loading Spinner -->
+                    <div id="ucp_loading" class="text-center py-5">
+                        <div class="spinner-border text-primary" role="status"></div>
+                        <div class="text-muted small mt-2">Loading permissions matrix...</div>
+                    </div>
+
+                    <!-- Table Container -->
+                    <div id="ucp_table_container" class="table-responsive" style="display: none; max-height: 55vh; overflow-y: auto;">
+                        <table class="table table-bordered table-sm align-middle mb-0" id="ucp_table" style="font-size: 0.82rem;">
+                            <thead class="bg-light text-uppercase text-secondary" style="font-size: 0.72rem; position: sticky; top: 0; z-index: 2;">
+                                <tr>
+                                    <th style="width: 28%;">Module / Feature</th>
+                                    <th style="width: 16%;" class="text-center text-primary">View</th>
+                                    <th style="width: 16%;" class="text-center text-success">Create (Add)</th>
+                                    <th style="width: 16%;" class="text-center text-warning text-dark">Edit</th>
+                                    <th style="width: 16%;" class="text-center text-danger">Delete</th>
+                                    <th style="width: 8%;" class="text-center">Row Preset</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ucp_tbody">
+                                <!-- Populated dynamically by openCustomUserPermissionsModal() -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="modal-footer border-top px-4 py-3 bg-light d-flex justify-content-between">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm px-4">
+                        <i class="bi bi-check2-circle me-1"></i> Save Custom Permissions
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <script>
 function openRoleAssignModal(data) {
     if (!data) return;
@@ -785,5 +928,171 @@ function togglePasswordVisibility(inputId, btn) {
             icon.classList.add('bi-eye');
         }
     }
+}
+
+// =========================================================
+// INDIVIDUAL USER GRANULAR PERMISSIONS MATRIX LOGIC
+// =========================================================
+let currentUcpData = null;
+
+function openCustomUserPermissionsModal(staffId, userId, staffName) {
+    const modalEl = document.getElementById('modalUserCustomPermissions');
+    if (!modalEl) return;
+
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    modal.show();
+
+    document.getElementById('ucp_loading').style.display = 'block';
+    document.getElementById('ucp_table_container').style.display = 'none';
+    document.getElementById('ucp_staff_id').value = staffId || '';
+    document.getElementById('ucp_user_id').value = userId || '';
+    document.getElementById('ucp_staff_name').innerText = staffName || 'Staff Member';
+    document.getElementById('ucp_staff_email').innerText = 'Loading...';
+    document.getElementById('ucp_role_name').innerText = '...';
+
+    const param = staffId ? ('staff_id=' + staffId) : ('user_id=' + userId);
+    fetch('<?= \App\Core\Controller::url('/api/staff/user-permissions?') ?>' + param)
+        .then(res => res.json())
+        .then(data => {
+            document.getElementById('ucp_loading').style.display = 'none';
+            if (!data.success) {
+                alert(data.error || 'Failed to fetch user permissions.');
+                modal.hide();
+                return;
+            }
+
+            if (!data.has_user_account) {
+                alert(data.message || 'Staff member does not have an active login account.');
+                modal.hide();
+                return;
+            }
+
+            currentUcpData = data;
+            document.getElementById('ucp_user_id').value = data.user.id;
+            document.getElementById('ucp_staff_email').innerText = data.user.email;
+            document.getElementById('ucp_role_name').innerText = data.user.role_name || 'Assigned Role';
+
+            renderUserCustomPermsTable(data);
+            document.getElementById('ucp_table_container').style.display = 'block';
+        })
+        .catch(err => {
+            document.getElementById('ucp_loading').style.display = 'none';
+            alert('Network error loading permissions: ' + err.message);
+        });
+}
+
+function renderUserCustomPermsTable(data) {
+    const tbody = document.getElementById('ucp_tbody');
+    tbody.innerHTML = '';
+
+    const modules = data.modules || [];
+    const rolePerms = data.role_permissions || {};
+    const userOverrides = data.user_overrides || {};
+
+    // Group modules by category
+    const grouped = {};
+    modules.forEach(m => {
+        const grp = m.group_name || 'General';
+        if (!grouped[grp]) grouped[grp] = [];
+        grouped[grp].push(m);
+    });
+
+    const actions = ['view', 'add', 'edit', 'delete'];
+
+    Object.keys(grouped).forEach(grpName => {
+        // Group Header Row
+        const grpTr = document.createElement('tr');
+        grpTr.className = 'table-secondary';
+        grpTr.innerHTML = `
+            <td colspan="6" class="fw-bold text-dark py-2 px-3 text-uppercase" style="font-size: 0.74rem; letter-spacing: 0.05em;">
+                <i class="bi bi-folder2-open me-1.5 text-primary"></i> ${escapeHtml(grpName)} Group
+            </td>
+        `;
+        tbody.appendChild(grpTr);
+
+        grouped[grpName].forEach(m => {
+            const mid = m.id;
+            const rp = rolePerms[mid] || { view: 0, add: 0, edit: 0, delete: 0 };
+            const uo = userOverrides[mid] || { view: null, add: null, edit: null, delete: null };
+
+            const tr = document.createElement('tr');
+            tr.id = 'ucp_row_' + mid;
+
+            let actionsHtml = '';
+            actions.forEach(act => {
+                const roleDefault = rp[act] ? 1 : 0;
+                const userVal = uo[act]; // null, 1, or 0
+                const currentSetting = userVal === 1 ? 'grant' : (userVal === 0 ? 'deny' : 'inherit');
+
+                const roleBadge = roleDefault === 1 
+                    ? '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-0 px-1" style="font-size: 0.65rem;">Role: Allow</span>'
+                    : '<span class="badge bg-secondary bg-opacity-10 text-secondary border py-0 px-1" style="font-size: 0.65rem;">Role: Deny</span>';
+
+                actionsHtml += `
+                    <td class="text-center p-1.5" style="vertical-align: middle;">
+                        <div class="d-flex flex-column align-items-center gap-1">
+                            <select name="overrides[${mid}][${act}]" 
+                                    class="form-select form-select-xs ucp-select ucp-mid-${mid} ucp-act-${act}" 
+                                    onchange="updateUcpRowVisual(this)"
+                                    style="width: 110px; font-size: 0.75rem; border-radius: 6px;">
+                                <option value="inherit" ${currentSetting === 'inherit' ? 'selected' : ''}>⚪ Inherit</option>
+                                <option value="grant" ${currentSetting === 'grant' ? 'selected' : ''} class="text-success fw-bold">🟢 Grant</option>
+                                <option value="deny" ${currentSetting === 'deny' ? 'selected' : ''} class="text-danger fw-bold">🔴 Deny</option>
+                            </select>
+                            <div class="mt-0.5">${roleBadge}</div>
+                        </div>
+                    </td>
+                `;
+            });
+
+            tr.innerHTML = `
+                <td class="ps-3 py-2">
+                    <div class="fw-semibold text-dark">${escapeHtml(m.name)}</div>
+                    <small class="text-muted font-monospace" style="font-size: 0.7rem;">${escapeHtml(m.code)}</small>
+                </td>
+                ${actionsHtml}
+                <td class="text-center p-1" style="vertical-align: middle;">
+                    <div class="btn-group btn-group-xs">
+                        <button type="button" class="btn btn-outline-secondary btn-xs" title="Reset Row to Inherit" onclick="setRowOverride(${mid}, 'inherit')">Inh</button>
+                        <button type="button" class="btn btn-outline-success btn-xs" title="Grant All 4 Operations" onclick="setRowOverride(${mid}, 'grant')">All</button>
+                        <button type="button" class="btn btn-outline-danger btn-xs" title="Deny All 4 Operations" onclick="setRowOverride(${mid}, 'deny')">Block</button>
+                    </div>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    });
+
+    // Apply visual styling to all selects
+    document.querySelectorAll('.ucp-select').forEach(sel => updateUcpRowVisual(sel));
+}
+
+function updateUcpRowVisual(selectEl) {
+    if (!selectEl) return;
+    selectEl.classList.remove('border-success', 'bg-success', 'bg-opacity-10', 'border-danger', 'bg-danger', 'border-secondary');
+    if (selectEl.value === 'grant') {
+        selectEl.classList.add('border-success', 'bg-success', 'bg-opacity-10');
+    } else if (selectEl.value === 'deny') {
+        selectEl.classList.add('border-danger', 'bg-danger', 'bg-opacity-10');
+    }
+}
+
+function setRowOverride(mid, val) {
+    document.querySelectorAll('.ucp-mid-' + mid).forEach(sel => {
+        sel.value = val;
+        updateUcpRowVisual(sel);
+    });
+}
+
+function setAllUserOverrides(val) {
+    document.querySelectorAll('.ucp-select').forEach(sel => {
+        sel.value = val;
+        updateUcpRowVisual(sel);
+    });
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
 </script>

@@ -147,8 +147,11 @@ $router->post('/m/concern_damage/delete', [DamageController::class, 'delete'], '
 $router->get('/m/customers', [SalesController::class, 'customers'], 'customers', 'view');
 $router->get('/shop/customers', [SalesController::class, 'customers'], 'customers', 'view');
 $router->post('/m/customers/store', [SalesController::class, 'storeCustomer'], 'customers', 'add');
+$router->post('/shop/customers/store', [SalesController::class, 'storeCustomer'], 'customers', 'add');
 $router->post('/m/customers/update', [SalesController::class, 'updateCustomer'], 'customers', 'add');
+$router->post('/shop/customers/update', [SalesController::class, 'updateCustomer'], 'customers', 'add');
 $router->post('/m/customers/delete', [SalesController::class, 'deleteCustomer'], 'customers', 'delete');
+$router->post('/shop/customers/delete', [SalesController::class, 'deleteCustomer'], 'customers', 'delete');
 $router->get('/m/customers/export', [SalesController::class, 'exportCustomers'], 'customers', 'view');
 $router->get('/api/customers/details', [SalesController::class, 'customerProfile'], 'customers', 'view');
 $router->get('/m/request', [SalesController::class, 'request'], 'request', 'view');
@@ -295,11 +298,15 @@ $router->post('/m/cash/shift/close', [FinanceController::class, 'closeShift'], '
 
 // Staff Management
 $router->get('/m/staff', [StaffController::class, 'index'], 'staff', 'view');
+$router->get('/m/staff/create', [StaffController::class, 'create'], 'staff', 'add');
 $router->get('/m/staff/roles', [StaffController::class, 'roles'], 'staff', 'view');
 $router->post('/m/staff/assign-role', [StaffController::class, 'assignRole'], 'staff', 'edit');
 $router->post('/m/staff/save-role-permissions', [StaffController::class, 'saveRolePermissions'], 'staff', 'edit');
+$router->post('/m/staff/save-user-permissions', [StaffController::class, 'saveUserPermissions'], 'staff', 'edit');
+$router->post('/m/staff/toggle-status', [StaffController::class, 'toggleStatus'], 'staff', 'edit');
 $router->post('/m/staff/create-role', [StaffController::class, 'createRole'], 'staff', 'add');
 $router->get('/api/staff/role-permissions', [StaffController::class, 'apiGetRolePermissions'], 'staff', 'view');
+$router->get('/api/staff/user-permissions', [StaffController::class, 'apiGetUserPermissions'], 'staff', 'view');
 $router->get('/m/staff/export', [StaffController::class, 'export'], 'staff', 'view');
 $router->post('/m/staff/store', [StaffController::class, 'store'], 'staff', 'add');
 $router->post('/m/staff/update', [StaffController::class, 'update'], 'staff', 'edit');

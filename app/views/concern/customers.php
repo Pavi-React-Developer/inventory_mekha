@@ -30,7 +30,7 @@
             </h4>
         </div>
         <div>
-            <button class="btn btn-primary btn-sm rounded-pill px-3 shadow-sm d-flex align-items-center gap-1" data-bs-toggle="modal" data-bs-target="#modalAddCustomer" style="background: #4f46e5; border-color: #4f46e5;">
+            <button type="button" id="btnAddCustomer" class="btn btn-primary btn-sm rounded-pill px-3 shadow-sm d-flex align-items-center gap-1" data-bs-toggle="modal" data-bs-target="#modalAddCustomer" style="background: #4f46e5; border-color: #4f46e5;">
                 <i class="bi bi-person-plus-fill"></i> + Add Customer
             </button>
         </div>
@@ -234,7 +234,7 @@
                                             <i class="bi bi-pencil-square"></i> Edit
                                         </button>
                                         <form action="<?= \App\Core\Controller::url('/m/customers/delete') ?>" method="POST" class="d-inline" onsubmit="return confirm('Delete customer <?= htmlspecialchars(addslashes($c['name'])) ?>?');">
-                                            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(\App\Core\Csrf::generateToken()) ?>">
+                                            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
                                             <input type="hidden" name="id" value="<?= $c['id'] ?>">
                                             <button type="submit" class="btn btn-sm btn-outline-danger rounded-3 px-2 py-1" title="Delete Customer" style="font-size: 0.78rem;">
                                                 <i class="bi bi-trash"></i>
@@ -606,9 +606,20 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // 2.5 Add Customer Modal Trigger
+    const btnAddCustomer = document.getElementById('btnAddCustomer');
+    const addModalEl = document.getElementById('modalAddCustomer');
+    if (btnAddCustomer && addModalEl) {
+        btnAddCustomer.addEventListener('click', function(e) {
+            if (window.bootstrap) {
+                const addModal = bootstrap.Modal.getOrCreateInstance(addModalEl);
+                addModal.show();
+            }
+        });
+    }
+
     // 3. Edit Customer Modal Population
     const editModalEl = document.getElementById('modalEditCustomer');
-    const editModal = editModalEl ? new bootstrap.Modal(editModalEl) : null;
 
     document.querySelectorAll('.btn-edit-customer').forEach(btn => {
         btn.addEventListener('click', function() {
@@ -621,13 +632,15 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('edit_cust_gstin').value = this.getAttribute('data-gstin');
             document.getElementById('edit_cust_status').value = this.getAttribute('data-status') || 'active';
 
-            if (editModal) editModal.show();
+            if (editModalEl && window.bootstrap) {
+                const editModal = bootstrap.Modal.getOrCreateInstance(editModalEl);
+                editModal.show();
+            }
         });
     });
 
     // 4. View Customer 360 CRM Modal
     const viewModalEl = document.getElementById('modalViewCustomerProfile');
-    const viewModal = viewModalEl ? new bootstrap.Modal(viewModalEl) : null;
 
     document.querySelectorAll('.btn-view-profile').forEach(btn => {
         btn.addEventListener('click', function() {
@@ -635,7 +648,10 @@ document.addEventListener('DOMContentLoaded', function() {
             const invoicesTbody = document.getElementById('view_invoices_body');
             invoicesTbody.innerHTML = '<tr><td colspan="5" class="text-center py-3 text-muted"><div class="spinner-border spinner-border-sm text-primary me-2"></div>Loading profile...</td></tr>';
 
-            if (viewModal) viewModal.show();
+            if (viewModalEl && window.bootstrap) {
+                const viewModal = bootstrap.Modal.getOrCreateInstance(viewModalEl);
+                viewModal.show();
+            }
 
             fetch('<?= \App\Core\Controller::url('/api/customers/details?id=') ?>' + encodeURIComponent(custId))
                 .then(res => res.json())
