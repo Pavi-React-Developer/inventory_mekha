@@ -1221,7 +1221,8 @@ class ProductionController extends Controller {
                      FROM purchase_bill_items pbi
                      JOIN purchase_bills pb ON pbi.purchase_bill_id = pb.id
                      LEFT JOIN suppliers s ON pb.supplier_id = s.id
-                     WHERE pbi.section_type = 'rolls'" . ($cid ? " AND pbi.concern_id = ?" : "") . "
+                     WHERE pbi.section_type = 'rolls'
+                       AND (pbi.inward_status = 'completed' OR (pbi.inward_status IS NULL AND pb.inward_status = 'completed'))" . ($cid ? " AND pbi.concern_id = ?" : "") . "
                      ORDER BY pbi.id DESC";
         $rawRolls = DB::fetchAll($rollsSql, $cid ? [$cid] : []);
 
@@ -1323,7 +1324,8 @@ class ProductionController extends Controller {
                      FROM purchase_bill_items pbi
                      JOIN purchase_bills pb ON pbi.purchase_bill_id = pb.id
                      LEFT JOIN suppliers s ON pb.supplier_id = s.id
-                     WHERE pbi.section_type = 'rolls'" . ($cid ? " AND pbi.concern_id = ?" : "") . "
+                     WHERE pbi.section_type = 'rolls'
+                       AND (pbi.inward_status = 'completed' OR (pbi.inward_status IS NULL AND pb.inward_status = 'completed'))" . ($cid ? " AND pbi.concern_id = ?" : "") . "
                      ORDER BY pbi.id DESC";
         $rawRolls = DB::fetchAll($rollsSql, $cid ? [$cid] : []);
 
@@ -1403,7 +1405,8 @@ class ProductionController extends Controller {
                 FROM purchase_bill_items pbi
                 JOIN purchase_bills pb ON pbi.purchase_bill_id = pb.id
                 LEFT JOIN suppliers s ON pb.supplier_id = s.id
-                WHERE pbi.section_type = 'rolls' " . ($cid ? " AND pbi.concern_id = ?" : "") . "
+                WHERE pbi.section_type = 'rolls'
+                  AND (pbi.inward_status = 'completed' OR (pbi.inward_status IS NULL AND pb.inward_status = 'completed'))" . ($cid ? " AND pbi.concern_id = ?" : "") . "
                   AND (pbi.item_code = ? OR pbi.item_name LIKE ? OR pbi.pattern LIKE ? OR pb.bill_no = ?)
                 LIMIT 1";
         $params = $cid ? [$cid, $tag, "%{$tag}%", "%{$tag}%", $tag] : [$tag, "%{$tag}%", "%{$tag}%", $tag];
@@ -1424,7 +1427,8 @@ class ProductionController extends Controller {
                             FROM purchase_bill_items pbi
                             JOIN purchase_bills pb ON pbi.purchase_bill_id = pb.id
                             LEFT JOIN suppliers s ON pb.supplier_id = s.id
-                            WHERE pbi.section_type = 'rolls'" . ($cid ? " AND pbi.concern_id = ?" : "");
+                            WHERE pbi.section_type = 'rolls'
+                              AND (pbi.inward_status = 'completed' OR (pbi.inward_status IS NULL AND pb.inward_status = 'completed'))" . ($cid ? " AND pbi.concern_id = ?" : "");
             $candidates = DB::fetchAll($allRollsSql, $cid ? [$cid] : []);
             foreach ($candidates as $cand) {
                 $candTag = QrService::generateTagCode($cand['item_name'], $cand['color'], $cand['pattern'] ?: ($cand['specification'] ?? ''), (string)$cand['id']);
@@ -1551,11 +1555,13 @@ class ProductionController extends Controller {
                                      AND pp.status != 'cancelled'
                                ), 0.00) AS used_qty
                         FROM purchase_bill_items pbi 
-                        WHERE pbi.id = ?" . ($cid ? " AND pbi.concern_id = ?" : "");
+                        JOIN purchase_bills pb ON pbi.purchase_bill_id = pb.id
+                        WHERE pbi.id = ?
+                          AND (pbi.inward_status = 'completed' OR (pbi.inward_status IS NULL AND pb.inward_status = 'completed'))" . ($cid ? " AND pbi.concern_id = ?" : "");
             $rollItem = DB::fetch($rollSql, $cid ? [$rollItemId, $cid] : [$rollItemId]);
 
             if (!$rollItem) {
-                $this->flash('error', "Roll #" . ($index + 1) . ": Invalid purchased roll selected.");
+                $this->flash('error', "Roll #" . ($index + 1) . ": Invalid purchased roll or roll has not been added to stock yet.");
                 $this->redirect('/production/programs/create');
             }
 
@@ -1887,7 +1893,8 @@ class ProductionController extends Controller {
                      FROM purchase_bill_items pbi
                      JOIN purchase_bills pb ON pbi.purchase_bill_id = pb.id
                      LEFT JOIN suppliers s ON pb.supplier_id = s.id
-                     WHERE pbi.section_type = 'rolls'" . ($cid ? " AND pbi.concern_id = ?" : "") . "
+                     WHERE pbi.section_type = 'rolls'
+                       AND (pbi.inward_status = 'completed' OR (pbi.inward_status IS NULL AND pb.inward_status = 'completed'))" . ($cid ? " AND pbi.concern_id = ?" : "") . "
                      ORDER BY pbi.id DESC";
         $rawRolls = DB::fetchAll($rollsSql, $cid ? [$id, $cid] : [$id]);
 
@@ -2062,12 +2069,14 @@ class ProductionController extends Controller {
                               AND pp.id != ?
                         ), 0.00) AS used_qty_other
                  FROM purchase_bill_items pbi 
-                 WHERE pbi.id = ?" . ($cid ? " AND pbi.concern_id = ?" : ""),
+                 JOIN purchase_bills pb ON pbi.purchase_bill_id = pb.id
+                 WHERE pbi.id = ?
+                   AND (pbi.inward_status = 'completed' OR (pbi.inward_status IS NULL AND pb.inward_status = 'completed'))" . ($cid ? " AND pbi.concern_id = ?" : ""),
                 $cid ? [$id, $rollItemId, $cid] : [$id, $rollItemId]
             );
 
             if (!$rollItem) {
-                $this->flash('error', "Roll #" . ($index + 1) . ": Invalid purchased roll selected.");
+                $this->flash('error', "Roll #" . ($index + 1) . ": Invalid purchased roll or roll has not been added to stock yet.");
                 $this->redirect('/production/programs/edit?id=' . $id);
             }
 
