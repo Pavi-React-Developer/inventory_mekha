@@ -265,11 +265,35 @@ $router->get('/production/cutting/wastage', [ProductionController::class, 'cutti
 $router->get('/production/wastage-selling', [ProductionController::class, 'cuttingWastageIndex'], 'cutting_wastage', 'view');
 $router->post('/production/cutting/wastage/sell', [ProductionController::class, 'storeWastageSale'], 'cutting_wastage', 'add');
 $router->post('/production/wastage-selling/store', [ProductionController::class, 'storeWastageSale'], 'cutting_wastage', 'add');
-$router->get('/m/stitching_wastage', [ProductionController::class, 'stitching'], 'stitching_wastage', 'view');
+$router->post('/production/cutting/wastage/update', [ProductionController::class, 'updateWastageSale'], 'cutting_wastage', 'edit');
+$router->post('/production/wastage-selling/update', [ProductionController::class, 'updateWastageSale'], 'cutting_wastage', 'edit');
+$router->post('/production/cutting/wastage/delete', [ProductionController::class, 'deleteWastageSale'], 'cutting_wastage', 'delete');
+$router->post('/production/wastage-selling/delete', [ProductionController::class, 'deleteWastageSale'], 'cutting_wastage', 'delete');
+$router->get('/api/cutting/wastage/details', [ProductionController::class, 'apiWastageSaleDetails'], 'cutting_wastage', 'view');
+
+// Stitching & Wastage Flow (Matching UI Images 1, 2, 3)
+$router->get('/production/stitching', [ProductionController::class, 'stitchingIndex'], 'stitching_wastage', 'view');
+$router->get('/m/stitching_wastage', [ProductionController::class, 'stitchingIndex'], 'stitching_wastage', 'view');
+$router->get('/production/stitching/create', [ProductionController::class, 'createStitching'], 'stitching_wastage', 'add');
+$router->post('/production/stitching/store', [ProductionController::class, 'storeStitchingBatch'], 'stitching_wastage', 'add');
+$router->get('/production/stitching/edit', [ProductionController::class, 'editStitchingBatch'], 'stitching_wastage', 'edit');
+$router->post('/production/stitching/update', [ProductionController::class, 'updateStitchingBatch'], 'stitching_wastage', 'edit');
+$router->get('/production/stitching/view', [ProductionController::class, 'viewStitchingBatch'], 'stitching_wastage', 'view');
+$router->post('/production/stitching/delete', [ProductionController::class, 'deleteStitchingBatch'], 'stitching_wastage', 'delete');
+
+// Stitching API Endpoints
+$router->get('/api/stitching/cutting-details', [ProductionController::class, 'apiCuttingDetailsForStitching'], 'stitching_wastage', 'view');
+$router->post('/api/stitching/quick-tailor', [ProductionController::class, 'apiQuickAddTailor'], 'stitching_wastage', 'add');
+
+// Stitching Wastage Selling (Image 2)
+$router->get('/production/stitching/wastage', [ProductionController::class, 'stitchingWastageIndex'], 'stitching_wastage', 'view');
+$router->post('/production/stitching/wastage/sell', [ProductionController::class, 'storeStitchingWastageSale'], 'stitching_wastage', 'add');
+
+// Legacy routes fallback
 $router->get('/m/stitching_wastage/export', [ProductionController::class, 'exportStitching'], 'stitching_wastage', 'view');
-$router->post('/m/stitching_wastage/store', [ProductionController::class, 'storeStitching'], 'stitching_wastage', 'add');
-$router->post('/m/stitching_wastage/update', [ProductionController::class, 'updateStitching'], 'stitching_wastage', 'edit');
-$router->post('/m/stitching_wastage/delete', [ProductionController::class, 'deleteStitching'], 'stitching_wastage', 'delete');
+$router->post('/m/stitching_wastage/store', [ProductionController::class, 'storeStitchingBatch'], 'stitching_wastage', 'add');
+$router->post('/m/stitching_wastage/update', [ProductionController::class, 'updateStitchingBatch'], 'stitching_wastage', 'edit');
+$router->post('/m/stitching_wastage/delete', [ProductionController::class, 'deleteStitchingBatch'], 'stitching_wastage', 'delete');
 $router->get('/m/qc_stocks', [ProductionController::class, 'qc'], 'qc_stocks', 'view');
 $router->get('/m/qc_stocks/export', [ProductionController::class, 'exportQc'], 'qc_stocks', 'view');
 $router->post('/m/qc_stocks/store', [ProductionController::class, 'storeQc'], 'qc_stocks', 'add');

@@ -45,7 +45,11 @@ foreach ($modules as $m) {
                     <h6 class="mb-0 fw-bold text-dark d-flex align-items-center gap-2">
                         <i class="bi bi-person-vcard text-primary fs-5"></i> Employee Details & Account Credentials
                     </h6>
-                    <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 px-2.5 py-1">New Registration</span>
+                    <a href="<?= \App\Core\Controller::url('/m/staff/create' . ($selectedCid ? '?concern_id=' . $selectedCid : '')) ?>" 
+                       class="btn btn-sm rounded-pill px-3 py-1 fw-semibold d-inline-flex align-items-center gap-1 shadow-sm" 
+                       style="font-size: 0.78rem; background: #eff6ff; border: 1px solid #bfdbfe; color: #2563eb; text-decoration: none;">
+                        <i class="bi bi-plus-lg"></i> Add New
+                    </a>
                 </div>
 
                 <form action="<?= \App\Core\Controller::url('/m/staff/store') ?>" method="POST" class="card-body p-4">

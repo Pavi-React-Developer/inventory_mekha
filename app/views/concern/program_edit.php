@@ -411,9 +411,20 @@ function addRollCard(rollData = null) {
         loadSubcategoriesForRoll(index, rollData.subcategory_id, rollData.sub_sub_category_id);
     }
     
-    // Auto-update catalog badge if roll had catalog
-    if (rollData && rollData.catalog_id) {
-        const catBadge = document.getElementById(`catalogBadge_${index}`);
+    // Auto-update catalog badge if roll had catalog or category hierarchy
+    const catBadge = document.getElementById(`catalogBadge_${index}`);
+    if (rollData && (rollData.catalog_name || rollData.catalog_style_code)) {
+        if (catBadge) {
+            catBadge.textContent = `${rollData.catalog_style_code ? '[' + rollData.catalog_style_code + '] ' : ''}${rollData.catalog_name}`;
+            catBadge.className = 'badge bg-primary text-white border-0 roll-catalog-badge';
+        }
+    } else if (rollData && (rollData.category_name || rollData.subcategory_name || rollData.subsub_name)) {
+        const parts = [rollData.category_name, rollData.subcategory_name, rollData.subsub_name].filter(Boolean);
+        if (catBadge && parts.length > 0) {
+            catBadge.textContent = parts.join(' > ');
+            catBadge.className = 'badge bg-info-subtle text-info-emphasis border border-info-subtle roll-catalog-badge';
+        }
+    } else if (rollData && rollData.catalog_id) {
         const catSelect = document.getElementById(`catalogSelect_${index}`);
         if (catBadge && catSelect && catSelect.selectedIndex > 0) {
             catBadge.textContent = catSelect.options[catSelect.selectedIndex].text;
@@ -595,11 +606,42 @@ function handleCatalogSelectChange(index) {
 function updateHierarchyBadgeFromCats(index) {
     const catalogSelect = document.getElementById(`catalogSelect_${index}`);
     const catalogBadge = document.getElementById(`catalogBadge_${index}`);
-    if (catalogSelect && catalogSelect.value) return;
 
     const catSelect = document.getElementById(`catSelect_${index}`);
     const subcatSelect = document.getElementById(`subcatSelect_${index}`);
     const subsubSelect = document.getElementById(`subsubSelect_${index}`);
+
+    if (catalogSelect && catalogSelect.value) {
+        const selOpt = catalogSelect.options[catalogSelect.selectedIndex];
+        if (catalogBadge && selOpt) {
+            catalogBadge.textContent = selOpt.text.trim();
+            catalogBadge.className = 'badge bg-primary text-white border-0 roll-catalog-badge';
+        }
+        return;
+    }
+
+    // Auto-match catalog from CATALOGS if 3-tier hierarchy matches
+    const subsubId = subsubSelect ? subsubSelect.value : '';
+    const subcatId = subcatSelect ? subcatSelect.value : '';
+    const catId = catSelect ? catSelect.value : '';
+
+    if (catalogSelect && typeof CATALOGS !== 'undefined' && CATALOGS.length > 0) {
+        let matched = null;
+        if (subsubId) {
+            matched = CATALOGS.find(c => String(c.sub_sub_category_id) === String(subsubId));
+        }
+        if (!matched && subcatId && catId) {
+            matched = CATALOGS.find(c => String(c.subcategory_id) === String(subcatId) && String(c.category_id) === String(catId));
+        }
+        if (matched) {
+            catalogSelect.value = matched.id;
+            if (catalogBadge) {
+                catalogBadge.textContent = `${matched.style_code ? '[' + matched.style_code + '] ' : ''}${matched.name}`;
+                catalogBadge.className = 'badge bg-primary text-white border-0 roll-catalog-badge';
+            }
+            return;
+        }
+    }
 
     const c1 = catSelect && catSelect.selectedIndex > 0 ? catSelect.options[catSelect.selectedIndex].text : '';
     const c2 = subcatSelect && subcatSelect.selectedIndex > 0 ? subcatSelect.options[subcatSelect.selectedIndex].text : '';
@@ -691,7 +733,10 @@ function loadSubcategoriesForRoll(index, preselectedSubId = null, preselectedSub
     subSelect.innerHTML = '<option value="">-- Subcategory --</option>';
     subSubSelect.innerHTML = '<option value="">-- Sub-Subcategory --</option>';
 
-    if (!catId) return;
+    if (!catId) {
+        updateHierarchyBadgeFromCats(index);
+        return;
+    }
 
     fetch(`<?= \App\Core\Controller::url('/api/categories/subcategories?category_id=') ?>${catId}`)
         .then(r => r.json())
@@ -704,7 +749,11 @@ function loadSubcategoriesForRoll(index, preselectedSubId = null, preselectedSub
                 });
                 if (preselectedSubId) {
                     loadSubSubcategoriesForRoll(index, preselectedSubSubId);
+                } else {
+                    updateHierarchyBadgeFromCats(index);
                 }
+            } else {
+                updateHierarchyBadgeFromCats(index);
             }
         });
 }
@@ -715,7 +764,10 @@ function loadSubSubcategoriesForRoll(index, preselectedSubSubId = null) {
     const subId = subSelect.value;
 
     subSubSelect.innerHTML = '<option value="">-- Sub-Subcategory --</option>';
-    if (!subId) return;
+    if (!subId) {
+        updateHierarchyBadgeFromCats(index);
+        return;
+    }
 
     fetch(`<?= \App\Core\Controller::url('/api/categories/subsubcategories?subcategory_id=') ?>${subId}`)
         .then(r => r.json())
@@ -727,6 +779,7 @@ function loadSubSubcategoriesForRoll(index, preselectedSubSubId = null) {
                     subSubSelect.innerHTML += `<option value="${item.id}" ${sel}>${item.name}</option>`;
                 });
             }
+            updateHierarchyBadgeFromCats(index);
         });
 }
 
