@@ -954,6 +954,7 @@ class ProductionController extends Controller {
         $type = strtolower(trim($_POST['attribute_type'] ?? 'size'));
         $val = trim($_POST['attribute_value'] ?? '');
         $name = trim($_POST['attribute_name'] ?? ucfirst($type));
+        $actionMode = trim($_POST['action_mode'] ?? '');
 
         if (empty($val)) {
             echo json_encode(['success' => false, 'message' => 'Attribute value cannot be empty.']);
@@ -968,6 +969,17 @@ class ProductionController extends Controller {
             [$type, $val, $cid]
         );
         if ($existing) {
+            if ($actionMode === 'style_builder') {
+                echo json_encode([
+                    'success' => true, 
+                    'id' => (int)$existing['id'], 
+                    'attribute_type' => $type, 
+                    'attribute_value' => $existing['attribute_value'], 
+                    'already_existed' => true,
+                    'message' => "Attribute '{$existing['attribute_value']}' selected."
+                ]);
+                exit;
+            }
             echo json_encode([
                 'success' => false, 
                 'message' => "Attribute '{$existing['attribute_value']}' already exists for '" . ucfirst($type) . "'.",
@@ -990,6 +1002,31 @@ class ProductionController extends Controller {
                 'attribute_value' => $val, 
                 'message' => "Attribute '{$val}' added successfully."
             ]);
+        } catch (Exception $e) {
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    public function deleteAttributeAjax(): void {
+        header('Content-Type: application/json');
+        $cid = Auth::concernId() ?: 1;
+        $type = strtolower(trim($_POST['attribute_type'] ?? 'size'));
+        $val = trim($_POST['attribute_value'] ?? '');
+
+        if (empty($val)) {
+            echo json_encode(['success' => false, 'message' => 'Attribute value is required.']);
+            exit;
+        }
+
+        try {
+            DB::query(
+                "DELETE FROM product_attributes 
+                 WHERE attribute_type = ? AND LOWER(TRIM(attribute_value)) = LOWER(TRIM(?)) 
+                 AND (concern_id = ? OR concern_id = 1 OR concern_id IS NULL)",
+                [$type, $val, $cid]
+            );
+            echo json_encode(['success' => true, 'message' => "Attribute '{$val}' deleted successfully."]);
         } catch (Exception $e) {
             echo json_encode(['success' => false, 'message' => $e->getMessage()]);
         }

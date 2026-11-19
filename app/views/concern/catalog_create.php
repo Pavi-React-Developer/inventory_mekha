@@ -30,7 +30,6 @@ if (!$isEdit) {
             </div>
             <div>
                 <h4 class="fw-bold mb-0 text-dark"><?= $isEdit ? 'Edit Product Style' : 'Add Product Style' ?></h4>
-                <p class="text-secondary small mb-0">Configure multi-tier garment categorization, QR barcodes, and size variant attributes.</p>
             </div>
         </div>
         <div>
@@ -773,8 +772,20 @@ document.addEventListener('DOMContentLoaded', function() {
             removeBtn.onclick = function(e) {
                 e.preventDefault();
                 e.stopPropagation();
+                const sizeVal = (wrapper.getAttribute('data-size') || '').trim();
                 wrapper.remove();
                 validateSizes(false);
+
+                // Delete from product_attributes in database via AJAX
+                if (sizeVal) {
+                    const fd = new FormData();
+                    fd.append('attribute_type', 'size');
+                    fd.append('attribute_value', sizeVal);
+                    fetch('<?= \App\Core\Controller::url('/api/attributes/delete') ?>', {
+                        method: 'POST',
+                        body: fd
+                    }).catch(err => console.error('Failed to delete attribute:', err));
+                }
             };
         });
     }
@@ -848,18 +859,20 @@ document.addEventListener('DOMContentLoaded', function() {
         fd.append('attribute_type', 'size');
         fd.append('attribute_value', val);
         fd.append('attribute_name', 'Size');
+        fd.append('action_mode', 'style_builder');
 
         fetch('<?= \App\Core\Controller::url('/api/attributes/quick-add') ?>', { method: 'POST', body: fd })
             .then(r => r.json())
             .then(res => {
                 if (res.success) {
+                    const chipVal = res.attribute_value || val;
                     const div = document.createElement('div');
                     div.className = 'size-chip-wrapper';
-                    div.setAttribute('data-size', val);
+                    div.setAttribute('data-size', chipVal);
                     div.innerHTML = `
                         <label class="size-chip active">
-                            <input type="checkbox" name="sizes[]" value="${val}" class="size-checkbox" checked>
-                            <span class="size-label">${val}</span>
+                            <input type="checkbox" name="sizes[]" value="${chipVal}" class="size-checkbox" checked>
+                            <span class="size-label">${chipVal}</span>
                             <button type="button" class="btn-remove-size" title="Remove size"><i class="bi bi-trash"></i></button>
                         </label>
                     `;

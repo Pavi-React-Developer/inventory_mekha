@@ -249,6 +249,7 @@ $router->post('/api/categories/quick-add', [ProductionController::class, 'quickA
 $router->post('/api/subcategories/quick-add', [ProductionController::class, 'quickAddSubcategoryAjax'], 'catalog_program', 'add');
 $router->post('/api/subsubcategories/quick-add', [ProductionController::class, 'quickAddSubSubcategoryAjax'], 'catalog_program', 'add');
 $router->post('/api/attributes/quick-add', [ProductionController::class, 'quickAddAttributeAjax'], 'catalog_program', 'add');
+$router->post('/api/attributes/delete', [ProductionController::class, 'deleteAttributeAjax'], 'catalog_program', 'delete');
 $router->get('/api/hsn/search', [ProductionController::class, 'searchHsnAjax'], 'catalog_program', 'view');
 $router->post('/api/hsn/quick-add', [ProductionController::class, 'quickAddHsnAjax'], 'catalog_program', 'add');
 $router->get('/api/catalog/style-details', [ProductionController::class, 'styleDetailsAjax'], 'catalog_program', 'view');
