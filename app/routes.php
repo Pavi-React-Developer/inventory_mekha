@@ -262,6 +262,8 @@ $router->get('/production/cutting/wastage', [ProductionController::class, 'cutti
 $router->get('/production/wastage-selling', [ProductionController::class, 'cuttingWastageIndex'], 'cutting_wastage', 'view');
 $router->post('/production/cutting/wastage/sell', [ProductionController::class, 'storeWastageSale'], 'cutting_wastage', 'add');
 $router->post('/production/wastage-selling/store', [ProductionController::class, 'storeWastageSale'], 'cutting_wastage', 'add');
+$router->post('/production/cutting/wastage/delete', [ProductionController::class, 'deleteWastageSale'], 'cutting_wastage', 'delete');
+$router->post('/production/wastage-selling/delete', [ProductionController::class, 'deleteWastageSale'], 'cutting_wastage', 'delete');
 
 // Stitching & Wastage Flow (Matching UI Images 1, 2, 3)
 $router->get('/production/stitching', [ProductionController::class, 'stitchingIndex'], 'stitching_wastage', 'view');

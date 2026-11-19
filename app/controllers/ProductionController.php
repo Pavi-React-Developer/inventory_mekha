@@ -2709,26 +2709,75 @@ class ProductionController extends Controller {
             $this->redirect('/production/cutting');
         }
 
-        // Check if wastage has already been sold
-        $salesCount = DB::fetch("SELECT COUNT(*) AS c FROM cutting_wastage_sales WHERE cutting_id = ?", [$id]);
-        if (!empty($salesCount['c']) && (int)$salesCount['c'] > 0) {
-            $this->flash('error', 'Cannot delete this cutting batch because wastage scrap sales have already been recorded against it.');
-            $this->redirect('/production/cutting');
-        }
+        // Count associated wastage scrap sales
+        $salesCount = (int)DB::fetchValue("SELECT COUNT(*) FROM cutting_wastage_sales WHERE cutting_id = ?", [$id]);
 
         DB::beginTransaction();
         try {
+            // Delete associated wastage sales if any exist
+            if ($salesCount > 0) {
+                DB::query("DELETE FROM cutting_wastage_sales WHERE cutting_id = ?", [$id]);
+            }
+
+            // Unlink downstream stitching logs if any
+            DB::query("UPDATE stitching_items SET cutting_item_id = NULL WHERE cutting_item_id IN (SELECT id FROM cutting_items WHERE cutting_id = ?)", [$id]);
+            DB::query("UPDATE stitching_logs SET cutting_id = NULL WHERE cutting_id = ?", [$id]);
+
+            // Delete cutting items and the cutting batch
             DB::query("DELETE FROM cutting_items WHERE cutting_id = ?", [$id]);
             DB::query("DELETE FROM cutting_logs WHERE id = ?", [$id]);
             AuditLog::log('DELETE', 'cutting_logs', $id, $batch, null);
             DB::commit();
-            $this->flash('success', "Cutting Batch '{$batch['batch_no']}' deleted successfully.");
+
+            $msg = "Cutting Batch '{$batch['batch_no']}'" . ($salesCount > 0 ? " and its {$salesCount} associated wastage scrap sale(s)" : "") . " deleted successfully.";
+            $this->flash('success', $msg);
         } catch (Exception $e) {
             DB::rollBack();
             $this->flash('error', 'Failed to delete cutting batch: ' . $e->getMessage());
         }
 
         $this->redirect('/production/cutting');
+    }
+
+    /**
+     * Delete Individual Wastage Scrap Sale
+     */
+    public function deleteWastageSale(): void {
+        $this->ensureCuttingSchema();
+        $this->validateCsrf();
+        $cid = Auth::concernId();
+        $id = (int)($_POST['id'] ?? 0);
+
+        if (!$id) {
+            $this->flash('error', 'Invalid scrap sale ID.');
+            $this->redirect('/production/cutting?tab=wastage');
+        }
+
+        $sale = DB::fetch("SELECT * FROM cutting_wastage_sales WHERE id = ?" . ($cid ? " AND concern_id = ?" : ""), $cid ? [$id, $cid] : [$id]);
+        if (!$sale) {
+            $this->flash('error', 'Scrap sale not found or access denied.');
+            $this->redirect('/production/cutting?tab=wastage');
+        }
+
+        DB::beginTransaction();
+        try {
+            DB::query("DELETE FROM cutting_wastage_sales WHERE id = ?", [$id]);
+            // Restore sold wastage weight back to available scrap in cutting_logs
+            if (!empty($sale['cutting_id']) && !empty($sale['wastage_weight'])) {
+                DB::query("UPDATE cutting_logs SET sold_wastage_qty = GREATEST(0, COALESCE(sold_wastage_qty, 0) - ?) WHERE id = ?", [
+                    (float)$sale['wastage_weight'],
+                    (int)$sale['cutting_id']
+                ]);
+            }
+            AuditLog::log('DELETE', 'cutting_wastage_sales', $id, $sale, null);
+            DB::commit();
+            $this->flash('success', "Scrap Sale '{$sale['sale_no']}' deleted successfully and scrap weight restored to batch.");
+        } catch (Exception $e) {
+            DB::rollBack();
+            $this->flash('error', 'Failed to delete scrap sale: ' . $e->getMessage());
+        }
+
+        $this->redirect('/production/cutting?tab=wastage');
     }
 
     /**

@@ -124,12 +124,13 @@
                             <th class="text-end">Total Price</th>
                             <th class="text-end">Received</th>
                             <th>Date</th>
+                            <th class="text-center pe-3" style="width: 80px;">Action</th>
                         </tr>
                     </thead>
                     <tbody class="small">
                         <?php if (empty($scrapSales)): ?>
                             <tr>
-                                <td colspan="9" class="text-center py-5 text-muted">
+                                <td colspan="10" class="text-center py-5 text-muted">
                                     <i class="bi bi-inbox fs-2 d-block mb-2 text-secondary"></i>
                                     No scrap sales recorded yet. Click <strong>"Record Scrap Sale"</strong> to sell accumulated cutting wastage.
                                 </td>
@@ -167,6 +168,12 @@
                                     </td>
                                     <td class="text-muted font-monospace">
                                         <?= date('d M Y', strtotime($s['sale_date'])) ?>
+                                    </td>
+                                    <td class="text-center pe-3">
+                                        <button type="button" class="btn btn-sm btn-outline-danger p-1 rounded-3" title="Delete Scrap Sale"
+                                                onclick="confirmDeleteScrapSale(<?= $s['id'] ?>, '<?= htmlspecialchars(addslashes($s['sale_no'])) ?>', '<?= number_format($s['total_price'], 2) ?>')">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
@@ -278,14 +285,10 @@
                                                     <i class="bi bi-recycle"></i>
                                                 </button>
                                             <?php endif; ?>
-                                            <form action="<?= \App\Core\Controller::url('/production/cutting/delete') ?>" method="POST" class="d-inline"
-                                                  onsubmit="return confirm('Are you sure you want to delete cutting batch <?= htmlspecialchars($bNo) ?>?');">
-                                                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
-                                                <input type="hidden" name="id" value="<?= $b['id'] ?>">
-                                                <button type="submit" class="btn btn-outline-danger" title="Delete">
-                                                    <i class="bi bi-trash"></i>
-                                                </button>
-                                            </form>
+                                            <button type="button" class="btn btn-outline-danger" title="Delete Cutting Batch"
+                                                    onclick="confirmDeleteCutting(<?= $b['id'] ?>, '<?= htmlspecialchars(addslashes($bNo)) ?>', <?= (float)($b['sold_wastage_qty'] ?? 0) ?>)">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
                                         </div>
                                     </td>
                                 </tr>
@@ -297,6 +300,65 @@
         </div>
     <?php endif; ?>
 
+</div>
+
+<!-- CONFIRM DELETE CUTTING BATCH MODAL -->
+<div class="modal fade" id="modalDeleteCutting" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <form action="<?= \App\Core\Controller::url('/production/cutting/delete') ?>" method="POST" class="modal-content border-0 shadow">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken ?? '') ?>">
+            <input type="hidden" name="id" id="deleteCuttingId" value="">
+            <div class="modal-header bg-danger text-white">
+                <h6 class="modal-title fw-bold"><i class="bi bi-exclamation-triangle-fill me-2"></i> Delete Cutting Batch</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4 text-center">
+                <i class="bi bi-trash3 text-danger fs-1 mb-3 d-block"></i>
+                <h5 class="fw-bold text-dark mb-2" id="deleteCuttingTitle">Delete Cutting Batch?</h5>
+                <div class="badge bg-dark font-monospace fs-6 mb-3" id="deleteCuttingCode"></div>
+                
+                <div id="deleteCuttingWastageWarning" class="alert alert-warning text-start small border-warning-subtle mb-3 d-none">
+                    <i class="bi bi-exclamation-triangle-fill text-warning me-1"></i>
+                    <strong>Notice:</strong> Wastage scrap sales have already been recorded against this cutting batch. Deleting this cutting batch will also remove its associated scrap sales records.
+                </div>
+
+                <p class="text-secondary small mb-0">
+                    Are you sure you want to delete this cutting batch? This action will permanently remove the cutting batch, its item breakdowns, and associated wastage records.
+                </p>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-danger btn-sm px-3"><i class="bi bi-trash me-1"></i> Confirm Delete</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- CONFIRM DELETE SCRAP SALE MODAL -->
+<div class="modal fade" id="modalDeleteScrapSale" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <form action="<?= \App\Core\Controller::url('/production/cutting/wastage/delete') ?>" method="POST" class="modal-content border-0 shadow">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken ?? '') ?>">
+            <input type="hidden" name="id" id="deleteScrapSaleId" value="">
+            <div class="modal-header bg-danger text-white">
+                <h6 class="modal-title fw-bold"><i class="bi bi-trash3 me-2"></i> Delete Scrap Sale</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4 text-center">
+                <i class="bi bi-exclamation-circle text-danger fs-1 mb-3 d-block"></i>
+                <h5 class="fw-bold text-dark mb-2">Delete Scrap Sale?</h5>
+                <div class="badge bg-dark font-monospace fs-6 mb-2" id="deleteScrapSaleCode"></div>
+                <div class="text-success fw-bold font-monospace fs-5 mb-3" id="deleteScrapSaleAmount"></div>
+                <p class="text-secondary small mb-0">
+                    Are you sure you want to delete this wastage scrap sale? The sold wastage quantity will be returned to available scrap.
+                </p>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-danger btn-sm px-3"><i class="bi bi-trash me-1"></i> Delete Sale</button>
+            </div>
+        </form>
+    </div>
 </div>
 
 <!-- ======================================================== -->
@@ -602,4 +664,26 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 });
+
+function confirmDeleteCutting(id, code, soldWastage) {
+    document.getElementById('deleteCuttingId').value = id;
+    document.getElementById('deleteCuttingCode').textContent = code;
+    document.getElementById('deleteCuttingTitle').textContent = `Delete Batch "${code}"?`;
+
+    const warnEl = document.getElementById('deleteCuttingWastageWarning');
+    if (parseFloat(soldWastage || 0) > 0) {
+        warnEl.classList.remove('d-none');
+    } else {
+        warnEl.classList.add('d-none');
+    }
+
+    new bootstrap.Modal(document.getElementById('modalDeleteCutting')).show();
+}
+
+function confirmDeleteScrapSale(id, code, amt) {
+    document.getElementById('deleteScrapSaleId').value = id;
+    document.getElementById('deleteScrapSaleCode').textContent = code;
+    document.getElementById('deleteScrapSaleAmount').textContent = '₹' + amt;
+    new bootstrap.Modal(document.getElementById('modalDeleteScrapSale')).show();
+}
 </script>
