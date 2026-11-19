@@ -5,16 +5,6 @@
             <p class="text-secondary small mb-0">Create new business concerns, toggle licensed modules, and configure tenant isolation.</p>
         </div>
         <div class="d-flex align-items-center gap-2">
-            <div class="dropdown">
-                <button class="btn btn-outline-secondary dropdown-toggle shadow-sm" type="button" data-bs-toggle="dropdown">
-                    <i class="bi bi-file-earmark-arrow-down me-1"></i> Creation Template
-                </button>
-                <ul class="dropdown-menu dropdown-menu-end shadow-sm">
-                    <li><h6 class="dropdown-header small text-muted">Offline Concern Creation</h6></li>
-                    <li><a class="dropdown-item small" href="<?= \App\Core\Controller::url('/admin/concerns/template?format=excel') ?>"><i class="bi bi-file-earmark-excel text-success me-2"></i>Excel Template (.xls)</a></li>
-                    <li><a class="dropdown-item small" href="<?= \App\Core\Controller::url('/admin/concerns/template?format=csv') ?>"><i class="bi bi-file-earmark-text text-primary me-2"></i>CSV Template</a></li>
-                </ul>
-            </div>
             <button class="btn btn-primary shadow-sm" data-bs-toggle="modal" data-bs-target="#modalCreateConcern">
                 <i class="bi bi-plus-circle me-1"></i> Create New Concern
             </button>
@@ -79,22 +69,8 @@
                             </td>
                             <td class="text-end">
                                 <div class="d-inline-flex align-items-center gap-1">
-                                    <div class="dropdown d-inline">
-                                        <button class="btn btn-sm btn-outline-success dropdown-toggle" type="button" data-bs-toggle="dropdown" title="Download Concern Creation Dossier">
-                                            <i class="bi bi-download"></i> Dossier
-                                        </button>
-                                        <ul class="dropdown-menu dropdown-menu-end shadow-sm">
-                                            <li><h6 class="dropdown-header small text-muted">Concern Creation Dossier</h6></li>
-                                            <li><a class="dropdown-item small" href="<?= \App\Core\Controller::url('/admin/concerns/download?id=' . $c['id'] . '&format=pdf') ?>" target="_blank"><i class="bi bi-file-earmark-pdf text-danger me-2"></i>Print / PDF Dossier</a></li>
-                                            <li><a class="dropdown-item small" href="<?= \App\Core\Controller::url('/admin/concerns/download?id=' . $c['id'] . '&format=excel') ?>"><i class="bi bi-file-earmark-excel text-success me-2"></i>Excel Dossier (.xls)</a></li>
-                                            <li><a class="dropdown-item small" href="<?= \App\Core\Controller::url('/admin/concerns/download?id=' . $c['id'] . '&format=csv') ?>"><i class="bi bi-file-earmark-text text-primary me-2"></i>CSV Dossier</a></li>
-                                        </ul>
-                                    </div>
                                     <button type="button" class="btn btn-sm btn-outline-info" onclick='openViewConcernModal(<?= json_encode($c, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>)' title="View Concern Details">
                                         <i class="bi bi-eye"></i>
-                                    </button>
-                                    <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalModules<?= $c['id'] ?>" title="Manage Modules">
-                                        <i class="bi bi-toggles"></i> Modules
                                     </button>
                                     <button type="button" class="btn btn-sm btn-outline-secondary" onclick='openEditConcernModal(<?= json_encode($c, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>)' title="Edit Concern Profile">
                                         <i class="bi bi-pencil"></i>

@@ -1,9 +1,10 @@
 <?php
 // Group operational modules to match Images 1 & 2 hierarchy exactly
-$groupOrder = ['Dashboard', 'Purchase', 'Production', 'Stock', 'Sales', 'Shop', 'Finance', 'Masters', 'Staff'];
+$groupOrder = ['Dashboard', 'Purchase', 'Production', 'Stock', 'Sales', 'Shop', 'Finance', 'Staff'];
 $groupedModules = [];
 foreach ($modules as $m) {
     if ($m['code'] === 'cash') continue; // Unified under 'Cash & Cash Flow' (cash_flow)
+    if ($m['code'] === 'variants' || $m['group_name'] === 'Masters') continue;
     $grp = $m['group_name'] ?: 'General';
     $groupedModules[$grp][] = $m;
 }
@@ -365,7 +366,6 @@ foreach ($modules as $m) {
                                                     <div class="d-flex align-items-center gap-2">
                                                         <i class="bi <?= htmlspecialchars($m['icon'] ?: 'bi-app') ?> text-primary fs-6"></i>
                                                         <span class="fw-semibold text-dark" style="font-size: 0.84rem;"><?= htmlspecialchars($m['name']) ?></span>
-                                                        <span class="badge bg-light text-secondary border font-monospace ms-auto concern-mod-badge-<?= $mid ?>" style="font-size: 0.62rem;">Active Concern Module</span>
                                                     </div>
                                                 </td>
                                                 <!-- View -->
@@ -471,12 +471,9 @@ function updateHeaderCheckboxesState() {
         totalAllCount += cbs.length;
         allCheckedCount += checkedCount;
 
-        if (checkedCount === cbs.length) {
+        if (checkedCount === cbs.length && cbs.length > 0) {
             headerCb.checked = true;
             headerCb.indeterminate = false;
-        } else if (checkedCount > 0) {
-            headerCb.checked = false;
-            headerCb.indeterminate = true;
         } else {
             headerCb.checked = false;
             headerCb.indeterminate = false;
@@ -485,16 +482,8 @@ function updateHeaderCheckboxesState() {
 
     const masterCb = document.getElementById('header_master_check_all');
     if (masterCb && totalAllCount > 0) {
-        if (allCheckedCount === totalAllCount) {
-            masterCb.checked = true;
-            masterCb.indeterminate = false;
-        } else if (allCheckedCount > 0) {
-            masterCb.checked = false;
-            masterCb.indeterminate = true;
-        } else {
-            masterCb.checked = false;
-            masterCb.indeterminate = false;
-        }
+        masterCb.checked = (allCheckedCount === totalAllCount && totalAllCount > 0);
+        masterCb.indeterminate = false;
     }
 }
 
@@ -517,28 +506,7 @@ function onPrimaryConcernChanged(selectedCid) {
         if (box) {
             box.classList.add('border-primary', 'bg-light');
         }
-
-        // Update concern module badges in matrix
-        updateConcernModulesBadges(selectedCid);
     }
-}
-
-function updateConcernModulesBadges(cid) {
-    if (!cid || !window.concernModules) return;
-    const enabledIds = window.concernModules[cid] || [];
-    document.querySelectorAll('.matrix-mod-row').forEach(row => {
-        const mid = parseInt(row.dataset.mid, 10);
-        const badge = row.querySelector('.concern-mod-badge-' + mid);
-        if (badge) {
-            if (enabledIds.length > 0 && enabledIds.includes(mid)) {
-                badge.className = 'badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 font-monospace ms-auto concern-mod-badge-' + mid;
-                badge.innerText = 'Concern Active';
-            } else if (enabledIds.length > 0) {
-                badge.className = 'badge bg-secondary bg-opacity-10 text-secondary border font-monospace ms-auto concern-mod-badge-' + mid;
-                badge.innerText = 'Not Enabled';
-            }
-        }
-    });
 }
 
 function onRoleChangedInCreate(roleId) {

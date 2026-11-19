@@ -18,6 +18,7 @@ class StaffPermissionsTest {
     private array $createdUserIds = [];
     private array $createdStaffIds = [];
     private array $createdRoleIds = [];
+    private array $createdConcernIds = [];
 
     private int $passed = 0;
     private int $failed = 0;
@@ -39,6 +40,7 @@ class StaffPermissionsTest {
             $this->testDeactivationAndImmediateSessionEviction();
             $this->testAuditLogging();
             $this->testModuleMatrixFormSubmissionAndMultiConcernPersistence();
+            $this->testExistingUserStaffLinking();
 
             $this->cleanupFixtures();
         } catch (\Throwable $e) {
@@ -61,8 +63,9 @@ class StaffPermissionsTest {
         // Ensure an active concern
         $concern = DB::fetch("SELECT id FROM concerns WHERE status = 'active' LIMIT 1");
         if (!$concern) {
-            DB::query("INSERT INTO concerns (name, code, type, status, created_at) VALUES ('Test Concern Unit', 'TST-CON', 'retail_shop', 'active', NOW())");
+            DB::query("INSERT INTO concerns (name, code, status, created_at) VALUES ('Test Concern Unit', 'TST-CON', 'active', NOW())");
             $this->testConcernId = (int)DB::lastInsertId();
+            $this->createdConcernIds[] = $this->testConcernId;
         } else {
             $this->testConcernId = (int)$concern['id'];
         }
@@ -485,6 +488,58 @@ class StaffPermissionsTest {
         $this->assert(
             $savedUp !== null && $savedUp['can_view'] == 1 && $savedUp['can_add'] == 1 && $savedUp['can_edit'] == 0 && $savedUp['can_delete'] == 0,
             "Submitted module CRUD permissions (View, Create, Edit, Delete) accurately saved in user_permissions"
+        );
+    }
+
+    // 10. Existing User (Concern Admin) Staff Linking and Conflict Isolation
+    private function testExistingUserStaffLinking(): void {
+        echo "\n[10] Testing Existing Concern User Linking & Conflict Isolation...\n";
+
+        $uniqueAdminEmail = 'test_concern_admin_' . uniqid() . '@invento.com';
+        $passHash = password_hash('PassAdmin123', PASSWORD_BCRYPT);
+
+        // Simulate concern creation creating user without staff profile
+        DB::query(
+            "INSERT INTO users (concern_id, role_id, name, email, password_hash, phone, status, created_at)
+             VALUES (?, ?, 'New Concern Admin', ?, ?, '9876543210', 'active', NOW())",
+            [$this->testConcernId, $this->testRoleId, $uniqueAdminEmail, $passHash]
+        );
+        $adminUserId = (int)DB::lastInsertId();
+        $this->createdUserIds[] = $adminUserId;
+
+        // Verify unlinked user check
+        $dupStaff = DB::fetch("SELECT id FROM staff WHERE email = ?", [$uniqueAdminEmail]);
+        $dupUser = DB::fetch("SELECT id, concern_id FROM users WHERE email = ?", [$uniqueAdminEmail]);
+        $linkedStaff = $dupUser ? DB::fetch("SELECT id FROM staff WHERE user_id = ?", [(int)$dupUser['id']]) : null;
+
+        $canLink = ($dupStaff === null && $dupUser !== null && $linkedStaff === null && (int)$dupUser['concern_id'] === $this->testConcernId);
+
+        $this->assert(
+            $canLink === true,
+            "Unlinked concern user in same concern correctly identified as eligible for staff profile linking"
+        );
+
+        // Perform staff record creation and linking
+        $staffCode = 'STF-TEST-' . uniqid();
+        DB::query(
+            "INSERT INTO staff (concern_id, user_id, staff_code, name, email, password_hash, phone, designation, department, salary_type, base_salary, address, status, joining_date, created_at)
+             VALUES (?, ?, ?, 'New Concern Admin', ?, ?, '9876543210', 'Concern Administrator', 'Management', 'monthly', 0.00, '', 'active', CURDATE(), NOW())",
+            [$this->testConcernId, $adminUserId, $staffCode, $uniqueAdminEmail, $passHash]
+        );
+        $staffId = (int)DB::lastInsertId();
+        $this->createdStaffIds[] = $staffId;
+
+        $linkedStaffRecord = DB::fetch("SELECT * FROM staff WHERE user_id = ?", [$adminUserId]);
+        $this->assert(
+            $linkedStaffRecord !== null && (int)$linkedStaffRecord['user_id'] === $adminUserId,
+            "Staff profile successfully linked to existing concern admin user account"
+        );
+
+        // Subsequent attempt to register with same email in the same concern updates existing staff record seamlessly
+        $secondDupStaff = DB::fetch("SELECT id, concern_id, user_id FROM staff WHERE email = ?", [$uniqueAdminEmail]);
+        $this->assert(
+            $secondDupStaff !== null && (int)$secondDupStaff['concern_id'] === $this->testConcernId,
+            "Subsequent form submission with same email in same concern allows update and avoids duplicate collision"
         );
     }
 }

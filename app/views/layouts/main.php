@@ -228,12 +228,13 @@
             $activeRoute = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
             $grouped = [];
             foreach ($sidebarModules as $m) {
+                if ($m['code'] === 'variants' || $m['group_name'] === 'Masters') continue;
                 $groupName = $m['code'] === 'catalog_mapping' ? 'Purchase' : $m['group_name'];
                 $grouped[$groupName][] = $m;
             }
 
             foreach ($grouped as $groupName => $mods):
-                if ($groupName === 'Staff') continue; // Rendered as the last module below Masters
+                if ($groupName === 'Staff' || $groupName === 'Masters') continue;
                 // If Finance group, merge 'cash' and 'cash_flow' into a single 'Cash & Cash Flow' module
                 if ($groupName === 'Finance') {
                     $hasCashOrFlow = false;
@@ -293,12 +294,6 @@
                     </a>
                 <?php endforeach; ?>
             <?php endforeach; ?>
-
-            <div class="nav-group-title">Masters</div>
-            <a href="<?= \App\Core\Controller::url('/m/variants') ?>" class="nav-link <?= (isset($currentModule) && $currentModule === 'variants') ? 'active' : '' ?>">
-                <i class="bi bi-tags"></i>
-                <span>Product Variants</span>
-            </a>
 
             <div class="nav-group-title">Staff</div>
             <a href="<?= \App\Core\Controller::url('/m/staff') ?>" class="nav-link <?= (isset($currentModule) && $currentModule === 'staff' && (empty($currentSubModule) || $currentSubModule === 'all')) ? 'active' : '' ?>">

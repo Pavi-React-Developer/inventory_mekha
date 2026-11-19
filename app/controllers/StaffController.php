@@ -220,16 +220,34 @@ class StaffController extends Controller {
             $this->redirect('/m/staff/create?concern_id=' . $cid);
         }
 
+        $existingStaffId = null;
+        $existingUserId = null;
         if ($email !== '') {
             if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
                 $this->flash('error', 'Please provide a valid email address.');
                 $this->redirect('/m/staff/create?concern_id=' . $cid);
             }
-            $dupUser = DB::fetch("SELECT id FROM users WHERE email = ?", [$email]);
-            $dupStaff = DB::fetch("SELECT id FROM staff WHERE email = ?", [$email]);
-            if ($dupUser || $dupStaff) {
-                $this->flash('error', "The email '{$email}' is already registered with another account.");
-                $this->redirect('/m/staff/create?concern_id=' . $cid);
+            $dupStaff = DB::fetch("SELECT id, concern_id, user_id FROM staff WHERE email = ?", [$email]);
+            if ($dupStaff) {
+                if ((int)$dupStaff['concern_id'] === $cid) {
+                    // This staff member already exists in THIS concern; update them seamlessly
+                    $existingStaffId = (int)$dupStaff['id'];
+                    if (!empty($dupStaff['user_id'])) {
+                        $existingUserId = (int)$dupStaff['user_id'];
+                    }
+                } else {
+                    $this->flash('error', "The email '{$email}' is already registered with another account.");
+                    $this->redirect('/m/staff/create?concern_id=' . $cid);
+                }
+            }
+            $dupUser = DB::fetch("SELECT id, concern_id FROM users WHERE email = ?", [$email]);
+            if ($dupUser) {
+                if ((int)$dupUser['concern_id'] === $cid) {
+                    $existingUserId = (int)$dupUser['id'];
+                } else {
+                    $this->flash('error', "The email '{$email}' is already registered with another account.");
+                    $this->redirect('/m/staff/create?concern_id=' . $cid);
+                }
             }
         }
 
@@ -240,7 +258,7 @@ class StaffController extends Controller {
                 $this->redirect('/m/staff/create?concern_id=' . $cid);
             }
             $dupPhone = DB::fetch("SELECT id FROM staff WHERE phone = ? AND concern_id = ?", [$phone, $cid]);
-            if ($dupPhone) {
+            if ($dupPhone && (!$existingStaffId || (int)$dupPhone['id'] !== $existingStaffId)) {
                 $this->flash('error', "A staff member with phone number '{$phone}' already exists in this concern.");
                 $this->redirect('/m/staff/create?concern_id=' . $cid);
             }
@@ -265,8 +283,62 @@ class StaffController extends Controller {
                 $concernIds[] = $cid;
             }
 
-            // If email and password (or role) provided, create login user account
-            if ($email !== '' && ($passwordHash || $selectedRole)) {
+            // If user already exists in this concern without staff link (e.g. concern admin), update and reuse
+            if ($existingUserId) {
+                $userId = $existingUserId;
+                $roleId = $selectedRole ?: (int)DB::fetchValue("SELECT role_id FROM users WHERE id = ?", [$userId]);
+                if (!$roleId) {
+                    $roleId = (int)DB::fetchValue("SELECT id FROM roles WHERE concern_id = ? LIMIT 1", [$cid]);
+                }
+                if (!$roleId) {
+                    $roleId = (int)DB::fetchValue("SELECT id FROM roles WHERE id != 1 LIMIT 1") ?: 3;
+                }
+                $uSql = "UPDATE users SET name = ?, concern_id = ?, phone = ?, status = ?, role_id = ?";
+                $uParams = [$name, $cid, $phone, $status, $roleId];
+                if ($passwordHash) {
+                    $uSql .= ", password_hash = ?";
+                    $uParams[] = $passwordHash;
+                }
+                $uSql .= " WHERE id = ?";
+                $uParams[] = $userId;
+                DB::query($uSql, $uParams);
+
+                $stmtUc = DB::pdo()->prepare("INSERT IGNORE INTO user_concerns (user_id, concern_id) VALUES (?, ?)");
+                foreach ($concernIds as $authCid) {
+                    if ($authCid > 0) {
+                        $stmtUc->execute([$userId, $authCid]);
+                    }
+                }
+
+                // Save module-level CRUD permissions (View, Create, Edit, Delete) for this staff account
+                if (!empty($_POST['perms'])) {
+                    $stmtUp = DB::pdo()->prepare(
+                        "INSERT INTO user_permissions (user_id, module_id, can_view, can_add, can_edit, can_delete)
+                         VALUES (?, ?, ?, ?, ?, ?)
+                         ON DUPLICATE KEY UPDATE can_view = VALUES(can_view), can_add = VALUES(can_add), can_edit = VALUES(can_edit), can_delete = VALUES(can_delete)"
+                    );
+                    $allMods = DB::fetchAll("SELECT id, code FROM modules WHERE is_super_admin_only = 0");
+                    $perms = (array)$_POST['perms'];
+                    // Auto-mirror cash_flow permissions to cash module for transparent consistency
+                    $cashModId = null;
+                    $cashFlowModId = null;
+                    foreach ($allMods as $m) {
+                        if ($m['code'] === 'cash') $cashModId = (int)$m['id'];
+                        if ($m['code'] === 'cash_flow') $cashFlowModId = (int)$m['id'];
+                    }
+                    if ($cashModId && $cashFlowModId && isset($perms[$cashFlowModId])) {
+                        $perms[$cashModId] = $perms[$cashFlowModId];
+                    }
+                    foreach ($allMods as $m) {
+                        $mid = (int)$m['id'];
+                        $v = !empty($perms[$mid]['view']) ? 1 : 0;
+                        $a = !empty($perms[$mid]['add']) ? 1 : 0;
+                        $e = !empty($perms[$mid]['edit']) ? 1 : 0;
+                        $d = !empty($perms[$mid]['delete']) ? 1 : 0;
+                        $stmtUp->execute([$userId, $mid, $v, $a, $e, $d]);
+                    }
+                }
+            } elseif ($email !== '' && ($passwordHash || $selectedRole)) {
                 $passHash = $passwordHash ?: password_hash('password123', PASSWORD_BCRYPT);
                 $roleId = $selectedRole ?: (int)DB::fetchValue("SELECT id FROM roles WHERE concern_id = ? LIMIT 1", [$cid]);
                 if (!$roleId) {
@@ -317,26 +389,57 @@ class StaffController extends Controller {
                 }
             }
 
-            DB::query(
-                "INSERT INTO staff (concern_id, user_id, staff_code, name, email, password_hash, phone, designation, department, salary_type, base_salary, address, status, joining_date, created_by, created_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())",
-                [$cid, $userId, $staffCode, $name, $email, $passwordHash, $phone, $designation, $department, $salaryType, $baseSalary, $address, $status, $joiningDate, Auth::id()]
-            );
-            $staffId = (int)DB::lastInsertId();
+            if ($existingStaffId) {
+                $sSql = "UPDATE staff SET concern_id = ?, user_id = ?, name = ?, email = ?, phone = ?, designation = ?, department = ?, salary_type = ?, base_salary = ?, address = ?, status = ?, joining_date = ?";
+                $sParams = [$cid, $userId, $name, $email, $phone, $designation, $department, $salaryType, $baseSalary, $address, $status, $joiningDate];
+                if ($passwordHash) {
+                    $sSql .= ", password_hash = ?";
+                    $sParams[] = $passwordHash;
+                }
+                if ($staffCode) {
+                    $sSql .= ", staff_code = ?";
+                    $sParams[] = $staffCode;
+                }
+                $sSql .= " WHERE id = ?";
+                $sParams[] = $existingStaffId;
+                DB::query($sSql, $sParams);
+                $staffId = $existingStaffId;
 
-            AuditLog::record(
-                $cid,
-                'staff',
-                $staffId,
-                'STAFF_CREATE',
-                null,
-                ['name' => $name, 'staff_code' => $staffCode, 'email' => $email, 'phone' => $phone, 'status' => $status, 'user_id' => $userId],
-                "Registered staff member {$name} [{$staffCode}]"
-            );
+                AuditLog::record(
+                    $cid,
+                    'staff',
+                    $staffId,
+                    'STAFF_UPDATE',
+                    null,
+                    ['name' => $name, 'staff_code' => $staffCode, 'email' => $email, 'phone' => $phone, 'status' => $status, 'user_id' => $userId],
+                    "Updated staff member {$name} [{$staffCode}]"
+                );
 
-            DB::commit();
-            $this->flash('success', "Staff member '{$name}' [{$staffCode}] registered successfully.");
-            $this->redirect('/m/staff?concern_id=' . $cid);
+                DB::commit();
+                $this->flash('success', "Staff member '{$name}' [{$staffCode}] updated successfully.");
+                $this->redirect('/m/staff?concern_id=' . $cid);
+            } else {
+                DB::query(
+                    "INSERT INTO staff (concern_id, user_id, staff_code, name, email, password_hash, phone, designation, department, salary_type, base_salary, address, status, joining_date, created_by, created_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())",
+                    [$cid, $userId, $staffCode, $name, $email, $passwordHash, $phone, $designation, $department, $salaryType, $baseSalary, $address, $status, $joiningDate, Auth::id()]
+                );
+                $staffId = (int)DB::lastInsertId();
+
+                AuditLog::record(
+                    $cid,
+                    'staff',
+                    $staffId,
+                    'STAFF_CREATE',
+                    null,
+                    ['name' => $name, 'staff_code' => $staffCode, 'email' => $email, 'phone' => $phone, 'status' => $status, 'user_id' => $userId],
+                    "Registered staff member {$name} [{$staffCode}]"
+                );
+
+                DB::commit();
+                $this->flash('success', "Staff member '{$name}' [{$staffCode}] registered successfully.");
+                $this->redirect('/m/staff?concern_id=' . $cid);
+            }
         } catch (Exception $e) {
             DB::rollBack();
             $this->flash('error', 'Failed to register staff: ' . $e->getMessage());

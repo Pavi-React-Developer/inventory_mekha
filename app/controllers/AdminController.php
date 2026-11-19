@@ -200,6 +200,27 @@ class AdminController extends Controller {
                 "INSERT INTO users (concern_id, role_id, name, email, password_hash, phone, status) VALUES (?, ?, ?, ?, ?, ?, 'active')",
                 [$concernId, $roleId, $adminName, $adminEmail, $passwordHash, $phone !== '' ? $phone : null]
             );
+            $adminUserId = (int)DB::lastInsertId();
+
+            DB::query("INSERT IGNORE INTO user_concerns (user_id, concern_id) VALUES (?, ?)", [$adminUserId, $concernId]);
+
+            // 5b. Create Initial Staff Profile for Concern Admin
+            $staffCode = 'STF-' . str_pad((string)$concernId, 3, '0', STR_PAD_LEFT) . '-001';
+            DB::query(
+                "INSERT INTO staff (concern_id, user_id, staff_code, name, email, password_hash, phone, designation, department, salary_type, base_salary, address, status, joining_date, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, 'Concern Administrator', 'Management', 'monthly', 0.00, ?, 'active', CURDATE(), NOW())",
+                [$concernId, $adminUserId, $staffCode, $adminName, $adminEmail, $passwordHash, $phone !== '' ? $phone : null, $address !== '' ? $address : null]
+            );
+
+            // 5c. Assign user_permissions for enabled modules
+            $insertUp = DB::pdo()->prepare(
+                "INSERT INTO user_permissions (user_id, module_id, can_view, can_add, can_edit, can_delete)
+                 VALUES (?, ?, 1, 1, 1, 1)
+                 ON DUPLICATE KEY UPDATE can_view = 1, can_add = 1, can_edit = 1, can_delete = 1"
+            );
+            foreach ($pickedModuleIds as $modId) {
+                $insertUp->execute([$adminUserId, (int)$modId]);
+            }
 
             // 6. Seed Default Document Series
             $prefix = strtoupper(substr($code, 0, 3));
