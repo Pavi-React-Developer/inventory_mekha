@@ -416,17 +416,48 @@
                                 </td>
                             </tr>
 
-                            <!-- Row 3: Color / Fabric Variation -->
+                            <!-- Row 3: Color Attributes (Multi-Select Pills Table Row, like Size Attributes) -->
                             <tr>
                                 <td>
-                                    <strong class="text-dark">Color / Fabric Variation</strong>
-                                    <small class="text-muted d-block">Visual / Aesthetic Attribute</small>
+                                    <strong class="text-dark">Color Attributes</strong>
+                                    <small class="text-muted d-block">Variant Color Matrix</small>
                                 </td>
                                 <td>
-                                    <input type="text" name="color" id="inputColor" class="form-control" value="<?= htmlspecialchars($resolvedColor ?? '') ?>" placeholder="e.g. Red, Navy Blue, Maroon" oninput="renderVariantsTable();">
+                                    <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                                        <span class="small fw-semibold text-secondary">Check colors to generate catalog variants:</span>
+                                        <div class="d-flex align-items-center gap-1">
+                                            <button type="button" class="btn btn-outline-secondary btn-sm py-0.5 px-2" style="font-size: 0.75rem;" onclick="selectAllColors()">Select All</button>
+                                            <button type="button" class="btn btn-outline-secondary btn-sm py-0.5 px-2" style="font-size: 0.75rem;" onclick="clearAllColors()">Clear</button>
+                                        </div>
+                                    </div>
+                                    <div class="d-flex flex-wrap gap-2 mb-3" id="colorsContainer">
+                                        <?php 
+                                            $defaultColorList = !empty($colorAttributes) ? $colorAttributes : ['Standard'];
+                                            foreach ($defaultColorList as $ca): 
+                                                $isColorChecked = (!empty($resolvedColor) && strtolower($ca) === strtolower($resolvedColor));
+                                        ?>
+                                            <label class="color-pill-label border rounded-3 p-2 d-inline-flex align-items-center gap-2 cursor-pointer <?= $isColorChecked ? 'border-primary bg-primary-subtle' : 'bg-light' ?>">
+                                                <input type="checkbox" name="colors[]" value="<?= htmlspecialchars($ca) ?>" class="form-check-input color-checkbox mt-0" onchange="handleColorCheckboxChange(this)" <?= $isColorChecked ? 'checked' : '' ?>>
+                                                <span class="fw-bold font-monospace color-text text-dark"><?= htmlspecialchars($ca) ?></span>
+                                            </label>
+                                        <?php endforeach; ?>
+                                    </div>
+
+                                    <!-- Add Custom Color Input -->
+                                    <div class="input-group input-group-sm" style="max-width: 420px;">
+                                        <input type="text" id="inputCustomColor" class="form-control font-monospace" placeholder="Add custom color (e.g. Red, Blue, Maroon)...">
+                                        <button type="button" class="btn btn-outline-primary fw-semibold" onclick="addCustomColorPill()">
+                                            <i class="bi bi-plus-lg me-1"></i> Add Color
+                                        </button>
+                                    </div>
+                                    <input type="hidden" name="color" id="inputColor" value="<?= htmlspecialchars($resolvedColor ?? '') ?>">
                                 </td>
                                 <td>
-                                    <small class="text-muted">Automatically extracted from item specifications or product name.</small>
+                                    <div class="p-2.5 rounded-3 bg-light border">
+                                        <div class="small fw-bold text-primary mb-1"><i class="bi bi-palette me-1"></i>Color Attribute Matrix:</div>
+                                        <small class="text-muted d-block mb-1">Check one or more colors above to apply to catalog variants.</small>
+                                        <span class="badge bg-secondary-subtle text-secondary border font-monospace" id="attrColorCountBadge">0 Colors Active</span>
+                                    </div>
                                 </td>
                             </tr>
 
@@ -469,6 +500,50 @@
                                     </div>
                                 </td>
                             </tr>
+
+                            <!-- Dynamic Other Attributes (Dynamically Reflected from Attributes Master) -->
+                            <?php if (!empty($otherAttributes)): ?>
+                                <?php foreach ($otherAttributes as $attrType => $attrValues): ?>
+                                    <tr>
+                                        <td>
+                                            <strong class="text-dark"><?= htmlspecialchars(ucfirst($attrType)) ?> Attributes</strong>
+                                            <small class="text-muted d-block">Configured <?= htmlspecialchars(ucfirst($attrType)) ?> Matrix</small>
+                                        </td>
+                                        <td>
+                                            <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                                                <span class="small fw-semibold text-secondary">Check <?= htmlspecialchars($attrType) ?> options:</span>
+                                                <div class="d-flex align-items-center gap-1">
+                                                    <button type="button" class="btn btn-outline-secondary btn-sm py-0.5 px-2" style="font-size: 0.75rem;" onclick="selectAllCustomAttr('<?= htmlspecialchars($attrType) ?>')">Select All</button>
+                                                    <button type="button" class="btn btn-outline-secondary btn-sm py-0.5 px-2" style="font-size: 0.75rem;" onclick="clearAllCustomAttr('<?= htmlspecialchars($attrType) ?>')">Clear</button>
+                                                </div>
+                                            </div>
+                                            <div class="d-flex flex-wrap gap-2 mb-3" id="customAttrContainer_<?= htmlspecialchars($attrType) ?>">
+                                                <?php foreach ($attrValues as $av): ?>
+                                                    <label class="custom-attr-pill-label border rounded-3 p-2 d-inline-flex align-items-center gap-2 cursor-pointer bg-light">
+                                                        <input type="checkbox" name="custom_attributes[<?= htmlspecialchars($attrType) ?>][]" value="<?= htmlspecialchars($av) ?>" class="form-check-input custom-attr-checkbox mt-0" data-attr-type="<?= htmlspecialchars($attrType) ?>" onchange="handleCustomAttrCheckboxChange(this)">
+                                                        <span class="fw-bold font-monospace text-dark"><?= htmlspecialchars($av) ?></span>
+                                                    </label>
+                                                <?php endforeach; ?>
+                                            </div>
+
+                                            <!-- Add Custom Value Input -->
+                                            <div class="input-group input-group-sm" style="max-width: 420px;">
+                                                <input type="text" id="inputCustomAttr_<?= htmlspecialchars($attrType) ?>" class="form-control font-monospace" placeholder="Add custom <?= htmlspecialchars($attrType) ?>...">
+                                                <button type="button" class="btn btn-outline-primary fw-semibold" onclick="addCustomAttrPill('<?= htmlspecialchars($attrType) ?>')">
+                                                    <i class="bi bi-plus-lg me-1"></i> Add <?= htmlspecialchars(ucfirst($attrType)) ?>
+                                                </button>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div class="p-2.5 rounded-3 bg-light border">
+                                                <div class="small fw-bold text-primary mb-1"><i class="bi bi-tag-fill me-1"></i><?= htmlspecialchars(ucfirst($attrType)) ?> Options:</div>
+                                                <small class="text-muted d-block mb-1">Dynamically reflected from Product Attributes Master.</small>
+                                                <span class="badge bg-secondary-subtle text-secondary border font-monospace" id="selectedAttrCount_<?= htmlspecialchars($attrType) ?>">0 Selected</span>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
                         </tbody>
                     </table>
                 </div>
@@ -486,30 +561,68 @@
                     <h6 class="mb-0 fw-bold text-dark">4. Product Variants Matrix Table (Editable Format)</h6>
                 </div>
                 <div class="d-flex align-items-center gap-2">
+                    <button type="button" class="btn btn-outline-primary btn-sm py-1 px-2.5 fw-semibold font-monospace" onclick="autoDistributeQuantities()" title="Distribute total purchased quantity equally across active variant rows">
+                        <i class="bi bi-magic me-1"></i> Auto-Balance Qty
+                    </button>
                     <span class="badge bg-primary font-monospace px-2.5 py-1.5" id="variantsCountBadge">0 Variants</span>
                     <span class="badge bg-success-subtle text-success border border-success-subtle font-monospace">Editable SKU & Pricing</span>
                 </div>
             </div>
 
-            <!-- Quick Batch Pricing Filler Bar -->
-            <div class="bg-light border-bottom p-3 d-flex align-items-center justify-content-between flex-wrap gap-3">
-                <div class="d-flex align-items-center gap-2">
-                    <i class="bi bi-magic text-primary"></i>
-                    <span class="small fw-bold text-dark">Batch Price Setter:</span>
-                    <span class="small text-muted">Quickly apply default prices to all active size rows:</span>
-                </div>
-                <div class="d-flex align-items-center gap-2 flex-wrap">
-                    <div class="input-group input-group-sm" style="max-width: 170px;">
-                        <span class="input-group-text bg-white font-monospace">MRP ₹</span>
-                        <input type="number" step="0.01" id="batchMrpInput" class="form-control font-monospace" placeholder="0.00" value="<?= number_format((float)($item['mrp'] ?? ((float)$item['unit_price'] * 2.0)), 2, '.', '') ?>">
+            <!-- Quick Fill Bar for All Variant Columns -->
+            <div class="bg-light border-bottom p-3">
+                <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-magic text-primary fs-6"></i>
+                        <span class="small fw-bold text-dark">Quick Fill (All Columns):</span>
+                        <span class="small text-muted">Set values below and apply across all active variant rows:</span>
                     </div>
-                    <div class="input-group input-group-sm" style="max-width: 190px;">
-                        <span class="input-group-text bg-white font-monospace text-success">Selling ₹</span>
-                        <input type="number" step="0.01" id="batchSellingInput" class="form-control font-monospace fw-bold text-success" placeholder="0.00" value="<?= number_format((float)($item['selling_price'] ?? ((float)$item['unit_price'] * 1.5)), 2, '.', '') ?>">
-                    </div>
-                    <button type="button" class="btn btn-sm btn-outline-primary fw-semibold px-3" onclick="applyBatchPrices()">
-                        <i class="bi bi-check-all me-1"></i> Apply to All
+                    <button type="button" class="btn btn-sm btn-primary fw-semibold px-3 shadow-xs" onclick="applyQuickFillAll()">
+                        <i class="bi bi-check-all me-1"></i> Apply to All Rows
                     </button>
+                </div>
+                <div class="row g-2 align-items-center">
+                    <div class="col-6 col-md-2">
+                        <label class="form-label small text-muted mb-1 font-monospace" style="font-size: 0.72rem;"><i class="bi bi-palette text-primary me-1"></i>COLOR</label>
+                        <input type="text" id="quickColorInput" list="colorSuggestions" class="form-control form-control-sm font-monospace" placeholder="Color...">
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <label class="form-label small text-muted mb-0 font-monospace" style="font-size: 0.72rem;"><i class="bi bi-boxes text-primary me-1"></i>QTY / SIZE</label>
+                            <a href="javascript:void(0)" class="text-primary small text-decoration-none fw-bold" style="font-size: 0.7rem;" onclick="autoDistributeQuantities()">Auto-Balance</a>
+                        </div>
+                        <input type="number" step="1" min="1" id="quickQtyInput" class="form-control form-control-sm font-monospace" placeholder="Qty...">
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <label class="form-label small text-muted mb-1 font-monospace" style="font-size: 0.72rem;"><i class="bi bi-speedometer2 text-primary me-1"></i>WEIGHT (KG)</label>
+                        <input type="number" step="0.001" min="0" id="quickWeightInput" class="form-control form-control-sm font-monospace" placeholder="Weight...">
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <label class="form-label small text-muted mb-1 font-monospace" style="font-size: 0.72rem;"><i class="bi bi-file-earmark-spreadsheet text-primary me-1"></i>HSN CODE</label>
+                        <input type="text" id="quickHsnInput" class="form-control form-control-sm font-monospace" placeholder="HSN..." value="<?= htmlspecialchars($item['hsn_code'] ?? '') ?>">
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <label class="form-label small text-muted mb-1 font-monospace" style="font-size: 0.72rem;"><i class="bi bi-tag-fill text-primary me-1"></i>MRP (₹)</label>
+                        <input type="number" step="0.01" id="quickMrpInput" class="form-control form-control-sm font-monospace" placeholder="MRP ₹" value="<?= number_format((float)($item['mrp'] ?? ((float)$item['unit_price'] * 2.0)), 2, '.', '') ?>">
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <label class="form-label small text-muted mb-1 font-monospace text-success fw-bold" style="font-size: 0.72rem;"><i class="bi bi-cash text-success me-1"></i>SELLING (₹)</label>
+                        <input type="number" step="0.01" id="quickSellingInput" class="form-control form-control-sm font-monospace fw-bold text-success" placeholder="Selling ₹" value="<?= number_format((float)($item['selling_price'] ?? ((float)$item['unit_price'] * 1.5)), 2, '.', '') ?>">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Prominent Quantity Validation Live Alert Banner -->
+            <div class="px-3 pt-3">
+                <div class="alert alert-success d-flex align-items-center justify-content-between p-2.5 mb-0 shadow-xs border-0" id="qtyValidationBanner">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-check-circle-fill fs-5 text-success"></i>
+                        <div>
+                            <strong class="text-success">Quantity Allocated:</strong>
+                            <span class="text-dark ms-1">Sum of all variants exactly matches purchased quantity (<?= (int)$item['qty'] ?> pcs).</span>
+                        </div>
+                    </div>
+                    <span class="badge bg-success font-monospace fs-6 px-2.5 py-1">✓ Match (<?= (int)$item['qty'] ?>/<?= (int)$item['qty'] ?> pcs)</span>
                 </div>
             </div>
 
@@ -965,6 +1078,166 @@ function addCustomSizePill() {
     renderVariantsTable();
 }
 
+// Color Attributes Helper Functions
+function handleColorCheckboxChange(checkbox) {
+    const label = checkbox.closest('.color-pill-label');
+    if (label) {
+        if (checkbox.checked) {
+            label.classList.add('border-primary', 'bg-primary-subtle');
+            label.classList.remove('bg-light');
+        } else {
+            label.classList.remove('border-primary', 'bg-primary-subtle');
+            label.classList.add('bg-light');
+        }
+    }
+    updateSelectedColorsCount();
+    renderVariantsTable();
+}
+
+function selectAllColors() {
+    document.querySelectorAll('.color-checkbox').forEach(cb => {
+        cb.checked = true;
+        const label = cb.closest('.color-pill-label');
+        if (label) {
+            label.classList.add('border-primary', 'bg-primary-subtle');
+            label.classList.remove('bg-light');
+        }
+    });
+    updateSelectedColorsCount();
+    renderVariantsTable();
+}
+
+function clearAllColors() {
+    document.querySelectorAll('.color-checkbox').forEach(cb => {
+        cb.checked = false;
+        const label = cb.closest('.color-pill-label');
+        if (label) {
+            label.classList.remove('border-primary', 'bg-primary-subtle');
+            label.classList.add('bg-light');
+        }
+    });
+    updateSelectedColorsCount();
+    renderVariantsTable();
+}
+
+function updateSelectedColorsCount() {
+    const checked = document.querySelectorAll('.color-checkbox:checked');
+    const badge = document.getElementById('attrColorCountBadge');
+    if (badge) {
+        badge.textContent = `${checked.length} Colors Active`;
+    }
+    const colorValues = Array.from(checked).map(c => c.value.trim()).filter(Boolean);
+    const hiddenColor = document.getElementById('inputColor');
+    if (hiddenColor) {
+        hiddenColor.value = colorValues.join(', ');
+    }
+}
+
+function addCustomColorPill() {
+    const input = document.getElementById('inputCustomColor');
+    const val = (input?.value || '').trim();
+    if (!val) return;
+
+    let exists = false;
+    document.querySelectorAll('.color-checkbox').forEach(cb => {
+        if (cb.value.toLowerCase() === val.toLowerCase()) exists = true;
+    });
+
+    if (exists) {
+        alert(`Color "${val}" is already present.`);
+        input.value = '';
+        return;
+    }
+
+    const container = document.getElementById('colorsContainer');
+    const html = `
+        <label class="color-pill-label border border-primary bg-primary-subtle rounded-3 p-2 d-inline-flex align-items-center gap-2 cursor-pointer">
+            <input type="checkbox" name="colors[]" value="${escapeHtml(val)}" class="form-check-input color-checkbox mt-0" checked onchange="handleColorCheckboxChange(this)">
+            <span class="fw-bold font-monospace color-text text-dark">${escapeHtml(val)}</span>
+        </label>
+    `;
+    container.insertAdjacentHTML('beforeend', html);
+    input.value = '';
+    updateSelectedColorsCount();
+    renderVariantsTable();
+}
+
+// Dynamic Custom Attribute Helper Functions
+function handleCustomAttrCheckboxChange(checkbox) {
+    const label = checkbox.closest('.custom-attr-pill-label');
+    if (label) {
+        if (checkbox.checked) {
+            label.classList.add('border-primary', 'bg-primary-subtle');
+            label.classList.remove('bg-light');
+        } else {
+            label.classList.remove('border-primary', 'bg-primary-subtle');
+            label.classList.add('bg-light');
+        }
+    }
+    const attrType = checkbox.getAttribute('data-attr-type');
+    if (attrType) updateSelectedCustomAttrCount(attrType);
+}
+
+function selectAllCustomAttr(attrType) {
+    document.querySelectorAll(`.custom-attr-checkbox[data-attr-type="${attrType}"]`).forEach(cb => {
+        cb.checked = true;
+        const label = cb.closest('.custom-attr-pill-label');
+        if (label) {
+            label.classList.add('border-primary', 'bg-primary-subtle');
+            label.classList.remove('bg-light');
+        }
+    });
+    updateSelectedCustomAttrCount(attrType);
+}
+
+function clearAllCustomAttr(attrType) {
+    document.querySelectorAll(`.custom-attr-checkbox[data-attr-type="${attrType}"]`).forEach(cb => {
+        cb.checked = false;
+        const label = cb.closest('.custom-attr-pill-label');
+        if (label) {
+            label.classList.remove('border-primary', 'bg-primary-subtle');
+            label.classList.add('bg-light');
+        }
+    });
+    updateSelectedCustomAttrCount(attrType);
+}
+
+function updateSelectedCustomAttrCount(attrType) {
+    const checked = document.querySelectorAll(`.custom-attr-checkbox[data-attr-type="${attrType}"]:checked`);
+    const badge = document.getElementById(`selectedAttrCount_${attrType}`);
+    if (badge) {
+        badge.textContent = `${checked.length} Selected`;
+    }
+}
+
+function addCustomAttrPill(attrType) {
+    const input = document.getElementById(`inputCustomAttr_${attrType}`);
+    const val = (input?.value || '').trim();
+    if (!val) return;
+
+    let exists = false;
+    document.querySelectorAll(`.custom-attr-checkbox[data-attr-type="${attrType}"]`).forEach(cb => {
+        if (cb.value.toLowerCase() === val.toLowerCase()) exists = true;
+    });
+
+    if (exists) {
+        alert(`${attrType.toUpperCase()} "${val}" is already present.`);
+        input.value = '';
+        return;
+    }
+
+    const container = document.getElementById(`customAttrContainer_${attrType}`);
+    const html = `
+        <label class="custom-attr-pill-label border border-primary bg-primary-subtle rounded-3 p-2 d-inline-flex align-items-center gap-2 cursor-pointer">
+            <input type="checkbox" name="custom_attributes[${escapeHtml(attrType)}][]" value="${escapeHtml(val)}" class="form-check-input custom-attr-checkbox mt-0" data-attr-type="${escapeHtml(attrType)}" checked onchange="handleCustomAttrCheckboxChange(this)">
+            <span class="fw-bold font-monospace text-dark">${escapeHtml(val)}</span>
+        </label>
+    `;
+    container.insertAdjacentHTML('beforeend', html);
+    input.value = '';
+    updateSelectedCustomAttrCount(attrType);
+}
+
 function updatePricingMargin() {
     const sp = parseFloat(document.getElementById('inputSellingPrice')?.value || 0);
     const mrp = parseFloat(document.getElementById('inputMrp')?.value || 0);
@@ -1027,17 +1300,16 @@ function updatePricingMargin() {
     }
 }
 
-// Render dynamic editable variants table based on current style code, name, color, prices & selected sizes
+// Render dynamic editable variants table based on current style code, name, color attributes & selected sizes
 function renderVariantsTable() {
     const tbody = document.getElementById('variantsTableBody');
     if (!tbody) return;
 
     const styleCode = (document.getElementById('inputStyleCode')?.value || 'GRM-STY-0001').trim();
     const styleName = (document.getElementById('inputStyleName')?.value || 'Product Style').trim();
-    const defaultColor = (document.getElementById('inputColor')?.value || '').trim() || 'Standard';
-    const defaultHsn = (document.getElementById('inputHsnCode')?.value || '6109').trim();
+    const defaultHsn = (document.getElementById('quickHsnInput')?.value || document.getElementById('inputHsnCode')?.value || '6109').trim();
 
-    // Current category hierarchy path
+    // Category hierarchy QR Key & Path
     const catSelect = document.getElementById('selectMainCategory');
     const subSelect = document.getElementById('selectSubCategory');
     const subSubSelect = document.getElementById('selectSubSubCategory');
@@ -1048,13 +1320,22 @@ function renderVariantsTable() {
     const parts = [catName, subName, subSubName].filter(Boolean);
     const hierarchyPath = parts.length > 0 ? parts.join(' > ') : (document.getElementById('hierarchyPathText')?.textContent || 'Apparel & Garments');
     const qrKey = (document.getElementById('inputWholeCode')?.value || '').trim() || '-';
-    const defaultWeight = parseFloat('<?= (float)($item['net_weight'] ?? 0.0) ?>') || 0.0;
+    const defaultWeight = parseFloat(document.getElementById('quickWeightInput')?.value || '<?= (float)($item['net_weight'] ?? 0.0) ?>') || 0.0;
 
-    const batchMrp = parseFloat(document.getElementById('batchMrpInput')?.value || document.getElementById('inputMrp')?.value || 0.0);
-    const batchSp = parseFloat(document.getElementById('batchSellingInput')?.value || document.getElementById('inputSellingPrice')?.value || 0.0);
+    const batchMrp = parseFloat(document.getElementById('quickMrpInput')?.value || document.getElementById('inputMrp')?.value || 0.0);
+    const batchSp = parseFloat(document.getElementById('quickSellingInput')?.value || document.getElementById('inputSellingPrice')?.value || 0.0);
 
-    const checkedBoxes = Array.from(document.querySelectorAll('.size-checkbox:checked'));
-    const checkedSizes = checkedBoxes.map(cb => cb.value.trim());
+    // Selected sizes
+    const checkedSizeBoxes = Array.from(document.querySelectorAll('.size-checkbox:checked'));
+    const checkedSizes = checkedSizeBoxes.map(cb => cb.value.trim()).filter(Boolean);
+
+    // Selected colors
+    const checkedColorBoxes = Array.from(document.querySelectorAll('.color-checkbox:checked'));
+    let checkedColors = checkedColorBoxes.map(cb => cb.value.trim()).filter(Boolean);
+    if (checkedColors.length === 0) {
+        const fallbackColor = (document.getElementById('inputColor')?.value || '').trim();
+        checkedColors = [fallbackColor || 'Standard'];
+    }
 
     if (checkedSizes.length === 0) {
         tbody.innerHTML = `
@@ -1068,27 +1349,60 @@ function renderVariantsTable() {
                 </td>
             </tr>
         `;
+        const countBadge = document.getElementById('variantsCountBadge');
+        if (countBadge) countBadge.textContent = '0 Variants';
+        updateAllocatedQtySummary();
         return;
     }
 
-    const totalPurchasedQty = parseFloat(purchasedBatchQty) || 1;
-    const equalQty = Math.max(1, Math.round(totalPurchasedQty / checkedSizes.length));
+    // Build combinations: If multiple colors, generate (Color x Size); if 1 color, generate 1 row per size
+    const combinations = [];
+    const hasMultipleColors = checkedColors.length > 1;
+
+    checkedColors.forEach(color => {
+        checkedSizes.forEach(size => {
+            const key = hasMultipleColors ? `${size}_${color.replace(/[^a-zA-Z0-9]/g, '_')}` : size;
+            const cleanColorCode = color.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().substring(0, 4);
+            const sku = hasMultipleColors && cleanColorCode !== 'STANDARD' 
+                ? `${styleCode}-${cleanColorCode}-${size}` 
+                : `${styleCode}-${size}`;
+            const name = hasMultipleColors && color !== 'Standard' 
+                ? `${styleName} - ${color} - ${size}` 
+                : `${styleName} - ${size}`;
+
+            combinations.push({
+                key: key,
+                size: size,
+                color: color,
+                sku: sku,
+                name: name
+            });
+        });
+    });
+
+    const countBadge = document.getElementById('variantsCountBadge');
+    if (countBadge) countBadge.textContent = `${combinations.length} Variants`;
+
+    // Strictly distribute total purchased quantity equally across active variant rows
+    const totalPurchasedQty = Math.round(parseFloat(purchasedBatchQty) || 1);
+    const baseQty = Math.floor(totalPurchasedQty / combinations.length);
+    const remainder = totalPurchasedQty % combinations.length;
 
     let rowsHtml = '';
-    checkedSizes.forEach((size, idx) => {
-        const curSkuInput = document.querySelector(`input[name="variant_skus[${size}]"]`);
-        const curNameInput = document.querySelector(`input[name="variant_names[${size}]"]`);
-        const curColorInput = document.querySelector(`input[name="variant_colors[${size}]"]`);
-        const curQtyInput = document.querySelector(`input[name="variant_qtys[${size}]"]`);
-        const curWeightInput = document.querySelector(`input[name="variant_weights[${size}]"]`);
-        const curHsnInput = document.querySelector(`input[name="variant_hsns[${size}]"]`);
-        const curMrpInput = document.querySelector(`input[name="variant_mrps[${size}]"]`);
-        const curSpInput = document.querySelector(`input[name="variant_selling_prices[${size}]"]`);
+    combinations.forEach((combo, idx) => {
+        const curSkuInput = document.querySelector(`input[name="variant_skus[${combo.key}]"]`);
+        const curNameInput = document.querySelector(`input[name="variant_names[${combo.key}]"]`);
+        const curColorInput = document.querySelector(`input[name="variant_colors[${combo.key}]"]`);
+        const curWeightInput = document.querySelector(`input[name="variant_weights[${combo.key}]"]`);
+        const curHsnInput = document.querySelector(`input[name="variant_hsns[${combo.key}]"]`);
+        const curMrpInput = document.querySelector(`input[name="variant_mrps[${combo.key}]"]`);
+        const curSpInput = document.querySelector(`input[name="variant_selling_prices[${combo.key}]"]`);
 
-        const sku = curSkuInput ? curSkuInput.value : `${styleCode}-${size}`;
-        const varName = curNameInput ? curNameInput.value : `${styleName} - ${size}`;
-        const varColor = curColorInput ? curColorInput.value : defaultColor;
-        const varQty = curQtyInput ? curQtyInput.value : equalQty;
+        // Automatically balanced quantity so sum strictly equals totalPurchasedQty
+        const autoDistQty = baseQty + (idx < remainder ? 1 : 0);
+        const sku = curSkuInput ? curSkuInput.value : combo.sku;
+        const varName = curNameInput ? curNameInput.value : combo.name;
+        const varColor = curColorInput ? curColorInput.value : combo.color;
         const varWeight = curWeightInput ? curWeightInput.value : (defaultWeight > 0 ? defaultWeight.toFixed(3) : '0.000');
         const varHsn = curHsnInput ? curHsnInput.value : defaultHsn;
         const mrp = curMrpInput && curMrpInput.value !== '' ? parseFloat(curMrpInput.value) : batchMrp;
@@ -1099,13 +1413,14 @@ function renderVariantsTable() {
         const profitBadgeClass = unitProfit >= 0 ? 'bg-success-subtle text-success border border-success-subtle' : 'bg-danger-subtle text-danger border border-danger-subtle';
 
         rowsHtml += `
-            <tr id="variant_row_${escapeHtml(size)}">
+            <tr id="variant_row_${escapeHtml(combo.key)}">
                 <td class="text-muted small">${idx + 1}</td>
                 <td>
-                    <input type="text" name="variant_skus[${escapeHtml(size)}]" class="form-control form-control-sm font-monospace fw-bold text-primary variant-sku-input" value="${escapeHtml(sku)}" required>
+                    <input type="text" name="variant_skus[${escapeHtml(combo.key)}]" class="form-control form-control-sm font-monospace fw-bold text-primary variant-sku-input" value="${escapeHtml(sku)}" required>
+                    <input type="hidden" name="variant_sizes[${escapeHtml(combo.key)}]" value="${escapeHtml(combo.size)}">
                 </td>
                 <td>
-                    <input type="text" name="variant_names[${escapeHtml(size)}]" class="form-control form-control-sm fw-semibold text-dark variant-name-input" value="${escapeHtml(varName)}" required>
+                    <input type="text" name="variant_names[${escapeHtml(combo.key)}]" class="form-control form-control-sm fw-semibold text-dark variant-name-input" value="${escapeHtml(varName)}" required>
                 </td>
                 <td class="text-center">
                     <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace fw-bold variant-qr-key-badge px-2 py-1" style="font-size: 0.82rem;" title="Hierarchy QR Key: ${escapeHtml(hierarchyPath)}">
@@ -1113,19 +1428,19 @@ function renderVariantsTable() {
                     </span>
                 </td>
                 <td>
-                    <input type="text" name="variant_colors[${escapeHtml(size)}]" class="form-control form-control-sm text-dark variant-color-input" value="${escapeHtml(varColor)}" placeholder="Color" required>
+                    <input type="text" name="variant_colors[${escapeHtml(combo.key)}]" list="colorSuggestions" class="form-control form-control-sm text-dark variant-color-input" value="${escapeHtml(varColor)}" placeholder="Color" required>
                 </td>
                 <td class="text-center">
-                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace fs-6 px-2.5 py-1">${escapeHtml(size)}</span>
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace fs-6 px-2.5 py-1">${escapeHtml(combo.size)}</span>
                 </td>
                 <td>
-                    <input type="number" name="variant_qtys[${escapeHtml(size)}]" class="form-control form-control-sm font-monospace text-center fw-bold variant-qty-input" value="${escapeHtml(String(varQty))}" min="1" required oninput="updateAllocatedQtySummary()">
+                    <input type="number" name="variant_qtys[${escapeHtml(combo.key)}]" class="form-control form-control-sm font-monospace text-center fw-bold variant-qty-input" value="${escapeHtml(String(autoDistQty))}" min="1" required oninput="updateAllocatedQtySummary()">
                 </td>
                 <td>
-                    <input type="number" step="0.001" min="0" name="variant_weights[${escapeHtml(size)}]" class="form-control form-control-sm font-monospace text-center variant-weight-input" value="${escapeHtml(String(varWeight))}" placeholder="0.000">
+                    <input type="number" step="0.001" min="0" name="variant_weights[${escapeHtml(combo.key)}]" class="form-control form-control-sm font-monospace text-center variant-weight-input" value="${escapeHtml(String(varWeight))}" placeholder="0.000">
                 </td>
                 <td>
-                    <input type="text" name="variant_hsns[${escapeHtml(size)}]" class="form-control form-control-sm font-monospace text-center variant-hsn-input" value="${escapeHtml(varHsn)}" required>
+                    <input type="text" name="variant_hsns[${escapeHtml(combo.key)}]" class="form-control form-control-sm font-monospace text-center variant-hsn-input" value="${escapeHtml(varHsn)}" required>
                 </td>
                 <td class="text-end font-monospace text-dark">
                     ₹${supplierUnitCost.toFixed(2)}
@@ -1133,17 +1448,17 @@ function renderVariantsTable() {
                 <td class="text-end">
                     <div class="input-group input-group-sm">
                         <span class="input-group-text font-monospace p-1">₹</span>
-                        <input type="number" step="0.01" name="variant_mrps[${escapeHtml(size)}]" class="form-control form-control-sm font-monospace text-end fw-semibold variant-mrp-input" value="${mrp.toFixed(2)}" required oninput="updateVariantRowProfit('${escapeHtml(size)}')">
+                        <input type="number" step="0.01" name="variant_mrps[${escapeHtml(combo.key)}]" class="form-control form-control-sm font-monospace text-end fw-semibold variant-mrp-input" value="${mrp.toFixed(2)}" required oninput="updateVariantRowProfit('${escapeHtml(combo.key)}')">
                     </div>
                 </td>
                 <td class="text-end">
                     <div class="input-group input-group-sm">
                         <span class="input-group-text font-monospace p-1 text-success fw-bold">₹</span>
-                        <input type="number" step="0.01" name="variant_selling_prices[${escapeHtml(size)}]" class="form-control form-control-sm font-monospace text-end fw-bold text-success variant-sp-input" value="${sp.toFixed(2)}" required oninput="updateVariantRowProfit('${escapeHtml(size)}')">
+                        <input type="number" step="0.01" name="variant_selling_prices[${escapeHtml(combo.key)}]" class="form-control form-control-sm font-monospace text-end fw-bold text-success variant-sp-input" value="${sp.toFixed(2)}" required oninput="updateVariantRowProfit('${escapeHtml(combo.key)}')">
                     </div>
                 </td>
                 <td class="text-center">
-                    <span id="profitBadge_${escapeHtml(size)}" class="badge ${profitBadgeClass} font-monospace fs-7 px-2 py-1">
+                    <span id="profitBadge_${escapeHtml(combo.key)}" class="badge ${profitBadgeClass} font-monospace fs-7 px-2 py-1">
                         ${unitProfit >= 0 ? '+' : ''}₹${unitProfit.toFixed(2)} (${profitMargin.toFixed(1)}%)
                     </span>
                 </td>
@@ -1155,30 +1470,150 @@ function renderVariantsTable() {
     updateAllocatedQtySummary();
 }
 
+// 1-Click Auto-Balance: Redistributes purchasedBatchQty equally across all active variant rows
+function autoDistributeQuantities() {
+    const qtyInputs = Array.from(document.querySelectorAll('.variant-qty-input'));
+    const n = qtyInputs.length;
+    if (n === 0) return;
+
+    const total = Math.round(parseFloat(purchasedBatchQty) || 1);
+    const base = Math.floor(total / n);
+    const remainder = total % n;
+
+    qtyInputs.forEach((inp, idx) => {
+        inp.value = base + (idx < remainder ? 1 : 0);
+    });
+
+    updateAllocatedQtySummary();
+}
+
+// Strict Real-Time Quantity Allocation Validation
 function updateAllocatedQtySummary() {
     let totalAlloc = 0;
-    document.querySelectorAll('.variant-qty-input').forEach(inp => {
+    const qtyInputs = document.querySelectorAll('.variant-qty-input');
+    qtyInputs.forEach(inp => {
         totalAlloc += parseInt(inp.value) || 0;
     });
+
+    const banner = document.getElementById('qtyValidationBanner');
+    const saveBtn = document.getElementById('btnSaveMapping');
     const notice = document.getElementById('variantsAllocationNotice');
-    if (notice) {
-        notice.textContent = `Total allocated: ${totalAlloc} / ${purchasedBatchQty} purchased pieces.`;
+
+    const isMatch = Math.abs(totalAlloc - purchasedBatchQty) < 0.001;
+
+    if (isMatch) {
+        qtyInputs.forEach(inp => {
+            inp.classList.remove('is-invalid');
+            inp.classList.add('is-valid');
+        });
+
+        if (banner) {
+            banner.className = 'alert alert-success d-flex align-items-center justify-content-between p-2.5 mb-3 shadow-xs border-0';
+            banner.innerHTML = `
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-check-circle-fill fs-5 text-success"></i>
+                    <div>
+                        <strong class="text-success">Quantity Allocated:</strong>
+                        <span class="text-dark ms-1">Sum of all variants (${totalAlloc} pcs) exactly matches total purchased quantity (${purchasedBatchQty} pcs).</span>
+                    </div>
+                </div>
+                <span class="badge bg-success font-monospace fs-6 px-3 py-1.5">✓ Match (${totalAlloc}/${purchasedBatchQty} pcs)</span>
+            `;
+        }
+
+        if (notice) {
+            notice.className = 'font-monospace text-success fw-bold';
+            notice.innerHTML = `<i class="bi bi-check-circle-fill me-1"></i> Total Allocated: ${totalAlloc} / ${purchasedBatchQty} pcs (Exact Match)`;
+        }
+
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.classList.remove('btn-secondary');
+            saveBtn.classList.add('btn-primary');
+        }
+    } else {
+        const diff = totalAlloc - purchasedBatchQty;
+        const diffText = diff > 0 ? `+${diff} pcs exceeded` : `${diff} pcs short`;
+
+        qtyInputs.forEach(inp => {
+            inp.classList.remove('is-valid');
+            inp.classList.add('is-invalid');
+        });
+
+        if (banner) {
+            banner.className = 'alert alert-danger d-flex align-items-center justify-content-between p-2.5 mb-3 shadow-sm border border-danger';
+            banner.innerHTML = `
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-exclamation-triangle-fill fs-4 text-danger"></i>
+                    <div>
+                        <strong class="text-danger fs-6">Quantity Allocation Error (${diffText}):</strong>
+                        <div class="text-dark small">Sum of all variants is <strong>${totalAlloc} pcs</strong>, but purchased batch quantity is <strong>${purchasedBatchQty} pcs</strong> (${diff > 0 ? `${diff} pieces exceeded` : `${Math.abs(diff)} pieces short`}). Sum must equal purchased total.</div>
+                    </div>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button" class="btn btn-sm btn-danger fw-bold shadow-xs px-2.5 py-1 text-nowrap" onclick="autoDistributeQuantities()">
+                        <i class="bi bi-magic me-1"></i> Auto-Balance to ${purchasedBatchQty} pcs
+                    </button>
+                    <span class="badge bg-danger font-monospace fs-6 px-3 py-1.5 text-nowrap">✗ ${totalAlloc}/${purchasedBatchQty} pcs</span>
+                </div>
+            `;
+        }
+
+        if (notice) {
+            notice.className = 'font-monospace text-danger fw-bold';
+            notice.innerHTML = `<i class="bi bi-exclamation-triangle-fill me-1"></i> Total Allocated: ${totalAlloc} / ${purchasedBatchQty} pcs (${diffText}) - Save disabled`;
+        }
+
+        if (saveBtn) {
+            saveBtn.disabled = true;
+            saveBtn.classList.remove('btn-primary');
+            saveBtn.classList.add('btn-secondary');
+        }
     }
 }
 
-function updateVariantRowProfit(size) {
-    const spInput = document.querySelector(`input[name="variant_selling_prices[${size}]"]`);
-    const badge = document.getElementById(`profitBadge_${size}`);
+function updateVariantRowProfit(key) {
+    const spInput = document.querySelector(`input[name="variant_selling_prices[${key}]"]`);
+    const mrpInput = document.querySelector(`input[name="variant_mrps[${key}]"]`);
+    const badge = document.getElementById(`profitBadge_${key}`);
     if (!spInput || !badge) return;
 
     const sp = parseFloat(spInput.value) || 0.0;
+    const mrp = parseFloat(mrpInput?.value) || 0.0;
     const profit = sp - supplierUnitCost;
     const margin = sp > 0 ? ((profit / sp) * 100) : 0;
 
-    badge.className = profit >= 0 
-        ? 'badge bg-success-subtle text-success border border-success-subtle font-monospace fs-7 px-2 py-1' 
-        : 'badge bg-danger-subtle text-danger border border-danger-subtle font-monospace fs-7 px-2 py-1';
-    badge.textContent = `${profit >= 0 ? '+' : ''}₹${profit.toFixed(2)} (${margin.toFixed(1)}%)`;
+    // Real-time visual validation: supplierCost < sellingPrice < mrp
+    const isSpValid = sp > supplierUnitCost;
+    const isMrpValid = mrp > sp;
+
+    if (!isSpValid) {
+        spInput.classList.add('is-invalid');
+        spInput.title = `Selling Price (₹${sp.toFixed(2)}) must be greater than Supplier Cost (₹${supplierUnitCost.toFixed(2)})`;
+    } else {
+        spInput.classList.remove('is-invalid');
+        spInput.removeAttribute('title');
+    }
+
+    if (mrpInput) {
+        if (!isMrpValid) {
+            mrpInput.classList.add('is-invalid');
+            mrpInput.title = `MRP (₹${mrp.toFixed(2)}) must be greater than Selling Price (₹${sp.toFixed(2)})`;
+        } else {
+            mrpInput.classList.remove('is-invalid');
+            mrpInput.removeAttribute('title');
+        }
+    }
+
+    if (!isSpValid || !isMrpValid) {
+        badge.className = 'badge bg-danger text-white font-monospace fs-7 px-2 py-1';
+        badge.innerHTML = `<i class="bi bi-exclamation-circle me-1"></i>Rule: Cost &lt; Sell &lt; MRP`;
+    } else {
+        badge.className = profit >= 0 
+            ? 'badge bg-success-subtle text-success border border-success-subtle font-monospace fs-7 px-2 py-1' 
+            : 'badge bg-danger-subtle text-danger border border-danger-subtle font-monospace fs-7 px-2 py-1';
+        badge.textContent = `${profit >= 0 ? '+' : ''}₹${profit.toFixed(2)} (${margin.toFixed(1)}%)`;
+    }
 
     // Sync primary hidden inputs
     const firstMrpInput = document.querySelector('.variant-mrp-input');
@@ -1191,23 +1626,67 @@ function updateVariantRowProfit(size) {
     }
 }
 
+function pickSavedColor(c) {
+    const colorInput = document.getElementById('inputColor');
+    if (colorInput) {
+        colorInput.value = c;
+        renderVariantsTable();
+    }
+}
+
+function applyQuickFillAll() {
+    const qColor = (document.getElementById('quickColorInput')?.value || '').trim();
+    const qQty = document.getElementById('quickQtyInput')?.value.trim();
+    const qWeight = document.getElementById('quickWeightInput')?.value.trim();
+    const qHsn = (document.getElementById('quickHsnInput')?.value || '').trim();
+    const qMrp = document.getElementById('quickMrpInput')?.value.trim();
+    const qSelling = document.getElementById('quickSellingInput')?.value.trim();
+
+    if (qColor !== '') {
+        document.querySelectorAll('.variant-color-input').forEach(inp => inp.value = qColor);
+    }
+    if (qQty !== '') {
+        const parsedQty = parseInt(qQty);
+        if (parsedQty > 0) {
+            document.querySelectorAll('.variant-qty-input').forEach(inp => inp.value = parsedQty);
+        }
+    }
+    if (qWeight !== '') {
+        const parsedW = parseFloat(qWeight);
+        if (!isNaN(parsedW)) {
+            document.querySelectorAll('.variant-weight-input').forEach(inp => inp.value = parsedW.toFixed(3));
+        }
+    }
+    if (qHsn !== '') {
+        document.querySelectorAll('.variant-hsn-input').forEach(inp => inp.value = qHsn);
+    }
+    if (qMrp !== '') {
+        const parsedMrp = parseFloat(qMrp);
+        if (!isNaN(parsedMrp)) {
+            document.querySelectorAll('.variant-mrp-input').forEach(inp => inp.value = parsedMrp.toFixed(2));
+            if (document.getElementById('inputMrp')) document.getElementById('inputMrp').value = parsedMrp.toFixed(2);
+        }
+    }
+    if (qSelling !== '') {
+        const parsedSp = parseFloat(qSelling);
+        if (!isNaN(parsedSp)) {
+            document.querySelectorAll('.variant-sp-input').forEach(inp => inp.value = parsedSp.toFixed(2));
+            if (document.getElementById('inputSellingPrice')) document.getElementById('inputSellingPrice').value = parsedSp.toFixed(2);
+        }
+    }
+
+    document.querySelectorAll('.variant-sku-input').forEach(skuInp => {
+        const row = skuInp.closest('tr');
+        if (row && row.id) {
+            const key = row.id.replace('variant_row_', '');
+            updateVariantRowProfit(key);
+        }
+    });
+    updateAllocatedQtySummary();
+}
+
 function applyBatchPrices() {
-    const batchMrp = parseFloat(document.getElementById('batchMrpInput')?.value || 0.0);
-    const batchSp = parseFloat(document.getElementById('batchSellingInput')?.value || 0.0);
-
-    document.querySelectorAll('.variant-mrp-input').forEach(inp => {
-        inp.value = batchMrp.toFixed(2);
-    });
-    document.querySelectorAll('.variant-sp-input').forEach(inp => {
-        inp.value = batchSp.toFixed(2);
-    });
-
-    document.querySelectorAll('.size-checkbox:checked').forEach(cb => {
-        updateVariantRowProfit(cb.value);
-    });
-
-    if (document.getElementById('inputMrp')) document.getElementById('inputMrp').value = batchMrp.toFixed(2);
-    if (document.getElementById('inputSellingPrice')) document.getElementById('inputSellingPrice').value = batchSp.toFixed(2);
+    applyQuickFillAll();
 }
 
 function loadSubcatsForModal(catId, preselectSubcatId = null) {
@@ -1357,6 +1836,12 @@ function handleQuickCategorySubmit(e, formId, modalId, tier) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Check initial colors
+    document.querySelectorAll('.color-checkbox').forEach(cb => {
+        handleColorCheckboxChange(cb);
+    });
+    updateSelectedColorsCount();
+
     // Check initial sizes
     document.querySelectorAll('.size-checkbox').forEach(cb => {
         handleSizeCheckboxChange(cb);
@@ -1442,6 +1927,56 @@ document.addEventListener('DOMContentLoaded', () => {
                     e.preventDefault();
                     alert('Please select at least one Size Attribute.');
                     return false;
+                }
+
+                // Strict Validation 1: Sum of variant quantities must equal purchased total qty
+                let totalAlloc = 0;
+                document.querySelectorAll('.variant-qty-input').forEach(inp => {
+                    totalAlloc += parseInt(inp.value) || 0;
+                });
+
+                if (Math.abs(totalAlloc - purchasedBatchQty) > 0.001) {
+                    e.preventDefault();
+                    const diff = totalAlloc - purchasedBatchQty;
+                    const diffMsg = diff > 0 ? `exceeded by ${diff} pieces` : `short by ${Math.abs(diff)} pieces`;
+                    alert(`Quantity Validation Error:\n\nSum of all variant quantities (${totalAlloc} pcs) must exactly equal total purchased quantity (${purchasedBatchQty} pcs).\nCurrently ${diffMsg}.\nVariant quantities cannot be less than or greater than the purchased total.`);
+                    const firstQty = document.querySelector('.variant-qty-input');
+                    if (firstQty) {
+                        firstQty.focus();
+                        firstQty.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                    return false;
+                }
+
+                // Strict Validation 2: Pricing Hierarchy Validation (Supplier Cost < Selling Price < MRP)
+                const variantRows = document.querySelectorAll('#variantsTableBody tr');
+                for (const row of variantRows) {
+                    const spInput = row.querySelector('.variant-sp-input');
+                    const mrpInput = row.querySelector('.variant-mrp-input');
+                    const nameInput = row.querySelector('.variant-name-input');
+                    const rowName = nameInput ? nameInput.value : 'Variant';
+                    if (!spInput || !mrpInput) continue;
+
+                    const sp = parseFloat(spInput.value || 0);
+                    const mrp = parseFloat(mrpInput.value || 0);
+
+                    if (sp <= supplierUnitCost) {
+                        e.preventDefault();
+                        alert(`Pricing Validation Error for "${rowName}":\n\nSelling Price (₹${sp.toFixed(2)}) must be strictly greater than Supplier Unit Cost (₹${supplierUnitCost.toFixed(2)}).\n\nRequired Rule: Supplier Cost < Selling Price < MRP`);
+                        spInput.classList.add('is-invalid');
+                        spInput.focus();
+                        spInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        return false;
+                    }
+
+                    if (mrp <= sp) {
+                        e.preventDefault();
+                        alert(`Pricing Validation Error for "${rowName}":\n\nMRP (₹${mrp.toFixed(2)}) must be strictly greater than Selling Price (₹${sp.toFixed(2)}).\n\nRequired Rule: Supplier Cost < Selling Price < MRP`);
+                        mrpInput.classList.add('is-invalid');
+                        mrpInput.focus();
+                        mrpInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        return false;
+                    }
                 }
             } else {
                 const existCat = document.getElementById('selectExistingCatalog');

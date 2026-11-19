@@ -309,9 +309,14 @@
                                                 <strong class="text-dark"><?= htmlspecialchars($c['name']) ?></strong>
                                                 <div class="small text-muted font-monospace">Code: [<?= htmlspecialchars($c['code'] ?: 'CAT') ?>] &bull; HSN <?= htmlspecialchars($c['default_hsn'] ?: '6109') ?></div>
                                             </div>
-                                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace">
-                                                <?= number_format((float)($c['default_gst_rate'] ?? 5.00), 2) ?>% GST
-                                            </span>
+                                            <div class="d-flex align-items-center gap-2">
+                                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace">
+                                                    <?= number_format((float)($c['default_gst_rate'] ?? 5.00), 2) ?>% GST
+                                                </span>
+                                                <button type="button" class="btn btn-outline-danger btn-sm py-0.5 px-1.5 border-0 shadow-none" title="Delete Main Category" onclick="confirmDeleteHierarchy('category', <?= $c['id'] ?>, '<?= htmlspecialchars(addslashes($c['name'])) ?>')">
+                                                    <i class="bi bi-trash fs-6"></i>
+                                                </button>
+                                            </div>
                                         </li>
                                     <?php endforeach; ?>
                                 <?php endif; ?>
@@ -343,9 +348,14 @@
                                                 <strong class="text-dark"><?= htmlspecialchars($sc['name']) ?></strong>
                                                 <div class="small text-muted">Parent: <span class="badge bg-light text-dark border"><?= htmlspecialchars($sc['category_name']) ?></span></div>
                                             </div>
-                                            <span class="badge bg-light text-secondary border font-monospace">
-                                                [<?= htmlspecialchars($sc['code'] ?: 'SUB') ?>]
-                                            </span>
+                                            <div class="d-flex align-items-center gap-2">
+                                                <span class="badge bg-light text-secondary border font-monospace">
+                                                    [<?= htmlspecialchars($sc['code'] ?: 'SUB') ?>]
+                                                </span>
+                                                <button type="button" class="btn btn-outline-danger btn-sm py-0.5 px-1.5 border-0 shadow-none" title="Delete Subcategory" onclick="confirmDeleteHierarchy('subcategory', <?= $sc['id'] ?>, '<?= htmlspecialchars(addslashes($sc['name'])) ?>')">
+                                                    <i class="bi bi-trash fs-6"></i>
+                                                </button>
+                                            </div>
                                         </li>
                                     <?php endforeach; ?>
                                 <?php endif; ?>
@@ -377,9 +387,14 @@
                                                 <strong class="text-dark"><?= htmlspecialchars($ssc['name']) ?></strong>
                                                 <div class="small text-muted"><?= htmlspecialchars($ssc['category_name']) ?> &rsaquo; <?= htmlspecialchars($ssc['subcategory_name'] ?? 'General') ?></div>
                                             </div>
-                                            <span class="badge bg-success-subtle text-success border border-success-subtle font-monospace">
-                                                [<?= htmlspecialchars($ssc['code'] ?: 'SS') ?>]
-                                            </span>
+                                            <div class="d-flex align-items-center gap-2">
+                                                <span class="badge bg-success-subtle text-success border border-success-subtle font-monospace">
+                                                    [<?= htmlspecialchars($ssc['code'] ?: 'SS') ?>]
+                                                </span>
+                                                <button type="button" class="btn btn-outline-danger btn-sm py-0.5 px-1.5 border-0 shadow-none" title="Delete Tier-3 Sub-Subcategory" onclick="confirmDeleteHierarchy('subsubcategory', <?= $ssc['id'] ?>, '<?= htmlspecialchars(addslashes($ssc['name'])) ?>')">
+                                                    <i class="bi bi-trash fs-6"></i>
+                                                </button>
+                                            </div>
                                         </li>
                                     <?php endforeach; ?>
                                 <?php endif; ?>
@@ -418,11 +433,19 @@
                                     <div class="mb-3">
                                         <strong class="small text-secondary d-block mb-2">Available <?= htmlspecialchars(ucfirst($type)) ?> Attributes:</strong>
                                         <div class="d-flex flex-wrap gap-2">
-                                            <?php foreach ($typeAttrs as $sa): ?>
-                                                <span class="badge bg-white text-dark border px-3 py-2 fs-6 shadow-xs font-monospace">
-                                                    <?= htmlspecialchars($sa['attribute_value']) ?>
+                                            <?php foreach ($typeAttrs as $sa): 
+                                                $splitVals = preg_split('/[,;|]+/', (string)$sa['attribute_value']);
+                                                foreach ($splitVals as $sv):
+                                                    $sv = trim($sv);
+                                                    if ($sv === '') continue;
+                                            ?>
+                                                <span class="badge bg-white text-dark border px-3 py-2 fs-6 shadow-xs font-monospace d-inline-flex align-items-center gap-1.5">
+                                                    <span><?= htmlspecialchars($sv) ?></span>
+                                                    <button type="button" class="btn btn-link text-danger p-0 ms-1 text-decoration-none shadow-none" style="font-size: 0.8rem; line-height: 1;" title="Delete Attribute <?= htmlspecialchars($sv) ?>" onclick="confirmDeleteHierarchy('attribute', <?= $sa['id'] ?>, '<?= htmlspecialchars(addslashes($sv)) ?>', '<?= htmlspecialchars(addslashes($sv)) ?>')">
+                                                        <i class="bi bi-x-circle-fill"></i>
+                                                    </button>
                                                 </span>
-                                            <?php endforeach; ?>
+                                            <?php endforeach; endforeach; ?>
                                         </div>
                                     </div>
                                 <?php endforeach; ?>
@@ -623,6 +646,34 @@
     </div>
 </div>
 
+<!-- CONFIRM DELETE HIERARCHY / ATTRIBUTE MODAL -->
+<div class="modal fade" id="modalConfirmDeleteHierarchy" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <form action="<?= \App\Core\Controller::url('/production/catalog-mapping/delete-hierarchy') ?>" method="POST" class="modal-content border-0 shadow">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(!empty($csrfToken) ? $csrfToken : \App\Core\Auth::csrfToken()) ?>">
+            <input type="hidden" name="type" id="deleteHierarchyType" value="">
+            <input type="hidden" name="id" id="deleteHierarchyId" value="">
+            <input type="hidden" name="value" id="deleteHierarchyValue" value="">
+            <input type="hidden" name="return_url" value="<?= htmlspecialchars($_SERVER['REQUEST_URI'] ?? '/production/catalog-mapping?tab=hierarchy') ?>">
+            <div class="modal-header bg-danger text-white">
+                <h6 class="modal-title fw-bold" id="deleteHierarchyModalTitle"><i class="bi bi-trash-fill me-2"></i> Confirm Deletion</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4 text-center">
+                <i class="bi bi-exclamation-triangle-fill text-danger fs-1 mb-2 d-block"></i>
+                <h5 class="fw-bold text-dark mb-2" id="deleteHierarchyName">Delete Item?</h5>
+                <p class="text-secondary small mb-0" id="deleteHierarchyWarning">
+                    Are you sure you want to delete this item? This action will permanently remove it from the system.
+                </p>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-danger btn-sm px-3 fw-bold"><i class="bi bi-trash me-1"></i> Yes, Delete Permanently</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <script>
 function handleAttributeTypeChange(val) {
     const box = document.getElementById('containerNewAttributeType');
@@ -644,23 +695,62 @@ function confirmUnmap(id, name) {
     new bootstrap.Modal(document.getElementById('modalConfirmUnmap')).show();
 }
 
+function confirmDeleteHierarchy(type, id, name, value = '') {
+    document.getElementById('deleteHierarchyType').value = type;
+    document.getElementById('deleteHierarchyId').value = id;
+    document.getElementById('deleteHierarchyValue').value = value;
+    const typeTitles = {
+        'category': 'Main Category',
+        'subcategory': 'Subcategory',
+        'subsubcategory': 'Tier-3 Sub-Subcategory',
+        'attribute': 'Attribute'
+    };
+    const titleLabel = typeTitles[type] || 'Item';
+    document.getElementById('deleteHierarchyModalTitle').innerHTML = `<i class="bi bi-trash-fill me-2"></i> Delete ${titleLabel}`;
+    document.getElementById('deleteHierarchyName').textContent = `Delete "${name}"?`;
+    document.getElementById('deleteHierarchyWarning').textContent = type === 'category' 
+        ? `Are you sure you want to delete category "${name}"? All associated subcategories will also be removed.` 
+        : `Are you sure you want to delete ${titleLabel.toLowerCase()} "${name}"? This action cannot be undone.`;
+    new bootstrap.Modal(document.getElementById('modalConfirmDeleteHierarchy')).show();
+}
+
 function loadSubcatsForModal(catId) {
     const subSelect = document.getElementById('modalTier3SubcatSelect');
+    if (!subSelect) return;
     subSelect.innerHTML = '<option value="">-- Loading... --</option>';
     if (!catId) {
         subSelect.innerHTML = '<option value="">-- Select Category First --</option>';
         return;
     }
 
-    fetch('<?= \App\Core\Controller::url('/api/categories/subcategories?category_id=') ?>' + catId)
+    fetch('<?= \App\Core\Controller::url('/api/categories/subcategories?category_id=') ?>' + encodeURIComponent(catId))
         .then(r => r.json())
         .then(data => {
-            subSelect.innerHTML = '<option value="">-- Select Subcategory (Optional) --</option>';
-            if (Array.isArray(data)) {
-                data.forEach(item => {
+            const items = Array.isArray(data) ? data : (data.data || []);
+            if (items.length === 0) {
+                subSelect.innerHTML = '<option value="">-- No Subcategories Available --</option>';
+            } else {
+                subSelect.innerHTML = '<option value="">-- Select Subcategory (Optional) --</option>';
+                items.forEach(item => {
                     subSelect.innerHTML += `<option value="${item.id}">${item.name}</option>`;
                 });
             }
+        })
+        .catch(err => {
+            console.error('Failed to load subcategories for modal:', err);
+            subSelect.innerHTML = '<option value="">-- Error Loading Subcategories --</option>';
         });
 }
+
+document.addEventListener('DOMContentLoaded', function() {
+    const modalSubSub = document.getElementById('modalAddSubSubcategory');
+    if (modalSubSub) {
+        modalSubSub.addEventListener('show.bs.modal', function() {
+            const catSelect = document.getElementById('modalTier3CatSelect');
+            if (catSelect && catSelect.value) {
+                loadSubcatsForModal(catSelect.value);
+            }
+        });
+    }
+});
 </script>

@@ -70,7 +70,11 @@ abstract class Controller {
 
     protected function redirect(string $path): void {
         if (!headers_sent()) {
-            header('Location: ' . $this->url($path));
+            if (str_starts_with($path, 'http://') || str_starts_with($path, 'https://')) {
+                header('Location: ' . $path);
+            } else {
+                header('Location: ' . self::url($path));
+            }
         }
         if (php_sapi_name() !== 'cli') {
             exit;
@@ -78,8 +82,20 @@ abstract class Controller {
     }
 
     public static function url(string $path = ''): string {
-        $base = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\');
-        // If script is in public/, handle neatly
+        if (str_starts_with($path, 'http://') || str_starts_with($path, 'https://')) {
+            return $path;
+        }
+
+        $base = rtrim(dirname($_SERVER['SCRIPT_NAME'] ?? ''), '/\\');
+        if ($base === '/' || $base === '.') {
+            $base = '';
+        }
+
+        // If path already starts with base directory, prevent duplication
+        if ($base !== '' && (str_starts_with($path, $base . '/') || $path === $base)) {
+            return $path;
+        }
+
         return $base . '/' . ltrim($path, '/');
     }
 

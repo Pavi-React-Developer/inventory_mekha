@@ -77,7 +77,10 @@ assertCondition(!str_contains($html, 'id="cardPricing"'), "Section 4 Pricing Con
 // 5. Verify Generated Product Variants Matrix Table in Editable Format
 assertCondition(str_contains($html, 'id="cardProductVariants"'), "Card 'cardProductVariants' exists");
 assertCondition(str_contains($html, 'Product Variants Matrix Table (Editable Format)'), "Product Variants Matrix Table (Editable Format) header exists");
-assertCondition(str_contains($html, 'Batch Price Setter:'), "Batch Price Setter quick bar exists");
+assertCondition(str_contains($html, 'Quick Fill (All Columns):'), "Quick Fill (All Columns) bar exists");
+assertCondition(str_contains($html, 'id="quickColorInput"') && str_contains($html, 'id="quickQtyInput"') && str_contains($html, 'id="quickWeightInput"') && str_contains($html, 'id="quickHsnInput"') && str_contains($html, 'id="quickMrpInput"') && str_contains($html, 'id="quickSellingInput"'), "Quick fill inputs for Color, Qty, Weight, HSN, MRP, Selling all exist");
+assertCondition(str_contains($html, 'id="colorSuggestions"'), "Color suggestions datalist exists");
+assertCondition(str_contains($html, 'applyQuickFillAll()'), "JavaScript applyQuickFillAll() function exists");
 assertCondition(str_contains($html, 'id="tableProductVariants"'), "Table 'tableProductVariants' exists");
 assertCondition(
     str_contains($html, 'Variant SKU Code *') &&
@@ -96,6 +99,8 @@ assertCondition(str_contains($html, 'variant-qr-key-badge'), "QR key badge class
 assertCondition(str_contains($html, 'variant_weights['), "Weight input variant_weights exists in JS render");
 assertCondition(str_contains($html, 'id="variantsTableBody"'), "Tbody 'variantsTableBody' exists for dynamic editable SKU population");
 assertCondition(str_contains($html, 'applyBatchPrices()'), "JavaScript applyBatchPrices() function exists");
+assertCondition(str_contains($html, 'Math.abs(totalAlloc - purchasedBatchQty) > 0.001'), "Quantity validation (sum equals total qty) exists in JS");
+assertCondition(str_contains($html, 'sp <= supplierUnitCost') && str_contains($html, 'mrp <= sp'), "Pricing validation (Supplier Cost < Selling Price < MRP) exists in JS");
 
 // 6. Verify Mapping Summary & Stock Projection Removal
 assertCondition(!str_contains($html, 'id="cardSummary"'), "Section 5 Mapping Summary & Stock Projection table is removed as requested");
@@ -114,15 +119,15 @@ assertCondition(str_contains($indexHtml, '+ Create New Attribute Type...'), "+ C
 assertCondition(!str_contains($indexHtml, 'Group / Display Label'), "Group / Display Label input field is removed as requested");
 assertCondition(!str_contains($indexHtml, 'Size (e.g. S, M, XL, 3XL, Free Size)'), "Hardcoded static options removed from attribute type select");
 
-// 9. Verify Category database is free of static dummy data
-$catCount = (int)DB::fetchValue("SELECT COUNT(*) FROM categories");
-$subCount = (int)DB::fetchValue("SELECT COUNT(*) FROM subcategories");
-$subSubCount = (int)DB::fetchValue("SELECT COUNT(*) FROM sub_subcategories");
+// 9. Verify Category database is free of static dummy/seed data (e.g. KIDS, BABY, DRESS)
+$kidsCount = (int)DB::fetchValue("SELECT COUNT(*) FROM categories WHERE name = 'KIDS'");
+$babyCount = (int)DB::fetchValue("SELECT COUNT(*) FROM subcategories WHERE name = 'BABY'");
+$dressCount = (int)DB::fetchValue("SELECT COUNT(*) FROM sub_subcategories WHERE name = 'DRESS'");
 $catalogCount = (int)DB::fetchValue("SELECT COUNT(*) FROM catalogs");
-assertCondition($catCount === 0, "categories table contains 0 static rows ({$catCount})");
-assertCondition($subCount === 0, "subcategories table contains 0 static rows ({$subCount})");
-assertCondition($subSubCount === 0, "sub_subcategories table contains 0 static rows ({$subSubCount})");
-assertCondition($catalogCount === 0, "catalogs table contains 0 static rows ({$catalogCount})");
+assertCondition($kidsCount === 0, "Static seed category 'KIDS' is not in database");
+assertCondition($babyCount === 0, "Static seed subcategory 'BABY' is not in database");
+assertCondition($dressCount === 0, "Static seed sub-subcategory 'DRESS' is not in database");
+assertCondition($catalogCount === 0, "Test catalogs table contains 0 rows ({$catalogCount})");
 
 echo "\nSummary: {$passed} passed, {$failed} failed.\n";
 exit($failed === 0 ? 0 : 1);

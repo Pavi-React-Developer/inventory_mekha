@@ -239,6 +239,7 @@ $router->post('/production/catalog-mapping/unmap', [CatalogMappingController::cl
 $router->post('/m/catalog_mapping/unmap', [CatalogMappingController::class, 'unmapItem'], 'catalog_mapping', 'delete');
 $router->post('/production/catalog-mapping/quick-category', [CatalogMappingController::class, 'quickCreateCategory'], 'catalog_mapping', 'add');
 $router->post('/production/catalog-mapping/quick-attribute', [CatalogMappingController::class, 'quickCreateAttribute'], 'catalog_mapping', 'add');
+$router->post('/production/catalog-mapping/delete-hierarchy', [CatalogMappingController::class, 'deleteHierarchy'], 'catalog_mapping', 'view');
 $router->get('/api/catalog-mapping/item-details', [CatalogMappingController::class, 'apiItemDetails'], 'catalog_mapping', 'view');
 
 // APIs for 3-Tier Hierarchy & HSN Lookups
