@@ -67,7 +67,6 @@ class ModuleGuard {
     }
 
     private static function url(string $path): string {
-        $base = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\');
-        return $base . '/' . ltrim($path, '/');
+        return Controller::url($path);
     }
 }

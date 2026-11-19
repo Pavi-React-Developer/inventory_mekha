@@ -229,11 +229,11 @@ class CatalogMappingController extends Controller {
 
         // Load 3-Tier Hierarchy for Tab 2 and Dropdowns
         if ($cid) {
-            $categories = DB::fetchAll("SELECT * FROM categories WHERE concern_id = ? ORDER BY name ASC", [$cid]);
-            $subcategories = DB::fetchAll("SELECT s.*, c.name AS category_name FROM subcategories s JOIN categories c ON s.category_id = c.id WHERE s.concern_id = ? ORDER BY s.name ASC", [$cid]);
-            $subSubcategories = DB::fetchAll("SELECT ss.*, s.name AS subcategory_name, c.name AS category_name FROM sub_subcategories ss LEFT JOIN subcategories s ON ss.subcategory_id = s.id LEFT JOIN categories c ON s.category_id = c.id WHERE ss.concern_id = ? ORDER BY ss.name ASC", [$cid]);
-            $attributes = DB::fetchAll("SELECT * FROM product_attributes WHERE concern_id = ? ORDER BY attribute_type ASC, sort_order ASC", [$cid]);
-            $catalogs = DB::fetchAll("SELECT id, style_code, short_code, name FROM catalogs WHERE concern_id = ? AND status != 'inactive' ORDER BY id DESC", [$cid]);
+            $categories = DB::fetchAll("SELECT * FROM categories WHERE (concern_id = ? OR concern_id = 1 OR concern_id IS NULL) ORDER BY name ASC", [$cid]);
+            $subcategories = DB::fetchAll("SELECT s.*, c.name AS category_name FROM subcategories s JOIN categories c ON s.category_id = c.id WHERE (s.concern_id = ? OR s.concern_id = 1 OR s.concern_id IS NULL) ORDER BY s.name ASC", [$cid]);
+            $subSubcategories = DB::fetchAll("SELECT ss.*, s.name AS subcategory_name, c.name AS category_name FROM sub_subcategories ss LEFT JOIN subcategories s ON ss.subcategory_id = s.id LEFT JOIN categories c ON s.category_id = c.id WHERE (ss.concern_id = ? OR ss.concern_id = 1 OR ss.concern_id IS NULL) ORDER BY ss.name ASC", [$cid]);
+            $attributes = DB::fetchAll("SELECT * FROM product_attributes WHERE (concern_id = ? OR concern_id = 1 OR concern_id IS NULL) ORDER BY attribute_type ASC, sort_order ASC", [$cid]);
+            $catalogs = DB::fetchAll("SELECT id, style_code, short_code, name FROM catalogs WHERE (concern_id = ? OR concern_id = 1 OR concern_id IS NULL) AND status != 'inactive' ORDER BY id DESC", [$cid]);
         } else {
             $categories = DB::fetchAll("SELECT * FROM categories ORDER BY name ASC");
             $subcategories = DB::fetchAll("SELECT s.*, c.name AS category_name FROM subcategories s JOIN categories c ON s.category_id = c.id ORDER BY s.name ASC");
@@ -326,11 +326,11 @@ class CatalogMappingController extends Controller {
         $suggestedStyleCode = sprintf("%s-STY-%04d", $conCode, $styleCount);
 
         // Fetch Categories & Attributes
-        $categories = DB::fetchAll("SELECT * FROM categories WHERE concern_id = ? AND status = 'active' ORDER BY name ASC", [$cid]);
-        $subcategories = DB::fetchAll("SELECT * FROM subcategories WHERE concern_id = ? AND status = 'active' ORDER BY name ASC", [$cid]);
-        $subSubcategories = DB::fetchAll("SELECT * FROM sub_subcategories WHERE concern_id = ? ORDER BY name ASC", [$cid]);
-        $attributes = DB::fetchAll("SELECT * FROM product_attributes WHERE concern_id = ? ORDER BY attribute_type ASC, sort_order ASC", [$cid]);
-        $catalogs = DB::fetchAll("SELECT id, style_code, short_code, name, hierarchy_path FROM catalogs WHERE concern_id = ? AND status != 'inactive' ORDER BY id DESC", [$cid]);
+        $categories = $cid ? DB::fetchAll("SELECT * FROM categories WHERE (concern_id = ? OR concern_id = 1 OR concern_id IS NULL) AND status = 'active' ORDER BY name ASC", [$cid]) : DB::fetchAll("SELECT * FROM categories WHERE status = 'active' ORDER BY name ASC");
+        $subcategories = $cid ? DB::fetchAll("SELECT * FROM subcategories WHERE (concern_id = ? OR concern_id = 1 OR concern_id IS NULL) AND status = 'active' ORDER BY name ASC", [$cid]) : DB::fetchAll("SELECT * FROM subcategories WHERE status = 'active' ORDER BY name ASC");
+        $subSubcategories = $cid ? DB::fetchAll("SELECT * FROM sub_subcategories WHERE (concern_id = ? OR concern_id = 1 OR concern_id IS NULL) ORDER BY name ASC", [$cid]) : DB::fetchAll("SELECT * FROM sub_subcategories ORDER BY name ASC");
+        $attributes = $cid ? DB::fetchAll("SELECT * FROM product_attributes WHERE (concern_id = ? OR concern_id = 1 OR concern_id IS NULL) ORDER BY attribute_type ASC, sort_order ASC", [$cid]) : DB::fetchAll("SELECT * FROM product_attributes ORDER BY attribute_type ASC, sort_order ASC");
+        $catalogs = $cid ? DB::fetchAll("SELECT id, style_code, short_code, name, hierarchy_path FROM catalogs WHERE (concern_id = ? OR concern_id = 1 OR concern_id IS NULL) AND status != 'inactive' ORDER BY id DESC", [$cid]) : DB::fetchAll("SELECT id, style_code, short_code, name, hierarchy_path FROM catalogs WHERE status != 'inactive' ORDER BY id DESC");
 
         // Default sizes available
         $defaultSizes = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', 'Free Size'];
@@ -339,6 +339,37 @@ class CatalogMappingController extends Controller {
             'attribute_value'
         );
         $allSizes = array_unique(array_merge($defaultSizes, $customSizes));
+
+        // Extract distinct saved color attributes
+        $colorAttributes = [];
+        foreach ($attributes as $a) {
+            if (strtolower($a['attribute_type'] ?? '') === 'color') {
+                $rawVals = preg_split('/[,;|]+/', (string)($a['attribute_value'] ?? ''));
+                foreach ($rawVals as $rv) {
+                    $rv = trim($rv);
+                    if ($rv !== '' && !in_array($rv, $colorAttributes, true)) {
+                        $colorAttributes[] = $rv;
+                    }
+                }
+            }
+        }
+        if (!empty($resolvedColor) && !in_array($resolvedColor, $colorAttributes, true)) {
+            $colorAttributes[] = $resolvedColor;
+        }
+
+        // Group all other dynamic attribute types
+        $otherAttributes = [];
+        foreach ($attributes as $a) {
+            $t = strtolower(trim($a['attribute_type'] ?? ''));
+            if ($t === 'size' || $t === 'color' || $t === '') continue;
+            $rawVals = preg_split('/[,;|]+/', (string)($a['attribute_value'] ?? ''));
+            foreach ($rawVals as $rv) {
+                $rv = trim($rv);
+                if ($rv !== '' && !in_array($rv, $otherAttributes[$t] ?? [], true)) {
+                    $otherAttributes[$t][] = $rv;
+                }
+            }
+        }
 
         $this->render('concern/catalog_mapping_form', [
             'pageTitle'          => 'Map Finished Good to Catalog: ' . $item['item_name'],
@@ -351,6 +382,8 @@ class CatalogMappingController extends Controller {
             'subSubcategories'   => $subSubcategories,
             'catalogs'           => $catalogs,
             'sizes'              => $allSizes,
+            'colorAttributes'    => $colorAttributes,
+            'otherAttributes'    => $otherAttributes,
             'selectedCid'        => $cid,
         ]);
     }
@@ -464,6 +497,46 @@ class CatalogMappingController extends Controller {
                 }
                 $hierarchyPath = implode(' > ', array_filter($pathParts));
 
+                // Validate variant inputs before inserting or updating catalog
+                $variantSkus = $_POST['variant_skus'] ?? [];
+                $variantNames = $_POST['variant_names'] ?? [];
+                $variantColors = $_POST['variant_colors'] ?? [];
+                $variantQtys = $_POST['variant_qtys'] ?? [];
+                $variantWeights = $_POST['variant_weights'] ?? [];
+                $variantHsns = $_POST['variant_hsns'] ?? [];
+                $variantMrps = $_POST['variant_mrps'] ?? [];
+                $variantSellingPrices = $_POST['variant_selling_prices'] ?? [];
+
+                // Strict Validation 1: Qty Validation - sum of variant quantities must equal purchased total qty
+                $purchasedTotalQty = (float)($item['qty'] ?? 0);
+                $sumAllocatedQty = 0;
+                if (!empty($variantQtys) && is_array($variantQtys)) {
+                    foreach ($variantQtys as $vQtyVal) {
+                        $sumAllocatedQty += (float)$vQtyVal;
+                    }
+                }
+
+                if ($purchasedTotalQty > 0 && abs($sumAllocatedQty - $purchasedTotalQty) > 0.001) {
+                    $diff = $sumAllocatedQty - $purchasedTotalQty;
+                    $diffText = $diff > 0 ? "+{$diff} pieces exceeded" : "{$diff} pieces short";
+                    throw new Exception("Quantity Validation Error: Sum of all variant quantities ({$sumAllocatedQty}) must exactly equal the total purchased quantity ({$purchasedTotalQty}). It cannot be less than or greater than {$purchasedTotalQty} ({$diffText}).");
+                }
+
+                // Strict Validation 2: Pricing Hierarchy Validation - Supplier Cost < Selling Price < MRP
+                $supplierUnitCost = (float)($item['unit_price'] ?? 0.0);
+                foreach ($variantMrps as $vKey => $vMrpVal) {
+                    $varMrp = $vMrpVal !== '' ? (float)$vMrpVal : $mrp;
+                    $varPrice = isset($variantSellingPrices[$vKey]) && $variantSellingPrices[$vKey] !== '' ? (float)$variantSellingPrices[$vKey] : $sellingPrice;
+
+                    if ($varPrice <= $supplierUnitCost) {
+                        throw new Exception("Pricing Validation Error: Selling Price (₹" . number_format($varPrice, 2) . ") must be strictly greater than Supplier Cost (₹" . number_format($supplierUnitCost, 2) . "). Required Rule: Supplier Cost < Selling Price < MRP.");
+                    }
+
+                    if ($varMrp <= $varPrice) {
+                        throw new Exception("Pricing Validation Error: MRP (₹" . number_format($varMrp, 2) . ") must be strictly greater than Selling Price (₹" . number_format($varPrice, 2) . "). Required Rule: Supplier Cost < Selling Price < MRP.");
+                    }
+                }
+
                 // Insert or update catalogs
                 $existStyle = DB::fetch("SELECT id FROM catalogs WHERE concern_id = ? AND style_code = ?", [$cid, $styleCode]);
                 if ($existStyle) {
@@ -500,14 +573,6 @@ class CatalogMappingController extends Controller {
                 }
 
                 // Generate / synchronize size variants (from editable table format)
-                $variantSkus = $_POST['variant_skus'] ?? [];
-                $variantNames = $_POST['variant_names'] ?? [];
-                $variantColors = $_POST['variant_colors'] ?? [];
-                $variantQtys = $_POST['variant_qtys'] ?? [];
-                $variantWeights = $_POST['variant_weights'] ?? [];
-                $variantHsns = $_POST['variant_hsns'] ?? [];
-                $variantMrps = $_POST['variant_mrps'] ?? [];
-                $variantSellingPrices = $_POST['variant_selling_prices'] ?? [];
 
                 $firstMrp = null;
                 $firstPrice = null;
@@ -713,6 +778,25 @@ class CatalogMappingController extends Controller {
                 $hsn = trim($_POST['default_hsn'] ?? '6109');
                 $gst = (float)($_POST['default_gst_rate'] ?? 5.00);
                 if (empty($code)) $code = strtoupper(substr($name, 0, 2));
+
+                // Strict duplicate validation: name and code
+                $dupCat = DB::fetch(
+                    "SELECT id, name FROM categories WHERE (concern_id = ? OR concern_id = 1 OR concern_id IS NULL) AND LOWER(TRIM(name)) = LOWER(TRIM(?)) AND status != 'deleted'",
+                    [$cid, $name]
+                );
+                if ($dupCat) {
+                    throw new Exception("Duplicate Error: Main Category '{$name}' already exists. Duplicates are not allowed.");
+                }
+                if (!empty($code)) {
+                    $dupCode = DB::fetch(
+                        "SELECT id, code FROM categories WHERE (concern_id = ? OR concern_id = 1 OR concern_id IS NULL) AND code = ? AND status != 'deleted'",
+                        [$cid, $code]
+                    );
+                    if ($dupCode) {
+                        throw new Exception("Duplicate Error: Category code '{$code}' already exists. Duplicates are not allowed.");
+                    }
+                }
+
                 DB::query(
                     "INSERT INTO categories (concern_id, name, code, default_hsn, default_gst_rate, status, created_at)
                      VALUES (?, ?, ?, ?, ?, 'active', NOW())",
@@ -724,6 +808,16 @@ class CatalogMappingController extends Controller {
                 $catId = (int)($_POST['category_id'] ?? 0);
                 if (!$catId) throw new Exception('Parent Main Category is required.');
                 if (empty($code)) $code = strtoupper(substr($name, 0, 2));
+
+                // Strict duplicate validation: name under parent category
+                $dupSub = DB::fetch(
+                    "SELECT id FROM subcategories WHERE category_id = ? AND (concern_id = ? OR concern_id = 1 OR concern_id IS NULL) AND LOWER(TRIM(name)) = LOWER(TRIM(?)) AND status != 'deleted'",
+                    [$catId, $cid, $name]
+                );
+                if ($dupSub) {
+                    throw new Exception("Duplicate Error: Subcategory '{$name}' already exists under the selected parent category. Duplicates are not allowed.");
+                }
+
                 DB::query(
                     "INSERT INTO subcategories (concern_id, category_id, name, code, status, created_at)
                      VALUES (?, ?, ?, ?, 'active', NOW())",
@@ -735,6 +829,16 @@ class CatalogMappingController extends Controller {
                 $subcatId = (int)($_POST['subcategory_id'] ?? 0);
                 if (!$subcatId) throw new Exception('Parent Subcategory is required for Tier-3 category.');
                 if (empty($code)) $code = strtoupper(substr($name, 0, 2));
+
+                // Strict duplicate validation: name under parent subcategory
+                $dupSubSub = DB::fetch(
+                    "SELECT id FROM sub_subcategories WHERE subcategory_id = ? AND (concern_id = ? OR concern_id = 1 OR concern_id IS NULL) AND LOWER(TRIM(name)) = LOWER(TRIM(?)) AND status != 'deleted'",
+                    [$subcatId, $cid, $name]
+                );
+                if ($dupSubSub) {
+                    throw new Exception("Duplicate Error: Sub-Subcategory '{$name}' already exists under the selected parent subcategory. Duplicates are not allowed.");
+                }
+
                 DB::query(
                     "INSERT INTO sub_subcategories (concern_id, subcategory_id, name, code, status, created_at)
                      VALUES (?, ?, ?, ?, 'active', NOW())",
@@ -803,6 +907,25 @@ class CatalogMappingController extends Controller {
         }
 
         try {
+            // Strict duplicate check for attribute values under this type
+            $existingAttrs = DB::fetchAll(
+                "SELECT attribute_value FROM product_attributes WHERE (concern_id = ? OR concern_id = 1 OR concern_id IS NULL) AND LOWER(TRIM(attribute_type)) = LOWER(TRIM(?))",
+                [$cid, $type]
+            );
+            $newVals = preg_split('/[,;|]+/', (string)$val);
+            foreach ($newVals as $nv) {
+                $nv = strtolower(trim($nv));
+                if ($nv === '') continue;
+                foreach ($existingAttrs as $ea) {
+                    $eaVals = preg_split('/[,;|]+/', (string)($ea['attribute_value'] ?? ''));
+                    foreach ($eaVals as $eav) {
+                        if (strtolower(trim($eav)) === $nv) {
+                            throw new Exception("Duplicate Error: Attribute value '{$nv}' already exists under '" . ucfirst($type) . "'. Duplicates are not allowed.");
+                        }
+                    }
+                }
+            }
+
             DB::query(
                 "INSERT INTO product_attributes (concern_id, attribute_type, attribute_name, attribute_value, sort_order)
                  VALUES (?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM product_attributes pa WHERE pa.concern_id = ?))",
@@ -814,6 +937,79 @@ class CatalogMappingController extends Controller {
         }
 
         $returnUrl = $_POST['return_url'] ?? '/production/catalog-mapping?tab=hierarchy';
+        $this->redirect($returnUrl);
+    }
+
+    /**
+     * Delete Category / Subcategory / Sub-Subcategory / Attribute
+     */
+    public function deleteHierarchy(): void {
+        $this->ensureSchema();
+        $this->validateCsrf();
+        $cid = Auth::concernId() ?: 1;
+
+        $type = $_POST['type'] ?? ''; // 'category', 'subcategory', 'subsubcategory', 'attribute'
+        $id = (int)($_POST['id'] ?? 0);
+        $returnUrl = $_POST['return_url'] ?? '/production/catalog-mapping?tab=hierarchy';
+
+        if (!$id || empty($type)) {
+            $this->flash('error', 'Invalid delete request.');
+            $this->redirect($returnUrl);
+            return;
+        }
+
+        try {
+            if ($type === 'category') {
+                $used = (int)DB::fetchValue("SELECT COUNT(*) FROM catalogs WHERE category_id = ?", [$id]);
+                if ($used > 0) {
+                    throw new Exception("Cannot delete category: It is currently linked to {$used} catalog style(s). Unmap or change their category first.");
+                }
+                $subIds = DB::fetchAll("SELECT id FROM subcategories WHERE category_id = ?", [$id]);
+                foreach ($subIds as $s) {
+                    DB::query("DELETE FROM sub_subcategories WHERE subcategory_id = ?", [$s['id']]);
+                }
+                DB::query("DELETE FROM subcategories WHERE category_id = ?", [$id]);
+                DB::query("DELETE FROM categories WHERE id = ?", [$id]);
+                $this->flash('success', "Main Category and its subcategories were deleted successfully.");
+            } elseif ($type === 'subcategory') {
+                $used = (int)DB::fetchValue("SELECT COUNT(*) FROM catalogs WHERE subcategory_id = ?", [$id]);
+                if ($used > 0) {
+                    throw new Exception("Cannot delete subcategory: It is currently linked to {$used} catalog style(s).");
+                }
+                DB::query("DELETE FROM sub_subcategories WHERE subcategory_id = ?", [$id]);
+                DB::query("DELETE FROM subcategories WHERE id = ?", [$id]);
+                $this->flash('success', "Subcategory was deleted successfully.");
+            } elseif ($type === 'subsubcategory') {
+                $used = (int)DB::fetchValue("SELECT COUNT(*) FROM catalogs WHERE sub_sub_category_id = ?", [$id]);
+                if ($used > 0) {
+                    throw new Exception("Cannot delete sub-subcategory: It is currently linked to {$used} catalog style(s).");
+                }
+                DB::query("DELETE FROM sub_subcategories WHERE id = ?", [$id]);
+                $this->flash('success', "Tier-3 Sub-Subcategory was deleted successfully.");
+            } elseif ($type === 'attribute') {
+                $subVal = trim($_POST['value'] ?? '');
+                $attr = DB::fetch("SELECT * FROM product_attributes WHERE id = ?", [$id]);
+                if ($attr) {
+                    if ($subVal !== '' && (str_contains($attr['attribute_value'], ',') || str_contains($attr['attribute_value'], ';'))) {
+                        $parts = preg_split('/[,;|]+/', (string)$attr['attribute_value']);
+                        $remaining = array_values(array_filter($parts, fn($p) => strtolower(trim($p)) !== strtolower($subVal)));
+                        if (empty($remaining)) {
+                            DB::query("DELETE FROM product_attributes WHERE id = ?", [$id]);
+                        } else {
+                            DB::query("UPDATE product_attributes SET attribute_value = ? WHERE id = ?", [implode(',', $remaining), $id]);
+                        }
+                    } else {
+                        DB::query("DELETE FROM product_attributes WHERE id = ?", [$id]);
+                    }
+                }
+                $this->flash('success', "Attribute was deleted successfully.");
+            } else {
+                throw new Exception("Unknown hierarchy type.");
+            }
+        } catch (Exception $e) {
+            $this->flash('error', $e->getMessage());
+        }
+
         $this->redirect($returnUrl);
     }
 

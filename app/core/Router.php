@@ -47,10 +47,15 @@ class Router {
         }
 
         // Normalize base path
-        $scriptDir = dirname($_SERVER['SCRIPT_NAME']);
+        $scriptDir = dirname($_SERVER['SCRIPT_NAME'] ?? '');
         $scriptDir = str_replace('\\', '/', $scriptDir);
-        if ($scriptDir !== '/' && str_starts_with($uri, $scriptDir)) {
-            $uri = substr($uri, strlen($scriptDir));
+        if ($scriptDir === '/' || $scriptDir === '.') {
+            $scriptDir = '';
+        }
+        if (!empty($scriptDir)) {
+            while (str_starts_with($uri, $scriptDir . '/') || $uri === $scriptDir) {
+                $uri = substr($uri, strlen($scriptDir));
+            }
         }
 
         $uri = '/' . trim($uri, '/');

@@ -778,6 +778,26 @@ class ProductionController extends Controller {
         }
 
         try {
+            // Strict duplicate checks
+            $dupCat = DB::fetch(
+                "SELECT id FROM categories WHERE (concern_id = ? OR concern_id = 1 OR concern_id IS NULL) AND LOWER(TRIM(name)) = LOWER(TRIM(?)) AND status != 'deleted'",
+                [$cid, $name]
+            );
+            if ($dupCat) {
+                echo json_encode(['success' => false, 'message' => "Duplicate Error: Category '{$name}' already exists. Duplicates are not allowed."]);
+                exit;
+            }
+            if (!empty($code)) {
+                $dupCode = DB::fetch(
+                    "SELECT id FROM categories WHERE (concern_id = ? OR concern_id = 1 OR concern_id IS NULL) AND code = ? AND status != 'deleted'",
+                    [$cid, $code]
+                );
+                if ($dupCode) {
+                    echo json_encode(['success' => false, 'message' => "Duplicate Error: Category code '{$code}' already exists. Duplicates are not allowed."]);
+                    exit;
+                }
+            }
+
             DB::query(
                 "INSERT INTO categories (concern_id, name, code, default_hsn, default_gst_rate, status) VALUES (?, ?, ?, ?, ?, 'active')",
                 [$cid, $name, $code, $hsn, $gst]
@@ -814,6 +834,16 @@ class ProductionController extends Controller {
         }
 
         try {
+            // Strict duplicate check under parent category
+            $dupSub = DB::fetch(
+                "SELECT id FROM subcategories WHERE category_id = ? AND (concern_id = ? OR concern_id = 1 OR concern_id IS NULL) AND LOWER(TRIM(name)) = LOWER(TRIM(?)) AND status != 'deleted'",
+                [$catId, $cid, $name]
+            );
+            if ($dupSub) {
+                echo json_encode(['success' => false, 'message' => "Duplicate Error: Subcategory '{$name}' already exists under this category. Duplicates are not allowed."]);
+                exit;
+            }
+
             DB::query(
                 "INSERT INTO subcategories (concern_id, category_id, name, code, status) VALUES (?, ?, ?, ?, 'active')",
                 [$cid, $catId, $name, $code]
@@ -843,6 +873,16 @@ class ProductionController extends Controller {
         }
 
         try {
+            // Strict duplicate check under parent subcategory
+            $dupSubSub = DB::fetch(
+                "SELECT id FROM sub_subcategories WHERE subcategory_id = ? AND (concern_id = ? OR concern_id = 1 OR concern_id IS NULL) AND LOWER(TRIM(name)) = LOWER(TRIM(?)) AND status != 'deleted'",
+                [$subcatId, $cid, $name]
+            );
+            if ($dupSubSub) {
+                echo json_encode(['success' => false, 'message' => "Duplicate Error: Sub-Subcategory '{$name}' already exists under this subcategory. Duplicates are not allowed."]);
+                exit;
+            }
+
             DB::query(
                 "INSERT INTO sub_subcategories (concern_id, subcategory_id, name, code, status) VALUES (?, ?, ?, ?, 'active')",
                 [$cid, $subcatId, $name, $code]

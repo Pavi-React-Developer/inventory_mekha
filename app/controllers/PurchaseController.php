@@ -242,7 +242,10 @@ class PurchaseController extends Controller {
         $cid = Auth::concernId();
 
         $sql = "SELECT pb.*, s.name AS supplier_name, con.name AS concern_name, con.code AS concern_code,
-                       (SELECT COUNT(*) FROM purchase_bill_items pbi WHERE pbi.purchase_bill_id = pb.id) AS items_count
+                       (SELECT COUNT(*) FROM purchase_bill_items pbi WHERE pbi.purchase_bill_id = pb.id) AS items_count,
+                       (SELECT GROUP_CONCAT(DISTINCT pbi.section_type ORDER BY pbi.section_type SEPARATOR ',') 
+                        FROM purchase_bill_items pbi 
+                        WHERE pbi.purchase_bill_id = pb.id) AS bill_types
                 FROM purchase_bills pb
                 JOIN suppliers s ON pb.supplier_id = s.id
                 LEFT JOIN concerns con ON pb.concern_id = con.id";
@@ -1114,8 +1117,8 @@ class PurchaseController extends Controller {
                 $targetSubtab = 'rolls';
             }
 
-            $this->flash('success', "Production Purchase '{$billNo}' recorded successfully! Now print QR/barcode labels or click 'Add to Stock' to inward into inventory.");
-            $this->redirect("/m/label_generation?bill_id={$billId}&tab={$targetTab}" . ($targetSubtab ? "&subtab={$targetSubtab}" : ''));
+            $this->flash('success', "Production Purchase '{$billNo}' recorded successfully!");
+            $this->redirect('/m/purchase_billing');
         } catch (Exception $e) {
             DB::rollBack();
             $this->flash('error', 'Error recording production purchase: ' . $e->getMessage());

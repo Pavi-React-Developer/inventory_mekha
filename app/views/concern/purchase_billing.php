@@ -104,6 +104,12 @@
                     <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-search"></i></span>
                     <input type="text" id="billSearchInput" class="form-control border-start-0" placeholder="Search bill #, supplier, inv...">
                 </div>
+                <select id="billTypeFilter" class="form-select form-select-sm" style="width: 155px;">
+                    <option value="">All Bill Types</option>
+                    <option value="rolls">Roll</option>
+                    <option value="garment_other">Other Garments Supply</option>
+                    <option value="finished_goods">Finished Goods</option>
+                </select>
                 <select id="billPaymentFilter" class="form-select form-select-sm" style="width: 130px;">
                     <option value="">All Payments</option>
                     <option value="unpaid">Unpaid</option>
@@ -126,6 +132,7 @@
                         <th>Supplier</th>
                         <th>Supplier Inv #</th>
                         <th>Bill Date</th>
+                        <th>Bill Type</th>
                         <th>Items</th>
                         <th>Taxable Amt</th>
                         <th>Tax</th>
@@ -137,17 +144,20 @@
                 </thead>
                 <tbody id="billsTableBody">
                     <?php if (empty($bills)): ?>
-                        <tr><td colspan="12" class="text-center py-4 text-muted">No purchase bills recorded. Click "Record Production Purchase" to create one.</td></tr>
+                        <tr><td colspan="13" class="text-center py-4 text-muted">No purchase bills recorded. Click "Record Production Purchase" to create one.</td></tr>
                     <?php else: ?>
                         <?php $bIdx = 1; foreach ($bills as $b): ?>
                             <?php
                             $pmtStatus = strtolower($b['payment_status'] ?? 'unpaid');
                             $inwStatus = strtolower($b['inward_status'] ?? 'pending');
+                            $rawTypes = strtolower($b['bill_types'] ?? '');
+                            $types = array_filter(explode(',', $rawTypes));
                             ?>
                             <tr class="bill-row"
                                 data-billno="<?= strtolower(htmlspecialchars($b['bill_no'])) ?>"
                                 data-supplier="<?= strtolower(htmlspecialchars($b['supplier_name'])) ?>"
                                 data-invno="<?= strtolower(htmlspecialchars($b['supplier_invoice_no'] ?? '')) ?>"
+                                data-types="<?= htmlspecialchars($rawTypes) ?>"
                                 data-payment="<?= $pmtStatus ?>"
                                 data-inward="<?= $inwStatus ?>">
                                 <td class="text-muted small"><?= $bIdx++ ?></td>
@@ -168,6 +178,29 @@
                                     <?php else: ?>-<?php endif; ?>
                                 </td>
                                 <td><?= date('d M Y', strtotime($b['bill_date'])) ?></td>
+                                <td>
+                                    <?php if (empty($types)): ?>
+                                        <span class="text-muted small">-</span>
+                                    <?php else: ?>
+                                        <div class="d-flex flex-wrap gap-1 align-items-center">
+                                            <?php if (in_array('rolls', $types)): ?>
+                                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace py-1 px-2" style="font-size: 0.72rem;">
+                                                    <i class="bi bi-layers-fill me-1"></i>Roll
+                                                </span>
+                                            <?php endif; ?>
+                                            <?php if (in_array('garment_other', $types)): ?>
+                                                <span class="badge bg-info-subtle text-dark border border-info-subtle font-monospace py-1 px-2" style="font-size: 0.72rem;">
+                                                    <i class="bi bi-scissors me-1"></i>Other Garments Supply
+                                                </span>
+                                            <?php endif; ?>
+                                            <?php if (in_array('finished_goods', $types)): ?>
+                                                <span class="badge bg-success-subtle text-success border border-success-subtle font-monospace py-1 px-2" style="font-size: 0.72rem;">
+                                                    <i class="bi bi-bag-check-fill me-1"></i>Finished Goods
+                                                </span>
+                                            <?php endif; ?>
+                                        </div>
+                                    <?php endif; ?>
+                                </td>
                                 <td><span class="badge bg-secondary-subtle text-secondary border"><?= (int)($b['items_count'] ?? 1) ?> Items</span></td>
                                 <td>₹<?= number_format($b['total_amount'], 2) ?></td>
                                 <td>₹<?= number_format($b['tax_amount'], 2) ?></td>
@@ -250,6 +283,7 @@
 // Filter Purchase Bills Table
 document.addEventListener('DOMContentLoaded', function () {
     const searchInput = document.getElementById('billSearchInput');
+    const typeFilter = document.getElementById('billTypeFilter');
     const paymentFilter = document.getElementById('billPaymentFilter');
     const inwardFilter = document.getElementById('billInwardFilter');
     const rows = document.querySelectorAll('.bill-row');
@@ -257,6 +291,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function filterBills() {
         const query = (searchInput.value || '').trim().toLowerCase();
+        const bType = (typeFilter ? typeFilter.value : '').trim().toLowerCase();
         const pmt = (paymentFilter.value || '').trim().toLowerCase();
         const inw = (inwardFilter.value || '').trim().toLowerCase();
         let visibleCount = 0;
@@ -265,14 +300,16 @@ document.addEventListener('DOMContentLoaded', function () {
             const billNo = row.dataset.billno || '';
             const supplier = row.dataset.supplier || '';
             const invNo = row.dataset.invno || '';
+            const rowTypes = row.dataset.types || '';
             const rowPmt = row.dataset.payment || '';
             const rowInw = row.dataset.inward || '';
 
             const matchesQuery = !query || billNo.includes(query) || supplier.includes(query) || invNo.includes(query);
+            const matchesType = !bType || rowTypes.includes(bType);
             const matchesPayment = !pmt || rowPmt === pmt;
             const matchesInward = !inw || rowInw === inw;
 
-            if (matchesQuery && matchesPayment && matchesInward) {
+            if (matchesQuery && matchesType && matchesPayment && matchesInward) {
                 row.style.display = '';
                 visibleCount++;
             } else {
@@ -286,6 +323,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     if (searchInput) searchInput.addEventListener('input', filterBills);
+    if (typeFilter) typeFilter.addEventListener('change', filterBills);
     if (paymentFilter) paymentFilter.addEventListener('change', filterBills);
     if (inwardFilter) inwardFilter.addEventListener('change', filterBills);
 });
