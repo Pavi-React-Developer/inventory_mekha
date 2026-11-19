@@ -798,11 +798,12 @@ class PurchaseController extends Controller {
                         }
                     }
 
+                    $rawRollCode = trim($r['roll_code'] ?? '');
                     $rollPattern = trim($r['pattern'] ?? ($r['design_name'] ?? ''));
                     $rollColor   = trim($r['color'] ?? ($r['shade'] ?? ''));
                     $rollShade   = trim($r['shade'] ?? '');
                     $rollSpec    = (!empty($rollShade) && strcasecmp($rollShade, $rollColor) !== 0) ? $rollShade : null;
-                    $rollName    = !empty($rollPattern) ? ($rollPattern . ' Fabric') : trim($r['roll_code'] ?? ('ROLL #' . $idx));
+                    $rollName    = !empty($rawRollCode) ? $rawRollCode : (!empty($rollPattern) ? ($rollPattern . ' Fabric') : ('ROLL #' . $idx));
 
                     $itemsToInsert[] = [
                         'section_type'  => 'rolls',
@@ -1231,11 +1232,12 @@ class PurchaseController extends Controller {
                         }
                     }
 
+                    $rawRollCode = trim($r['roll_code'] ?? '');
                     $rollPattern = trim($r['pattern'] ?? ($r['design_name'] ?? ''));
                     $rollColor   = trim($r['color'] ?? ($r['shade'] ?? ''));
                     $rollShade   = trim($r['shade'] ?? '');
                     $rollSpec    = (!empty($rollShade) && strcasecmp($rollShade, $rollColor) !== 0) ? $rollShade : null;
-                    $rollName    = !empty($rollPattern) ? ($rollPattern . ' Fabric') : trim($r['roll_code'] ?? ('ROLL #' . $idx));
+                    $rollName    = !empty($rawRollCode) ? $rawRollCode : (!empty($rollPattern) ? ($rollPattern . ' Fabric') : ('ROLL #' . $idx));
 
                     $itemsToInsert[] = [
                         'section_type'  => 'rolls',

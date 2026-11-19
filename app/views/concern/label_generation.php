@@ -39,6 +39,15 @@ $concernName = $concern['name'] ?? 'INVENTO ERP';
 
     <?php 
     $curTab = $activeTab ?? 'purchase_raw'; 
+    $curSectionTab = ($curTab === 'purchase_fg') ? 'finished_goods' : (($activeSubTab === 'garment_other') ? 'garment_other' : 'rolls');
+    $activeBillSectionPending = 0;
+    if (!empty($activeBill['id'])) {
+        $activeBillSectionPending = (int)\App\Core\DB::fetchValue(
+            "SELECT COUNT(*) FROM purchase_bill_items WHERE purchase_bill_id = ? AND section_type = ? AND inward_status = 'pending'",
+            [(int)$activeBill['id'], $curSectionTab]
+        );
+    }
+    $sectionDisplayTitle = ($curSectionTab === 'rolls') ? 'Fabric Rolls' : (($curSectionTab === 'garment_other') ? 'Trims & Supplies' : 'Finished Goods');
     ?>
 
     <!-- Workflow Banner if redirected directly from completing a purchase bill -->
@@ -61,20 +70,20 @@ $concernName = $concern['name'] ?? 'INVENTO ERP';
                 </div>
             </div>
             <div class="d-flex align-items-center gap-2">
-                <?php if (($activeBill['inward_status'] ?? '') !== 'completed'): ?>
+                <?php if ($activeBillSectionPending > 0): ?>
                     <form action="<?= \App\Core\Controller::url('/m/label/add_to_stock') ?>" method="POST" class="d-inline">
                         <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
                         <input type="hidden" name="bill_id" value="<?= (int)$activeBill['id'] ?>">
-                        <input type="hidden" name="tab" value="<?= ($curTab === 'purchase_fg') ? 'finished_goods' : 'rolls' ?>">
+                        <input type="hidden" name="tab" value="<?= htmlspecialchars($curSectionTab) ?>">
                         <button type="submit" class="btn btn-success fw-bold px-3 py-2 shadow-sm d-flex align-items-center gap-1.5 rounded-2">
-                            <i class="bi bi-box-arrow-in-down fs-6"></i> Add to Stock &rarr; Purchase Stocks
+                            <i class="bi bi-box-arrow-in-down fs-6"></i> Add <?= $sectionDisplayTitle ?> to Stock &rarr; Purchase Stocks
                         </button>
                     </form>
                 <?php else: ?>
                     <span class="badge bg-success-subtle text-success border border-success p-2">
-                        <i class="bi bi-check-circle-fill me-1"></i> Already In Stock
+                        <i class="bi bi-check-circle-fill me-1"></i> <?= $sectionDisplayTitle ?> In Stock
                     </span>
-                    <a href="<?= \App\Core\Controller::url('/m/purchase_stocks?tab=' . (($curTab === 'purchase_fg') ? 'finished_goods' : 'rolls')) ?>" class="btn btn-outline-success fw-bold px-3 py-2 rounded-2">
+                    <a href="<?= \App\Core\Controller::url('/m/purchase_stocks?tab=' . htmlspecialchars($curSectionTab)) ?>" class="btn btn-outline-success fw-bold px-3 py-2 rounded-2">
                         View in Purchase Stocks &rarr;
                     </a>
                 <?php endif; ?>
@@ -177,9 +186,23 @@ $concernName = $concern['name'] ?? 'INVENTO ERP';
                                         <select name="item_id" id="roll_item_select" class="form-select" required onchange="updateRollPreview(); matchRollQty()">
                                             <option value="">-- Choose Fabric Roll --</option>
                                             <?php foreach ($purchaseRollItems as $raw): 
+                                                $codeVal = trim($raw['item_code'] ?? '');
+                                                $nameVal = trim($raw['item_name'] ?? '');
+                                                $patternVal = trim($raw['pattern'] ?? '');
+                                                $codeIsGenericRoll = preg_match('/^ROLL\s*#?\s*\d*$/i', $codeVal);
+                                                $nameIsPatternFabric = !empty($patternVal) && (strcasecmp($nameVal, $patternVal . ' Fabric') === 0 || strcasecmp($nameVal, $patternVal) === 0);
+
+                                                if (!empty($codeVal) && !$codeIsGenericRoll) {
+                                                    $fabricName = $codeVal;
+                                                } elseif (!empty($nameVal) && !$nameIsPatternFabric) {
+                                                    $fabricName = $nameVal;
+                                                } else {
+                                                    $fabricName = !empty($codeVal) ? $codeVal : (!empty($nameVal) ? $nameVal : 'Fabric Material');
+                                                }
+
                                                 $code = $raw['item_code'] ?: ('ROLL-' . $raw['id']);
                                                 $tagCode = QrService::generateTagCode(
-                                                    $raw['item_name'] ?: 'Fabric',
+                                                    $fabricName,
                                                     $raw['color'] ?? '',
                                                     $raw['pattern'] ?: ($raw['specification'] ?? ''),
                                                     (string)$raw['id']
@@ -187,6 +210,7 @@ $concernName = $concern['name'] ?? 'INVENTO ERP';
                                             ?>
                                                 <option value="<?= $raw['id'] ?>"
                                                         data-name="<?= htmlspecialchars($raw['item_name']) ?>"
+                                                        data-fabric="<?= htmlspecialchars($fabricName) ?>"
                                                         data-code="<?= htmlspecialchars($code) ?>"
                                                         data-tag="<?= htmlspecialchars($tagCode) ?>"
                                                         data-type="Fabric Roll"
@@ -202,7 +226,7 @@ $concernName = $concern['name'] ?? 'INVENTO ERP';
                                                         data-price="<?= (float)($raw['unit_price'] ?: ($raw['mrp'] ?: 0)) ?>"
                                                         data-bill="<?= htmlspecialchars($raw['bill_no']) ?>"
                                                         data-qr="<?= htmlspecialchars($tagCode) ?>">
-                                                    [ROLL] <?= htmlspecialchars($raw['item_name']) ?> (<?= htmlspecialchars($tagCode) ?>) &bull; <?= number_format((float)$raw['qty'], 2) ?> <?= htmlspecialchars($raw['unit'] ?: 'Rolls') ?> &bull; Bill #<?= htmlspecialchars($raw['bill_no']) ?>
+                                                    [ROLL] <?= htmlspecialchars($fabricName) ?> (<?= htmlspecialchars($tagCode) ?>) &bull; <?= number_format((float)$raw['qty'], 2) ?> <?= htmlspecialchars($raw['unit'] ?: 'Rolls') ?> &bull; Bill #<?= htmlspecialchars($raw['bill_no']) ?>
                                                 </option>
                                             <?php endforeach; ?>
                                         </select>
@@ -244,7 +268,7 @@ $concernName = $concern['name'] ?? 'INVENTO ERP';
                                             <div class="d-flex align-items-center gap-3 pt-2">
                                                 <div class="d-flex align-items-center justify-content-center bg-white flex-shrink-0" style="width: 76px; height: 76px;" id="roll_qr_box"></div>
                                                 <div class="flex-grow-1 overflow-hidden" style="line-height: 1.35; font-size: 0.76rem;">
-                                                    <div class="fw-bold text-dark text-uppercase mb-1 text-truncate" style="font-size: 0.86rem;" id="roll_preview_title">ROLL #1</div>
+                                                    <div class="fw-bold text-dark text-uppercase mb-1 text-truncate" style="font-size: 0.86rem; display: none;" id="roll_preview_title"></div>
                                                     <div class="text-truncate"><span class="text-secondary">Fabric:</span> <strong class="text-dark" id="roll_preview_fabric">-</strong></div>
                                                     <div class="text-truncate"><span class="text-secondary">Color:</span> <strong class="text-dark text-uppercase" id="roll_preview_color">RED</strong></div>
                                                     <div class="text-truncate"><span class="text-secondary">Design:</span> <strong class="text-dark text-uppercase" id="roll_preview_design">FLORA</strong></div>
@@ -294,12 +318,25 @@ $concernName = $concern['name'] ?? 'INVENTO ERP';
                                                 <tr><td colspan="6" class="text-center py-4 text-muted">No fabric rolls found. Record purchase bills with fabric rolls to see items here.</td></tr>
                                             <?php else: ?>
                                                 <?php $idx = 1; foreach ($purchaseRollItems as $item): 
+                                                    $codeVal = trim($item['item_code'] ?? '');
+                                                    $nameVal = trim($item['item_name'] ?? '');
+                                                    $patternVal = trim($item['pattern'] ?? '');
+                                                    $codeIsGenericRoll = preg_match('/^ROLL\s*#?\s*\d*$/i', $codeVal);
+                                                    $nameIsPatternFabric = !empty($patternVal) && (strcasecmp($nameVal, $patternVal . ' Fabric') === 0 || strcasecmp($nameVal, $patternVal) === 0);
+
+                                                    if (!empty($codeVal) && !$codeIsGenericRoll) {
+                                                        $fabricName = $codeVal;
+                                                    } elseif (!empty($nameVal) && !$nameIsPatternFabric) {
+                                                        $fabricName = $nameVal;
+                                                    } else {
+                                                        $fabricName = !empty($codeVal) ? $codeVal : (!empty($nameVal) ? $nameVal : 'Fabric Material');
+                                                    }
                                                     $code = $item['item_code'] ?: ('ROLL-' . $item['id']);
                                                 ?>
-                                                    <tr class="roll-row" data-search="<?= strtolower(htmlspecialchars($item['item_name'] . ' ' . $code . ' ' . ($item['color'] ?? '') . ' ' . ($item['pattern'] ?? '') . ' ' . $item['bill_no'] . ' ' . ($item['supplier_name'] ?? ''))) ?>">
+                                                    <tr class="roll-row" data-search="<?= strtolower(htmlspecialchars($fabricName . ' ' . $item['item_name'] . ' ' . $code . ' ' . ($item['color'] ?? '') . ' ' . ($item['pattern'] ?? '') . ' ' . $item['bill_no'] . ' ' . ($item['supplier_name'] ?? ''))) ?>">
                                                         <td class="text-muted small"><?= $idx++ ?></td>
                                                         <td>
-                                                            <div class="fw-bold text-dark"><?= htmlspecialchars($item['item_name']) ?></div>
+                                                            <div class="fw-bold text-dark"><?= htmlspecialchars($fabricName) ?></div>
                                                             <div class="small text-muted d-flex align-items-center gap-1 mt-1">
                                                                 <span class="badge bg-primary-subtle text-primary border" style="font-size: 0.7rem;">FABRIC ROLL</span>
                                                                 <span class="badge bg-light text-dark border font-monospace"><?= htmlspecialchars($code) ?></span>
@@ -570,8 +607,15 @@ $concernName = $concern['name'] ?? 'INVENTO ERP';
                                 <label class="form-label small fw-semibold">Select Purchased Finished Good <span class="text-danger">*</span></label>
                                 <select name="item_id" id="fg_item_select" class="form-select" required onchange="updateFgPreview()">
                                     <option value="">-- Choose Finished Goods Item --</option>
-                                    <?php foreach ($purchaseFgItems as $fg): 
+                                    <?php 
+                                    $mappedFgCount = 0;
+                                    foreach ($purchaseFgItems as $fg): 
                                         $isMapped = !empty($fg['variant_id']);
+                                        // Requirement: dropdown list ONLY wants mapped goods list
+                                        if (!$isMapped) {
+                                            continue;
+                                        }
+                                        $mappedFgCount++;
                                         $varName = $fg['variant_name'] ?: $fg['item_name'];
                                         $sku = $fg['sku_code'] ?: ($fg['item_code'] ?: 'FG-' . $fg['id']);
                                         $tagCode = QrService::generateTagCode(
@@ -595,15 +639,18 @@ $concernName = $concern['name'] ?? 'INVENTO ERP';
                                                 data-cat="<?= htmlspecialchars($cat) ?>"
                                                 data-brand="<?= htmlspecialchars($fg['brand_name'] ?: ($fg['supplier_company'] ?: 'INVENTO')) ?>"
                                                 data-color="<?= htmlspecialchars($fg['color'] ?: 'STANDARD') ?>"
-                                                data-mapped="<?= $isMapped ? '1' : '0' ?>"
+                                                data-mapped="1"
                                                 data-varid="<?= htmlspecialchars($fg['variant_id'] ?? '') ?>"
                                                 data-qty="<?= htmlspecialchars($fg['qty']) ?>"
                                                 data-unit="<?= htmlspecialchars($fg['unit'] ?: 'pcs') ?>"
                                                 data-bill="<?= htmlspecialchars($fg['bill_no']) ?>"
                                                 data-qr="<?= htmlspecialchars($tagCode) ?>">
-                                            <?= htmlspecialchars($fg['item_name']) ?> (<?= htmlspecialchars($tagCode) ?>) &bull; <?= number_format((float)$fg['qty'], 0) ?> pcs &bull; Bill #<?= htmlspecialchars($fg['bill_no']) ?> <?= $isMapped ? " [Mapped: {$sku}]" : " [Unmapped]" ?>
+                                            <?= htmlspecialchars($varName) ?> (<?= htmlspecialchars($tagCode) ?>) &bull; <?= number_format((float)$fg['qty'], 0) ?> pcs &bull; Bill #<?= htmlspecialchars($fg['bill_no']) ?> [Mapped: <?= htmlspecialchars($sku) ?>]
                                         </option>
                                     <?php endforeach; ?>
+                                    <?php if ($mappedFgCount === 0): ?>
+                                        <option value="" disabled>-- No Mapped Goods Found (Please map items in Catalog Mapping) --</option>
+                                    <?php endif; ?>
                                 </select>
                             </div>
 
@@ -652,7 +699,7 @@ $concernName = $concern['name'] ?? 'INVENTO ERP';
                                 </div>
                                 <div class="input-group">
                                     <button type="button" class="btn btn-outline-secondary" onclick="adjustCopies('fg_qty', -1)" aria-label="Decrease label quantity"><i class="bi bi-dash-lg"></i></button>
-                                    <input type="number" name="qty" id="fg_qty" class="form-control text-center" min="1" max="500" value="24" required>
+                                    <input type="number" name="qty" id="fg_qty" class="form-control text-center" min="1" max="500" value="" placeholder="Enter copies count" required>
                                     <button type="button" class="btn btn-outline-secondary" onclick="adjustCopies('fg_qty', 1)" aria-label="Increase label quantity"><i class="bi bi-plus-lg"></i></button>
                                     <span class="input-group-text bg-light">Price Tags</span>
                                 </div>
@@ -762,9 +809,15 @@ $concernName = $concern['name'] ?? 'INVENTO ERP';
                                                     <div class="small text-danger fw-bold">MRP ₹<?= number_format((float)($fg['variant_mrp'] ?: ($fg['mrp'] ?: $fg['unit_price'])), 2) ?></div>
                                                 </td>
                                                 <td class="text-end pe-3 text-nowrap">
-                                                    <button type="button" class="btn btn-sm btn-outline-success py-1 px-2 fw-semibold me-1" onclick="selectFgItem(<?= (int)$fg['id'] ?>)">
-                                                        <i class="bi bi-printer me-1"></i> Print
-                                                    </button>
+                                                    <?php if ($isMapped): ?>
+                                                        <button type="button" class="btn btn-sm btn-outline-success py-1 px-2 fw-semibold me-1" onclick="selectFgItem(<?= (int)$fg['id'] ?>)">
+                                                            <i class="bi bi-printer me-1"></i> Print
+                                                        </button>
+                                                    <?php else: ?>
+                                                        <a href="<?= \App\Core\Controller::url('/production/catalog-mapping/map?id=' . (int)$fg['id']) ?>" class="btn btn-sm btn-outline-warning py-1 px-2 fw-semibold me-1" title="Map item in Catalog Mapping before printing retail label">
+                                                            <i class="bi bi-link-45deg me-1"></i> Map to Catalog
+                                                        </a>
+                                                    <?php endif; ?>
                                                     <?php $isFgInStock = (($fg['inward_status'] ?? '') === 'completed'); ?>
                                                     <?php if ($isFgInStock): ?>
                                                         <a href="<?= \App\Core\Controller::url('/m/purchase_stocks?tab=finished_goods') ?>" class="btn btn-sm btn-outline-success py-1 px-2 fw-semibold" title="Already in Stock - Click to view in Purchase Stocks">
@@ -1273,18 +1326,22 @@ function renderQr(containerId, text) {
 function updateRollPreview() {
     const sel = document.getElementById('roll_item_select');
     if (!sel) return;
+    const titleEl = document.getElementById('roll_preview_title');
+    if (titleEl) {
+        titleEl.style.display = 'none';
+        titleEl.textContent = '';
+    }
+
     const opt = sel.options[sel.selectedIndex];
     if (opt && opt.value) {
-        const tag = opt.dataset.tag || makeTagCode(opt.dataset.name, opt.dataset.color, opt.dataset.pattern || opt.dataset.spec, opt.value);
-        const title = 'ROLL #' + (opt.dataset.code || opt.value);
-        const fabric = opt.dataset.name || 'Fabric Material';
+        const fabric = opt.dataset.fabric || opt.dataset.code || opt.dataset.name || 'Fabric Material';
+        const tag = opt.dataset.tag || makeTagCode(fabric, opt.dataset.color, opt.dataset.pattern || opt.dataset.spec, opt.value);
         const color = (opt.dataset.color || 'STANDARD').toUpperCase();
         const design = (opt.dataset.pattern || opt.dataset.spec || 'PLAIN').toUpperCase();
         const price = parseFloat(opt.dataset.price || 0);
         const ref = opt.dataset.bill ? ('PO-' + opt.dataset.bill) : 'PO-REF';
 
         document.getElementById('roll_preview_ref').textContent = ref;
-        document.getElementById('roll_preview_title').textContent = title;
         document.getElementById('roll_preview_fabric').textContent = fabric;
         document.getElementById('roll_preview_color').textContent = color;
         document.getElementById('roll_preview_design').textContent = design;
@@ -1295,7 +1352,6 @@ function updateRollPreview() {
         renderQr('roll_qr_box', tag);
     } else {
         document.getElementById('roll_preview_ref').textContent = 'PO-REF';
-        document.getElementById('roll_preview_title').textContent = 'ROLL #1';
         document.getElementById('roll_preview_fabric').textContent = 'Select a fabric roll';
         document.getElementById('roll_preview_color').textContent = 'RED';
         document.getElementById('roll_preview_design').textContent = 'FLORA';
@@ -1482,9 +1538,13 @@ function updateFgPreview() {
 function selectFgItem(id) {
     const sel = document.getElementById('fg_item_select');
     sel.value = id;
-    updateFgPreview();
-    matchFgQty();
-    sel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (sel.value) {
+        updateFgPreview();
+        matchFgQty();
+        sel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else {
+        alert('This finished good item is not yet mapped to the catalog. Please map it first in Catalog Mapping.');
+    }
 }
 
 function matchFgQty() {
@@ -1682,7 +1742,12 @@ function adjustCopies(inputId, delta) {
     if (!input) return;
     const min = parseInt(input.min || '1', 10);
     const max = parseInt(input.max || '500', 10);
-    const current = parseInt(input.value || String(min), 10);
+    const val = (input.value || '').trim();
+    if (val === '') {
+        input.value = String(delta > 0 ? min : min);
+        return;
+    }
+    const current = parseInt(val, 10);
     input.value = String(Math.min(max, Math.max(min, current + delta)));
 }
 

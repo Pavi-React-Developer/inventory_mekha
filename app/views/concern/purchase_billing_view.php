@@ -202,8 +202,8 @@ if (!function_exists('amountToWordsINR')) {
                             <th>HSN</th>
                             <th>COLOR / SHADE</th>
                             <th>DESIGN / PATTERN</th>
-                            <th>WEIGHT (KG)</th>
-                            <th>UNIT PRICE</th>
+                            <th>OVERALL WEIGHT (KG)</th>
+                            <th>UNIT PRICE (₹)</th>
                             <th>QTY</th>
                             <th>TOTAL</th>
                             <th>GST TYPE</th>
@@ -358,9 +358,8 @@ if (!function_exists('amountToWordsINR')) {
                             <th style="width: 40px;">#</th>
                             <th>PRODUCT</th>
                             <th>HSN</th>
-                            <th>WEIGHT (KG)</th>
                             <th>QTY</th>
-                            <th>SUPPLIER COST (₹)</th>
+                            <th>UNIT PRICE OF SUPPLIER COST (₹)</th>
                             <th>GST TYPE</th>
                             <th>TAX</th>
                             <th class="table-success text-success fw-bold">TOTAL VALUE</th>
@@ -377,7 +376,6 @@ if (!function_exists('amountToWordsINR')) {
                                 <td><?= $idx++ ?></td>
                                 <td class="fw-bold text-dark text-start"><?= htmlspecialchars($f['item_name']) ?></td>
                                 <td class="font-monospace"><?= htmlspecialchars($f['hsn_code'] ?: '-') ?></td>
-                                <td><?= number_format($f['net_weight'] ?? 0, 3) ?></td>
                                 <td class="fw-bold"><?= (int)$f['qty'] ?></td>
                                 <td>₹<?= number_format($f['unit_price'], 2) ?></td>
                                 <td>

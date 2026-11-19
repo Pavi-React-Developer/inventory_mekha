@@ -43,7 +43,13 @@ class PurchaseStockController extends Controller {
             $where = ["pbi.section_type = ?"];
             $params = [$secType];
 
-            if ($secType === 'rolls') {
+            // Purchase Stocks strictly shows items added to stock via the "Add to Stock" action (inward_status = 'completed')
+            if ($statusFilter === 'pending') {
+                $where[] = "COALESCE(NULLIF(pbi.inward_status, ''), pb.inward_status, 'pending') = 'pending'";
+            } elseif ($statusFilter === 'all') {
+                // Shows all items regardless of inward status
+            } else {
+                // Default & 'in_stock': strictly only items where Add to Stock was clicked (inward_status = 'completed')
                 $where[] = "COALESCE(NULLIF(pbi.inward_status, ''), pb.inward_status, 'pending') = 'completed'";
             }
 
@@ -61,14 +67,6 @@ class PurchaseStockController extends Controller {
             if ($supplierFilter > 0) {
                 $where[] = "pb.supplier_id = ?";
                 $params[] = $supplierFilter;
-            }
-
-            if (!empty($statusFilter)) {
-                if ($statusFilter === 'in_stock') {
-                    $where[] = "COALESCE(NULLIF(pbi.inward_status, ''), pb.inward_status, 'pending') = 'completed'";
-                } elseif ($statusFilter === 'pending') {
-                    $where[] = "COALESCE(NULLIF(pbi.inward_status, ''), pb.inward_status, 'pending') = 'pending'";
-                }
             }
 
             return ['sql' => implode(' AND ', $where), 'params' => $params];
@@ -190,9 +188,13 @@ class PurchaseStockController extends Controller {
         }
         unset($item);
 
-        // Calculate KPI Metrics across current concern scope (unfiltered by search for accurate totals)
-        $metricWhere = $selectedCid ? "WHERE pbi.concern_id = ?" : "";
-        $metricParams = $selectedCid ? [$selectedCid] : [];
+        // Calculate KPI Metrics across current concern scope (strictly inwarded stocks: inward_status = 'completed')
+        $metricWhere = ["COALESCE(NULLIF(pbi.inward_status, ''), pb.inward_status, 'pending') = 'completed'"];
+        $metricParams = [];
+        if ($selectedCid) {
+            $metricWhere[] = "pbi.concern_id = ?";
+            $metricParams[] = $selectedCid;
+        }
 
         $allMetrics = DB::fetchAll(
             "SELECT pbi.section_type,
@@ -202,11 +204,12 @@ class PurchaseStockController extends Controller {
                     SUM(COALESCE(stock_override.mrp, pbi.mrp, 0) * COALESCE(stock_override.qty, pbi.qty)) AS total_mrp_val,
                     COUNT(pbi.id) AS item_count
              FROM purchase_bill_items pbi
+             JOIN purchase_bills pb ON pbi.purchase_bill_id = pb.id
              LEFT JOIN purchase_stock_item_overrides stock_override
                ON stock_override.concern_id = pbi.concern_id
               AND stock_override.purchase_bill_item_id = pbi.id
               AND stock_override.section_type = pbi.section_type
-             {$metricWhere}
+             WHERE " . implode(' AND ', $metricWhere) . "
              GROUP BY pbi.section_type",
             $metricParams
         );
@@ -559,7 +562,10 @@ class PurchaseStockController extends Controller {
             $tab = 'rolls';
         }
 
-        $where = ["pbi.section_type = ?"];
+        $where = [
+            "pbi.section_type = ?",
+            "COALESCE(NULLIF(pbi.inward_status, ''), pb.inward_status, 'pending') = 'completed'"
+        ];
         $params = [$tab];
         if ($selectedCid) {
             $where[] = "pbi.concern_id = ?";

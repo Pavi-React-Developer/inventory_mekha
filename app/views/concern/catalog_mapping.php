@@ -401,31 +401,32 @@
                             </button>
                         </div>
                         <div class="card-body p-4">
-                            <div class="mb-3">
-                                <strong class="small text-secondary d-block mb-2">Available Size Attributes:</strong>
-                                <div class="d-flex flex-wrap gap-2">
-                                    <?php 
-                                        $sizeAttrs = array_filter($attributes, fn($a) => $a['attribute_type'] === 'size');
-                                        if (empty($sizeAttrs)) {
-                                            $sizeAttrs = [
-                                                ['attribute_value' => 'XS'],
-                                                ['attribute_value' => 'S'],
-                                                ['attribute_value' => 'M'],
-                                                ['attribute_value' => 'L'],
-                                                ['attribute_value' => 'XL'],
-                                                ['attribute_value' => 'XXL'],
-                                                ['attribute_value' => '3XL'],
-                                                ['attribute_value' => 'Free Size'],
-                                            ];
-                                        }
-                                    ?>
-                                    <?php foreach ($sizeAttrs as $sa): ?>
-                                        <span class="badge bg-white text-dark border px-3 py-2 fs-6 shadow-xs font-monospace">
-                                            <?= htmlspecialchars($sa['attribute_value']) ?>
-                                        </span>
-                                    <?php endforeach; ?>
+                            <?php 
+                                $groupedAttrs = [];
+                                foreach ($attributes as $a) {
+                                    $t = strtolower($a['attribute_type'] ?? 'size');
+                                    $groupedAttrs[$t][] = $a;
+                                }
+                            ?>
+                            <?php if (empty($groupedAttrs)): ?>
+                                <div class="text-center text-muted py-4">
+                                    <i class="bi bi-tag fs-2 text-secondary d-block mb-2"></i>
+                                    <p class="small mb-0">No custom attributes created yet. Click <strong>Add Attribute</strong> above to add size, color, or other attributes.</p>
                                 </div>
-                            </div>
+                            <?php else: ?>
+                                <?php foreach ($groupedAttrs as $type => $typeAttrs): ?>
+                                    <div class="mb-3">
+                                        <strong class="small text-secondary d-block mb-2">Available <?= htmlspecialchars(ucfirst($type)) ?> Attributes:</strong>
+                                        <div class="d-flex flex-wrap gap-2">
+                                            <?php foreach ($typeAttrs as $sa): ?>
+                                                <span class="badge bg-white text-dark border px-3 py-2 fs-6 shadow-xs font-monospace">
+                                                    <?= htmlspecialchars($sa['attribute_value']) ?>
+                                                </span>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    </div>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
                         </div>
                     </div>
                 </div>
@@ -460,11 +461,11 @@
                     </div>
                     <div class="col-md-4">
                         <label class="form-label small fw-semibold">Default HSN</label>
-                        <input type="text" name="default_hsn" class="form-control font-monospace" value="6109">
+                        <input type="text" name="default_hsn" class="form-control font-monospace" placeholder="e.g. 6109">
                     </div>
                     <div class="col-md-4">
                         <label class="form-label small fw-semibold">GST Rate (%)</label>
-                        <input type="number" step="0.01" name="default_gst_rate" class="form-control font-monospace" value="5.00">
+                        <input type="number" step="0.01" name="default_gst_rate" class="form-control font-monospace" placeholder="e.g. 5.00">
                     </div>
                 </div>
             </div>
@@ -571,19 +572,22 @@
             <div class="modal-body p-4">
                 <div class="mb-3">
                     <label class="form-label small fw-semibold">Attribute Type <span class="text-danger">*</span></label>
-                    <select name="attribute_type" class="form-select" required>
-                        <option value="size" selected>Size (e.g. S, M, XL, 3XL, Free Size)</option>
-                        <option value="color">Color (e.g. Navy Blue, Red, Maroon)</option>
-                        <option value="fit">Fit / Cut (e.g. Regular, Slim Fit, Oversized)</option>
+                    <select name="attribute_type" id="selectAttributeType" class="form-select" required onchange="handleAttributeTypeChange(this.value)">
+                        <option value="">-- Choose Attribute Type --</option>
+                        <?php foreach (($attributeTypes ?? ['size', 'color']) as $at): ?>
+                            <option value="<?= htmlspecialchars($at) ?>"><?= htmlspecialchars(ucfirst($at)) ?></option>
+                        <?php endforeach; ?>
+                        <option value="__create_new__" class="fw-bold text-primary">+ Create New Attribute Type...</option>
                     </select>
+                </div>
+                <div class="mb-3 d-none" id="containerNewAttributeType">
+                    <label class="form-label small fw-semibold text-primary">New Attribute Type Name <span class="text-danger">*</span></label>
+                    <input type="text" name="new_attribute_type" id="inputNewAttributeType" class="form-control" placeholder="e.g. Fabric Material, Sleeve, Neck Type">
+                    <small class="text-muted">Enter a custom attribute type name to add to the dropdown.</small>
                 </div>
                 <div class="mb-3">
                     <label class="form-label small fw-semibold">Attribute Value <span class="text-danger">*</span></label>
                     <input type="text" name="attribute_value" class="form-control" placeholder="e.g. 4XL, Olive Green, Comfort Fit" required>
-                </div>
-                <div class="mb-2">
-                    <label class="form-label small fw-semibold">Group / Display Label</label>
-                    <input type="text" name="attribute_name" class="form-control" placeholder="e.g. Extended Sizes, Seasonal Color">
                 </div>
             </div>
             <div class="modal-footer bg-light">
@@ -620,6 +624,20 @@
 </div>
 
 <script>
+function handleAttributeTypeChange(val) {
+    const box = document.getElementById('containerNewAttributeType');
+    const input = document.getElementById('inputNewAttributeType');
+    if (!box || !input) return;
+    if (val === '__create_new__') {
+        box.classList.remove('d-none');
+        input.setAttribute('required', 'required');
+        input.focus();
+    } else {
+        box.classList.add('d-none');
+        input.removeAttribute('required');
+    }
+}
+
 function confirmUnmap(id, name) {
     document.getElementById('unmapItemId').value = id;
     document.getElementById('unmapItemName').textContent = `Unmap "${name}"?`;

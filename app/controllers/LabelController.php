@@ -321,22 +321,44 @@ class LabelController extends Controller {
             $designVal = trim($item['pattern'] ?: ($item['specification'] ?: ($isRoll ? 'PLAIN' : 'STANDARD')));
             $priceVal = (float)($item['unit_price'] ?: ($item['mrp'] ?: 0));
 
+            // Dynamically resolve fabric name vs design name for fabric rolls
+            if ($isRoll) {
+                $codeVal = trim($item['item_code'] ?? '');
+                $nameVal = trim($item['item_name'] ?? '');
+                $patternVal = trim($item['pattern'] ?? '');
+
+                $codeIsGenericRoll = preg_match('/^ROLL\s*#?\s*\d*$/i', $codeVal);
+                $nameIsPatternFabric = !empty($patternVal) && (strcasecmp($nameVal, $patternVal . ' Fabric') === 0 || strcasecmp($nameVal, $patternVal) === 0);
+
+                if (!empty($codeVal) && !$codeIsGenericRoll) {
+                    $fabricName = $codeVal;
+                } elseif (!empty($nameVal) && !$nameIsPatternFabric) {
+                    $fabricName = $nameVal;
+                } else {
+                    $fabricName = !empty($codeVal) ? $codeVal : (!empty($nameVal) ? $nameVal : 'Fabric Material');
+                }
+            } else {
+                $fabricName = $item['item_name'] ?: 'Garment Supply';
+            }
+
             $tagCode = QrService::generateTagCode(
-                $item['item_name'] ?: ($isRoll ? 'Fabric' : 'Trims'),
+                $fabricName,
                 $item['color'] ?? '',
                 $designVal,
                 (string)$item['id']
             );
             $qrText = $tagCode;
 
-            $headerTitle = $isRoll ? ('ROLL #' . ($item['item_code'] ?: $item['id'])) : $item['item_name'];
+            // For fabric rolls: remove "ROLL #cotton" / "ROLL #..." header title completely as requested
+            $headerTitle = $isRoll ? '' : $item['item_name'];
 
             $labelData = [
                 'concern_name'   => $concernName,
                 'ref_no'         => $item['bill_no'] ?: ('PO-' . $item['purchase_bill_id']),
                 'header_title'   => $headerTitle,
+                'is_roll'        => $isRoll,
                 'label_1_name'   => $isRoll ? 'Fabric' : 'Item',
-                'label_1_val'    => $item['item_name'] ?: ($isRoll ? 'Fabric Material' : 'Garment Supply'),
+                'label_1_val'    => $fabricName,
                 'label_2_name'   => 'Color',
                 'label_2_val'    => $item['color'] ?: 'STANDARD',
                 'label_3_name'   => 'Design',
@@ -350,7 +372,7 @@ class LabelController extends Controller {
                 'qr_payload'     => $qrText,
                 'section_title'  => $isRoll ? 'FABRIC ROLL LABEL' : 'TRIMS & ACCESSORIES',
                 'section_badge'  => $isRoll ? 'RAW MATERIAL' : 'PURCHASE TRIM',
-                'item_title'     => $headerTitle,
+                'item_title'     => $isRoll ? $fabricName : $headerTitle,
                 'item_code'      => $tagCode,
                 'brand_name'     => $concernName,
                 'category_name'  => $isRoll ? 'Fabric Rolls' : 'Garment Other Things',
@@ -360,6 +382,7 @@ class LabelController extends Controller {
                 'stock_tab'      => $isRoll ? 'rolls' : 'garment_other',
                 'inward_status'  => $item['inward_status'] ?? 'pending',
                 'extra_details'  => [
+                    'Fabric'   => $fabricName,
                     'Design'   => $designVal,
                     'Price'    => '₹' . number_format($priceVal, 2),
                     'Bill No'  => $item['bill_no'],
@@ -1017,85 +1040,8 @@ class LabelController extends Controller {
             $targetTab = 'rolls';
             $billNo = '';
 
-            if ($billId > 0) {
-                // Inward full bill
-                $billSql = "SELECT * FROM purchase_bills WHERE id = ?";
-                $billParams = [$billId];
-                if ($cid) {
-                    $billSql .= " AND concern_id = ?";
-                    $billParams[] = $cid;
-                }
-                $bill = DB::fetch($billSql, $billParams);
-                if (!$bill) {
-                    throw new Exception("Purchase bill #{$billId} not found or access denied.");
-                }
-
-                $concernId = (int)$bill['concern_id'];
-                $billNo = $bill['bill_no'];
-
-                // Update bill inward_status to completed
-                DB::query("UPDATE purchase_bills SET inward_status = 'completed' WHERE id = ?", [$billId]);
-                DB::query("UPDATE purchase_bill_items SET inward_status = 'completed' WHERE purchase_bill_id = ?", [$billId]);
-
-                $items = DB::fetchAll("SELECT * FROM purchase_bill_items WHERE purchase_bill_id = ?", [$billId]);
-                $hasRolls = false;
-                $hasOther = false;
-                $hasFg = false;
-
-                foreach ($items as $it) {
-                    if ($it['section_type'] === 'rolls') {
-                        $hasRolls = true;
-                    } elseif ($it['section_type'] === 'garment_other') {
-                        $hasOther = true;
-                    } elseif ($it['section_type'] === 'finished_goods') {
-                        $hasFg = true;
-                        if (!empty($it['variant_id'])) {
-                            // Check if already moved into stock ledger for this bill
-                            $alreadyLedger = DB::fetchValue(
-                                "SELECT id FROM stock_ledger WHERE concern_id = ? AND variant_id = ? AND ref_module = 'Purchase Inward' AND ref_id = ? LIMIT 1",
-                                [$concernId, $it['variant_id'], $billId]
-                            );
-                            if (!$alreadyLedger) {
-                                StockService::move(
-                                    $concernId,
-                                    (int)$it['variant_id'],
-                                    'Main Store',
-                                    (float)$it['qty'],
-                                    0.00,
-                                    'Purchase Inward',
-                                    $billId,
-                                    "Inward from Purchase Bill #{$billNo} via Label Generation Hub"
-                                );
-                            }
-                        }
-                    }
-                }
-
-                if ($hasRolls) {
-                    RollRegistryService::syncSpecs($concernId);
-                }
-
-                if ($preferredTab && in_array($preferredTab, ['rolls', 'garment_other', 'finished_goods'], true)) {
-                    $targetTab = $preferredTab;
-                } elseif ($hasRolls) {
-                    $targetTab = 'rolls';
-                } elseif ($hasOther) {
-                    $targetTab = 'garment_other';
-                } elseif ($hasFg) {
-                    $targetTab = 'finished_goods';
-                }
-
-                if (DB::pdo()->inTransaction()) {
-                    DB::commit();
-                }
-
-                $this->flash('success', "Purchase Bill '{$billNo}' items successfully added to stock! Purchase inventory updated.");
-                $this->redirect("/m/purchase_stocks?tab={$targetTab}");
-                return;
-            }
-
+            // Priority 1: Inward individual item strictly when item_id is provided
             if ($itemId > 0) {
-                // Inward individual item
                 $itemSql = "SELECT pbi.*, pb.bill_no, pb.concern_id AS b_cid 
                             FROM purchase_bill_items pbi 
                             JOIN purchase_bills pb ON pbi.purchase_bill_id = pb.id 
@@ -1116,13 +1062,15 @@ class LabelController extends Controller {
 
                 DB::query("UPDATE purchase_bill_items SET inward_status = 'completed' WHERE id = ?", [$itemId]);
 
-                // Check if all items in the bill are completed
+                // Check remaining pending items across this bill
                 $pendingCount = (int)DB::fetchValue(
                     "SELECT COUNT(*) FROM purchase_bill_items WHERE purchase_bill_id = ? AND inward_status = 'pending'",
                     [$billId]
                 );
                 if ($pendingCount === 0) {
                     DB::query("UPDATE purchase_bills SET inward_status = 'completed' WHERE id = ?", [$billId]);
+                } else {
+                    DB::query("UPDATE purchase_bills SET inward_status = 'pending' WHERE id = ?", [$billId]);
                 }
 
                 if ($item['section_type'] === 'rolls') {
@@ -1161,6 +1109,106 @@ class LabelController extends Controller {
                 }
 
                 $this->flash('success', "Item '{$item['item_name']}' from Bill '{$billNo}' added to stock successfully!");
+                $this->redirect("/m/purchase_stocks?tab={$targetTab}");
+                return;
+            }
+
+            // Priority 2: Inward at bill level (restricted to specific section if tab is specified)
+            if ($billId > 0) {
+                $billSql = "SELECT * FROM purchase_bills WHERE id = ?";
+                $billParams = [$billId];
+                if ($cid) {
+                    $billSql .= " AND concern_id = ?";
+                    $billParams[] = $cid;
+                }
+                $bill = DB::fetch($billSql, $billParams);
+                if (!$bill) {
+                    throw new Exception("Purchase bill #{$billId} not found or access denied.");
+                }
+
+                $concernId = (int)$bill['concern_id'];
+                $billNo = $bill['bill_no'];
+
+                $sectionFilter = null;
+                $sectionLabel = 'All items';
+                if ($preferredTab === 'rolls') {
+                    $sectionFilter = 'rolls';
+                    $sectionLabel = 'Fabric rolls';
+                    $targetTab = 'rolls';
+                } elseif ($preferredTab === 'garment_other') {
+                    $sectionFilter = 'garment_other';
+                    $sectionLabel = 'Other garments & trims';
+                    $targetTab = 'garment_other';
+                } elseif ($preferredTab === 'finished_goods') {
+                    $sectionFilter = 'finished_goods';
+                    $sectionLabel = 'Purchased finished goods';
+                    $targetTab = 'finished_goods';
+                }
+
+                if ($sectionFilter !== null) {
+                    // Strictly inward ONLY items of the requested section
+                    DB::query(
+                        "UPDATE purchase_bill_items SET inward_status = 'completed' WHERE purchase_bill_id = ? AND section_type = ?",
+                        [$billId, $sectionFilter]
+                    );
+                    $affectedItems = DB::fetchAll(
+                        "SELECT * FROM purchase_bill_items WHERE purchase_bill_id = ? AND section_type = ?",
+                        [$billId, $sectionFilter]
+                    );
+                } else {
+                    // Blanket inward of all items
+                    DB::query("UPDATE purchase_bill_items SET inward_status = 'completed' WHERE purchase_bill_id = ?", [$billId]);
+                    $affectedItems = DB::fetchAll("SELECT * FROM purchase_bill_items WHERE purchase_bill_id = ?", [$billId]);
+                }
+
+                $hasRolls = false;
+                foreach ($affectedItems as $it) {
+                    if ($it['section_type'] === 'rolls') {
+                        $hasRolls = true;
+                    } elseif ($it['section_type'] === 'finished_goods' && !empty($it['variant_id'])) {
+                        $alreadyLedger = DB::fetchValue(
+                            "SELECT id FROM stock_ledger WHERE concern_id = ? AND variant_id = ? AND ref_module = 'Purchase Inward' AND ref_id = ? LIMIT 1",
+                            [$concernId, $it['variant_id'], $billId]
+                        );
+                        if (!$alreadyLedger) {
+                            StockService::move(
+                                $concernId,
+                                (int)$it['variant_id'],
+                                'Main Store',
+                                (float)$it['qty'],
+                                0.00,
+                                'Purchase Inward',
+                                $billId,
+                                "Inward from Purchase Bill #{$billNo} via Label Generation Hub"
+                            );
+                        }
+                    }
+                }
+
+                if ($hasRolls) {
+                    RollRegistryService::syncSpecs($concernId);
+                }
+
+                // Check remaining pending items across all sections in the bill
+                $pendingCount = (int)DB::fetchValue(
+                    "SELECT COUNT(*) FROM purchase_bill_items WHERE purchase_bill_id = ? AND inward_status = 'pending'",
+                    [$billId]
+                );
+                if ($pendingCount === 0) {
+                    DB::query("UPDATE purchase_bills SET inward_status = 'completed' WHERE id = ?", [$billId]);
+                } else {
+                    DB::query("UPDATE purchase_bills SET inward_status = 'pending' WHERE id = ?", [$billId]);
+                }
+
+                if (DB::pdo()->inTransaction()) {
+                    DB::commit();
+                }
+
+                $msg = ($pendingCount === 0)
+                    ? "Purchase Bill '{$billNo}' items successfully added to stock! Purchase inventory updated."
+                    : "{$sectionLabel} from Purchase Bill '{$billNo}' added to stock successfully! Other sections remain pending.";
+
+                $this->flash('success', $msg);
                 $this->redirect("/m/purchase_stocks?tab={$targetTab}");
                 return;
             }

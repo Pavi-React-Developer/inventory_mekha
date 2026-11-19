@@ -243,6 +243,8 @@ class CatalogMappingController extends Controller {
         }
 
         $activeTab = $_GET['tab'] ?? 'mappings';
+        $attributeTypes = array_values(array_unique(array_filter(array_column($attributes, 'attribute_type'))));
+        sort($attributeTypes);
 
         $this->render('concern/catalog_mapping', [
             'pageTitle'        => 'Catalog Mapping',
@@ -252,6 +254,7 @@ class CatalogMappingController extends Controller {
             'subcategories'    => $subcategories,
             'subSubcategories' => $subSubcategories,
             'attributes'       => $attributes,
+            'attributeTypes'   => $attributeTypes,
             'catalogs'         => $catalogs,
             'metrics'          => [
                 'total'    => $totalItems,
@@ -283,8 +286,9 @@ class CatalogMappingController extends Controller {
         }
 
         $sql = "SELECT pbi.*, 
-                       pb.bill_no, pb.bill_date, pb.supplier_id,
-                       s.name AS supplier_name,
+                       pb.bill_no, pb.bill_date, pb.supplier_id, pb.supplier_invoice_no, pb.payment_status, pb.inward_status AS bill_inward_status,
+                       pb.payment_method, pb.paid_amount, pb.total_amount AS bill_total_amount, pb.tax_amount AS bill_tax_amount,
+                       s.name AS supplier_name, s.phone AS supplier_phone, s.email AS supplier_email, s.gstin AS supplier_gstin, s.city AS supplier_city, s.state AS supplier_state, s.address AS supplier_address,
                        cm.id AS mapping_id, cm.catalog_id AS mapped_catalog_id, cm.selected_sizes, cm.selected_color,
                        c.name AS catalog_name, c.style_code AS catalog_style_code, c.short_code AS catalog_short_code,
                        c.hierarchy_path, c.category_id AS mapped_cat_id, c.subcategory_id AS mapped_subcat_id, c.sub_sub_category_id AS mapped_subsub_id
@@ -300,6 +304,21 @@ class CatalogMappingController extends Controller {
             $this->flash('error', 'Finished good item not found or access denied.');
             $this->redirect('/production/catalog-mapping');
         }
+
+        // Extract or resolve color from item, specification, or product name
+        $knownColors = ['RED', 'BLUE', 'GREEN', 'BLACK', 'WHITE', 'YELLOW', 'NAVY', 'NAVY BLUE', 'ORANGE', 'PINK', 'GREY', 'GRAY', 'PURPLE', 'MAROON', 'BEIGE', 'BROWN', 'CORAL', 'TEAL', 'OLIVE'];
+        $colorFromProduct = '';
+        $upperName = strtoupper($item['item_name'] ?? '');
+        foreach ($knownColors as $c) {
+            if (preg_match('/\b' . preg_quote($c, '/') . '\b/i', $upperName)) {
+                $colorFromProduct = ucwords(strtolower($c));
+                break;
+            }
+        }
+        $resolvedColor = !empty($item['selected_color']) ? $item['selected_color'] 
+            : (!empty($item['color']) ? $item['color'] 
+            : (!empty($item['specification']) ? $item['specification'] 
+            : $colorFromProduct));
 
         // Generate suggested style code: GRM-STY-XXXX
         $styleCount = (int)DB::fetchValue("SELECT COUNT(*) FROM catalogs WHERE concern_id = ?", [$cid]) + 1;
@@ -325,6 +344,7 @@ class CatalogMappingController extends Controller {
             'pageTitle'          => 'Map Finished Good to Catalog: ' . $item['item_name'],
             'currentModule'      => 'catalog_mapping',
             'item'               => $item,
+            'resolvedColor'      => $resolvedColor,
             'suggestedStyleCode' => $suggestedStyleCode,
             'categories'         => $categories,
             'subcategories'      => $subcategories,
@@ -368,6 +388,8 @@ class CatalogMappingController extends Controller {
             $primaryVariantId = null;
             $cleanSizes = [];
             $color = trim($_POST['color'] ?? ($item['color'] ?? ''));
+            $mrp = (float)($_POST['mrp'] ?? ($item['mrp'] ?? 0.00));
+            $sellingPrice = (float)($_POST['selling_price'] ?? ($item['selling_price'] ?? 0.00));
 
             if ($mappingMode === 'existing_style') {
                 $catalogId = (int)($_POST['existing_catalog_id'] ?? 0);
@@ -477,36 +499,78 @@ class CatalogMappingController extends Controller {
                     $catalogId = (int)DB::lastInsertId();
                 }
 
-                // Generate / synchronize size variants
-                $attrJson = json_encode(array_filter(['color' => $color]));
+                // Generate / synchronize size variants (from editable table format)
+                $variantSkus = $_POST['variant_skus'] ?? [];
+                $variantNames = $_POST['variant_names'] ?? [];
+                $variantColors = $_POST['variant_colors'] ?? [];
+                $variantQtys = $_POST['variant_qtys'] ?? [];
+                $variantWeights = $_POST['variant_weights'] ?? [];
+                $variantHsns = $_POST['variant_hsns'] ?? [];
+                $variantMrps = $_POST['variant_mrps'] ?? [];
+                $variantSellingPrices = $_POST['variant_selling_prices'] ?? [];
+
+                $firstMrp = null;
+                $firstPrice = null;
+                $createdVariantQtys = [];
+
                 foreach ($cleanSizes as $size) {
-                    $sku = "{$styleCode}-{$size}";
-                    $varName = "{$styleName} - {$size}";
+                    $sku = !empty($variantSkus[$size]) ? trim($variantSkus[$size]) : "{$styleCode}-{$size}";
+                    $varName = !empty($variantNames[$size]) ? trim($variantNames[$size]) : "{$styleName} - {$size}";
+                    $varColor = !empty($variantColors[$size]) ? trim($variantColors[$size]) : $color;
+                    $varQty = isset($variantQtys[$size]) && (float)$variantQtys[$size] > 0 ? (float)$variantQtys[$size] : 1;
+                    $varWeight = isset($variantWeights[$size]) && $variantWeights[$size] !== '' ? (float)$variantWeights[$size] : 0.0;
+                    $varHsn = !empty($variantHsns[$size]) ? trim($variantHsns[$size]) : $hsnCode;
+                    $varMrp = isset($variantMrps[$size]) && $variantMrps[$size] !== '' ? (float)$variantMrps[$size] : $mrp;
+                    $varPrice = isset($variantSellingPrices[$size]) && $variantSellingPrices[$size] !== '' ? (float)$variantSellingPrices[$size] : $sellingPrice;
+
+                    if ($firstMrp === null && $varMrp > 0) $firstMrp = $varMrp;
+                    if ($firstPrice === null && $varPrice > 0) $firstPrice = $varPrice;
+
+                    $varAttrJson = json_encode(array_filter([
+                        'color' => $varColor,
+                        'hsn' => $varHsn,
+                        'weight' => $varWeight,
+                        'allocated_qty' => $varQty
+                    ]));
+
                     $existVar = DB::fetch("SELECT id FROM variants WHERE concern_id = ? AND catalog_id = ? AND size = ?", [$cid, $catalogId, $size]);
                     if (!$existVar) {
                         DB::query(
                             "INSERT INTO variants (
                                 concern_id, catalog_id, sku_code, name,
-                                category_id, subcategory_id, size, attributes,
+                                category_id, subcategory_id, size, weight, weight_unit, attributes,
                                 price, mrp, creation_date, status, created_at
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURDATE(), 'active', NOW())",
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'kg', ?, ?, ?, CURDATE(), 'active', NOW())",
                             [
                                 $cid, $catalogId, $sku, $varName,
-                                $categoryId, $subcategoryId, $size, $attrJson,
-                                $sellingPrice, $mrp
+                                $categoryId, $subcategoryId, $size, $varWeight, $varAttrJson,
+                                $varPrice, $varMrp
                             ]
                         );
                         $newVarId = (int)DB::lastInsertId();
                         if (!$primaryVariantId) $primaryVariantId = $newVarId;
+                        $createdVariantQtys[$newVarId] = $varQty;
                     } else {
-                        DB::query("UPDATE variants SET price = ?, mrp = ?, attributes = ?, status = 'active' WHERE id = ?", [$sellingPrice, $mrp, $attrJson, $existVar['id']]);
+                        DB::query(
+                            "UPDATE variants SET sku_code = ?, name = ?, weight = ?, weight_unit = 'kg', price = ?, mrp = ?, attributes = ?, status = 'active' WHERE id = ?",
+                            [$sku, $varName, $varWeight, $varPrice, $varMrp, $varAttrJson, $existVar['id']]
+                        );
                         if (!$primaryVariantId) $primaryVariantId = (int)$existVar['id'];
+                        $createdVariantQtys[(int)$existVar['id']] = $varQty;
                     }
                 }
+
+                if ($mrp <= 0 && $firstMrp !== null) $mrp = $firstMrp;
+                if ($sellingPrice <= 0 && $firstPrice !== null) $sellingPrice = $firstPrice;
             }
 
             // Update purchase_bill_items
-            DB::query("UPDATE purchase_bill_items SET catalog_id = ?, variant_id = ? WHERE id = ?", [$catalogId, $primaryVariantId, $itemId]);
+            DB::query(
+                "UPDATE purchase_bill_items 
+                 SET catalog_id = ?, variant_id = ?, mrp = ?, selling_price = ?, color = COALESCE(NULLIF(?, ''), color) 
+                 WHERE id = ?", 
+                [$catalogId, $primaryVariantId, $mrp, $sellingPrice, $color, $itemId]
+            );
 
             // Save or update catalog_mappings table
             $existMap = DB::fetch("SELECT id FROM catalog_mappings WHERE purchase_bill_item_id = ?", [$itemId]);
@@ -721,13 +785,21 @@ class CatalogMappingController extends Controller {
         $this->validateCsrf();
         $cid = Auth::concernId() ?: 1;
 
-        $type = trim($_POST['attribute_type'] ?? 'size');
+        $type = trim($_POST['attribute_type'] ?? '');
+        if ($type === '__create_new__' || !empty($_POST['new_attribute_type'])) {
+            $type = strtolower(trim($_POST['new_attribute_type'] ?? ''));
+        }
+        if (empty($type)) {
+            $type = 'size';
+        }
+
         $val = trim($_POST['attribute_value'] ?? '');
         $name = trim($_POST['attribute_name'] ?? ucfirst($type));
 
         if (empty($val)) {
             $this->flash('error', 'Attribute value cannot be empty.');
-            $this->redirect('/production/catalog-mapping?tab=hierarchy');
+            $this->redirect($_POST['return_url'] ?? '/production/catalog-mapping?tab=hierarchy');
+            return;
         }
 
         try {
@@ -736,7 +808,7 @@ class CatalogMappingController extends Controller {
                  VALUES (?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM product_attributes pa WHERE pa.concern_id = ?))",
                 [$cid, $type, $name, $val, $cid]
             );
-            $this->flash('success', "Attribute '{$val}' ({$name}) added successfully.");
+            $this->flash('success', "Attribute '{$val}' for '" . ucfirst($type) . "' added successfully.");
         } catch (Exception $e) {
             $this->flash('error', 'Failed to add attribute: ' . $e->getMessage());
         }

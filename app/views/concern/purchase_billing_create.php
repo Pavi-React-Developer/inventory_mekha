@@ -141,7 +141,7 @@ if ($isEdit && !empty($existingItems)) {
                         <li class="nav-item" role="presentation">
                             <button class="nav-link active px-3 py-2 fw-semibold d-flex align-items-center gap-2" id="tabRollsBtn" data-bs-toggle="pill" data-bs-target="#paneRolls" type="button" role="tab">
                                 <i class="bi bi-layers text-primary"></i> Individual Fabric Rolls
-                                <span class="badge bg-primary rounded-pill" id="rollBadgeCount">1</span>
+                                <span class="badge bg-primary rounded-pill" id="rollBadgeCount">0</span>
                             </button>
                         </li>
                         <li class="nav-item" role="presentation">
@@ -175,7 +175,7 @@ if ($isEdit && !empty($existingItems)) {
                     <div class="tab-pane fade show active" id="paneRolls" role="tabpanel">
                         <div class="d-flex justify-content-between align-items-center mb-3">
                             <div>
-                                <h6 class="fw-bold mb-0 text-dark"><i class="bi bi-layers text-primary me-1"></i> Individual Fabric Rolls (<span id="rollCountHeader">1</span>)</h6>
+                                <h6 class="fw-bold mb-0 text-dark"><i class="bi bi-layers text-primary me-1"></i> Individual Fabric Rolls (<span id="rollCountHeader">0</span>)</h6>
                                 <small class="text-muted">Add each roll received on this supplier invoice.</small>
                             </div>
                             <button type="button" class="btn btn-sm text-white px-3 fw-semibold shadow-sm" style="background: #4f46e5;" onclick="addRollRow()">
@@ -195,168 +195,12 @@ if ($isEdit && !empty($existingItems)) {
                             <?php endforeach; ?>
                         </datalist>
 
-                        <!-- Dynamic Roll Input Cards -->
-                        <div id="rollsContainer">
-                            <!-- Roll #1 (Starts Empty with Placeholders) -->
-                            <div class="roll-card card border mb-4 shadow-sm rounded-3" id="rollCard_1">
-                                <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center">
-                                    <div class="d-flex align-items-center gap-2">
-                                        <i class="bi bi-layers text-primary"></i>
-                                        <span class="fw-bold text-dark font-monospace">ROLL #1</span>
-                                        <span class="badge bg-dark font-monospace px-2 py-1 roll-code-badge">FB112661</span>
-                                    </div>
-                                    <button type="button" class="btn btn-outline-danger btn-sm py-0 px-2" onclick="removeRollRow(1)">
-                                        <i class="bi bi-trash3 me-1"></i> Delete
-                                    </button>
-                                </div>
-                                <div class="card-body p-3">
-                                    <!-- Quick Select from Saved Color & Design Registry with View and + New options -->
-                                    <div class="mb-3 p-2.5 rounded bg-light border d-flex flex-wrap align-items-center justify-content-between gap-2 roll-spec-selector-bar">
-                                        <div class="d-flex align-items-center gap-1.5 small text-secondary">
-                                            <i class="bi bi-bookmark-star text-primary"></i>
-                                            <span class="fw-semibold">Roll Design / Pattern:</span>
-                                        </div>
-                                        <div class="flex-grow-1" style="max-width: 520px;">
-                                            <div class="input-group input-group-sm">
-                                                <select class="form-select form-select-sm roll-quick-select" id="rollQuickSelect_1" onchange="applySavedRollSpec(this, 1)">
-                                                    <option value="">-- Choose from Saved Color & Design Registry --</option>
-                                                    <?php if (!empty($savedRollSpecs)): ?>
-                                                        <optgroup label="Saved Specifications">
-                                                            <?php foreach ($savedRollSpecs as $spec): ?>
-                                                                <option value="<?= htmlspecialchars($spec['design_name']) ?>|<?= htmlspecialchars($spec['color']) ?>"
-                                                                        data-color="<?= htmlspecialchars($spec['color']) ?>"
-                                                                        data-pattern="<?= htmlspecialchars($spec['design_name']) ?>"
-                                                                        data-qty="<?= (float)$spec['qty'] ?>"
-                                                                        data-weight="<?= (float)$spec['net_weight'] ?>"
-                                                                        data-price="<?= (float)$spec['last_unit_price'] ?>"
-                                                                        data-hsn="<?= htmlspecialchars($spec['hsn_code'] ?? '') ?>"
-                                                                        data-supplier="<?= htmlspecialchars($spec['last_supplier_name'] ?? '') ?>"
-                                                                        data-bill="<?= htmlspecialchars($spec['last_bill_no'] ?? '') ?>"
-                                                                        data-bills="<?= (int)($spec['bills_count'] ?? 1) ?>">
-                                                                    <?= htmlspecialchars($spec['design_name']) ?> &bull; <?= htmlspecialchars($spec['color']) ?> (Available: <?= (float)$spec['qty'] ?> Rolls)
-                                                                </option>
-                                                            <?php endforeach; ?>
-                                                        </optgroup>
-                                                    <?php endif; ?>
-                                                </select>
-                                                <button type="button" class="btn btn-outline-info btn-sm btn-view-spec px-2" id="btnViewSpec_1" onclick="viewCurrentRollSpec(1)" title="View Details of Selected Design">
-                                                    <i class="bi bi-eye"></i> View
-                                                </button>
-                                                <button type="button" class="btn btn-primary btn-sm px-2 fw-semibold" onclick="openCreateDesignModal(1)" title="Create New Design & Color">
-                                                    <i class="bi bi-plus-lg"></i> New
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
+                        <!-- Dynamic Roll Input Cards (Starts Empty) -->
+                        <div id="rollsContainer"></div>
 
-                                    <!-- Row 1: Fabric Name, Color, Design Name, Qty, Weight, Price -->
-                                    <div class="row g-2 mb-2 align-items-end">
-                                        <div class="col-md-2">
-                                            <label class="form-label small fw-semibold mb-1">Fabric Name <span class="text-danger">*</span></label>
-                                            <input type="text" name="rolls[1][roll_code]" class="form-control form-control-sm font-monospace text-uppercase roll-input-code" placeholder="E.G. COTTON" value="" required oninput="syncRollsTable()">
-                                        </div>
-                                        <div class="col-md-2">
-                                            <label class="form-label small fw-semibold mb-1">Color / Shade <span class="text-danger">*</span></label>
-                                            <input type="text" name="rolls[1][color]" list="rollColorList" class="form-control form-control-sm text-uppercase roll-input-color" placeholder="E.G. BLACK" value="" required oninput="onRollColorOrPatternChange(1); syncRollsTable()">
-                                        </div>
-                                        <div class="col-md-2">
-                                            <label class="form-label small fw-semibold mb-1">Design Name / Pattern <span class="text-danger">*</span></label>
-                                            <input type="text" name="rolls[1][pattern]" list="rollPatternList" class="form-control form-control-sm text-uppercase roll-input-pattern" placeholder="E.G. FLORAL 01" value="" required oninput="onRollColorOrPatternChange(1); syncRollsTable()">
-                                        </div>
-                                        <div class="col-md-2">
-                                            <label class="form-label small fw-semibold mb-1">Qty <span class="text-danger">*</span></label>
-                                            <input type="number" min="1" step="1" name="rolls[1][rq]" class="form-control form-control-sm roll-input-rq" placeholder="1" value="1" required oninput="onRollColorOrPatternChange(1); syncRollsTable()">
-                                        </div>
-                                        <div class="col-md-2">
-                                            <label class="form-label small fw-semibold mb-1">Weight (kg) <span class="text-danger">*</span></label>
-                                            <div class="input-group input-group-sm">
-                                                <input type="number" step="0.01" min="0.01" name="rolls[1][weight]" class="form-control form-control-sm roll-input-weight" placeholder="0.00" value="" required oninput="syncRollsTable()">
-                                                <span class="input-group-text small bg-light text-muted">kg</span>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-2">
-                                            <label class="form-label small fw-semibold mb-1">Price (₹) <span class="text-danger">*</span></label>
-                                            <div class="input-group input-group-sm">
-                                                <span class="input-group-text small bg-light text-muted">₹</span>
-                                                <input type="number" step="0.01" min="0.01" name="rolls[1][price]" class="form-control form-control-sm roll-input-price" placeholder="0.00" value="" required oninput="syncRollsTable()">
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <!-- Live Roll Stock Accumulation Notice -->
-                                    <div class="roll-stock-notice mb-3" id="rollStockNotice_1" style="display: none;"></div>
-
-                                    <!-- Row 2: HSN Code, Tax Mode (Include/Exclude GST), GST & Dynamic Tax Fields -->
-                                    <div class="row g-2 mb-3 align-items-end">
-                                        <div class="col-md-3">
-                                            <div class="d-flex justify-content-between align-items-center mb-1">
-                                                <label class="form-label small fw-semibold mb-0">HSN Code</label>
-                                                <a href="javascript:void(0)" class="text-decoration-none small text-primary fw-semibold" onclick="promptAddHsn(1)">+ Add HSN</a>
-                                            </div>
-                                            <select name="rolls[1][hsn]" class="form-select form-select-sm roll-input-hsn" onchange="onRollHsnChange(1)">
-                                                <option value="">-- Select HSN --</option>
-                                                <?php if (!empty($hsnList)): ?>
-                                                    <?php foreach ($hsnList as $h): ?>
-                                                        <option value="<?= htmlspecialchars($h['hsn_code']) ?>" data-gst="<?= (float)$h['gst_rate'] ?>">
-                                                            <?= htmlspecialchars($h['hsn_code'] . (!empty($h['description']) ? ' - ' . $h['description'] : '')) ?>
-                                                        </option>
-                                                    <?php endforeach; ?>
-                                                <?php endif; ?>
-                                            </select>
-                                        </div>
-                                        <div class="col-md-2">
-                                            <label class="form-label small fw-semibold mb-1">Tax Mode</label>
-                                            <select name="rolls[1][tax_mode]" class="form-select form-select-sm roll-input-tax-mode" onchange="syncRollsTable()">
-                                                <option value="Exclude GST" selected>Exclude GST</option>
-                                                <option value="Include GST">Include GST</option>
-                                            </select>
-                                        </div>
-                                        <div class="col-md-2">
-                                            <label class="form-label small fw-semibold mb-1">GST</label>
-                                            <select name="rolls[1][gst]" class="form-select form-select-sm roll-input-gst" onchange="onRollGstTypeChange(1)">
-                                                <option value="Exempted" selected>Exempted</option>
-                                                <option value="Both (CGST and SGST)">Both (CGST and SGST)</option>
-                                                <option value="SGST">SGST</option>
-                                                <option value="CGST">CGST</option>
-                                                <option value="IGST">IGST</option>
-                                            </select>
-                                        </div>
-                                        <!-- Dynamic Tax Fields Container -->
-                                        <div class="col-md-5 d-none roll-gst-dynamic-container" id="gstDynamic_1">
-                                            <div class="row g-2 align-items-end">
-                                                <div class="col-md-4">
-                                                    <label class="form-label small fw-semibold mb-1">Tax Input Type</label>
-                                                    <select name="rolls[1][tax_input_type]" class="form-select form-select-sm roll-input-tax-type" onchange="onRollTaxInputTypeChange(1)">
-                                                        <option value="Percentage" selected>Percentage (%)</option>
-                                                        <option value="Amount">Amount (₹)</option>
-                                                    </select>
-                                                </div>
-                                                <div class="col-md-4 roll-sgst-col" id="sgstCol_1">
-                                                    <label class="form-label small fw-semibold mb-1 roll-sgst-label">SGST (%)</label>
-                                                    <input type="number" step="0.01" min="0" name="rolls[1][sgst]" class="form-control form-control-sm roll-input-sgst" value="0" placeholder="0" oninput="syncRollsTable()">
-                                                </div>
-                                                <div class="col-md-4 roll-cgst-col" id="cgstCol_1">
-                                                    <label class="form-label small fw-semibold mb-1 roll-cgst-label">CGST (%)</label>
-                                                    <input type="number" step="0.01" min="0" name="rolls[1][cgst]" class="form-control form-control-sm roll-input-cgst" value="0" placeholder="0" oninput="syncRollsTable()">
-                                                </div>
-                                                <div class="col-md-4 roll-igst-col d-none" id="igstCol_1">
-                                                    <label class="form-label small fw-semibold mb-1 roll-igst-label">IGST (%)</label>
-                                                    <input type="number" step="0.01" min="0" name="rolls[1][igst]" class="form-control form-control-sm roll-input-igst" value="0" placeholder="0" oninput="syncRollsTable()">
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <!-- Row 3: Roll Sample Photo & Preview -->
-                                    <div class="row g-2 align-items-end">
-                                        <div class="col-md-6">
-                                            <label class="form-label small fw-semibold mb-1">Roll Sample Photo (Optional — JPG, PNG, WEBP)</label>
-                                            <input type="file" name="rolls[1][photo]" class="form-control form-control-sm roll-input-photo" accept=".jpg,.jpeg,.png,.webp" onchange="previewRollPhoto(this, 1)">
-                                            <div class="roll-photo-preview-inline mt-1" id="photoPreview_1"></div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                        <div id="noRollsPlaceholder" class="p-4 bg-light rounded-3 text-center text-muted mb-3">
+                            <i class="bi bi-layers fs-3 d-block mb-1 text-secondary"></i>
+                            No fabric rolls added. Click <strong>+ Add Fabric Roll</strong> to add roll items.
                         </div>
 
                         <!-- Fabric Rolls Inventory & Details Table (Matching Image 1 & 2) -->
@@ -375,8 +219,8 @@ if ($isEdit && !empty($existingItems)) {
                                             <th>HSN</th>
                                             <th>COLOR / SHADE</th>
                                             <th>DESIGN / PATTERN</th>
-                                            <th>WEIGHT (KG)</th>
-                                            <th>UNIT PRICE</th>
+                                            <th>OVERALL WEIGHT (KG)</th>
+                                            <th>UNIT PRICE (₹)</th>
                                             <th>QTY</th>
                                             <th>TOTAL</th>
                                             <th>GST TYPE</th>
@@ -385,7 +229,7 @@ if ($isEdit && !empty($existingItems)) {
                                         </tr>
                                     </thead>
                                     <tbody id="rollsInventoryTableBody">
-                                        <!-- Dynamically generated -->
+                                        <tr><td colspan="13" class="text-center py-3 text-muted">Add fabric rolls to see inventory details.</td></tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -516,16 +360,15 @@ if ($isEdit && !empty($existingItems)) {
                                             <th style="width: 40px;">#</th>
                                             <th>PRODUCT</th>
                                             <th>HSN</th>
-                                            <th>WEIGHT (KG)</th>
                                             <th>QTY</th>
-                                            <th>SUPPLIER COST (₹)</th>
+                                            <th>UNIT PRICE OF SUPPLIER COST (₹)</th>
                                             <th>GST TYPE</th>
                                             <th>TAX</th>
                                             <th class="table-success text-success fw-bold">TOTAL VALUE</th>
                                         </tr>
                                     </thead>
                                     <tbody id="finishedGoodsTableBody">
-                                        <tr><td colspan="9" class="text-center py-3 text-muted">Add finished goods to see inventory details.</td></tr>
+                                        <tr><td colspan="8" class="text-center py-3 text-muted">Add finished goods to see inventory details.</td></tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -545,7 +388,7 @@ if ($isEdit && !empty($existingItems)) {
                                 <div class="card border p-3 rounded-3 text-center bg-light h-100">
                                     <div class="fw-bold text-primary mb-1"><i class="bi bi-layers me-1"></i> Fabric Rolls</div>
                                     <div class="fs-4 fw-bold text-dark my-1" id="overviewRollsVal">₹0.00</div>
-                                    <div class="small text-muted mb-3"><span id="overviewRollsCount">1</span> roll(s) &bull; <span id="overviewRollsWeight">0.00</span> kg</div>
+                                    <div class="small text-muted mb-3"><span id="overviewRollsCount">0</span> roll(s) &bull; <span id="overviewRollsWeight">0.00</span> kg</div>
                                     <button type="button" class="btn btn-sm btn-outline-primary w-100" onclick="document.getElementById('tabRollsBtn').click();">
                                         Open Rolls Section
                                     </button>
@@ -855,7 +698,7 @@ let savedRollSpecsRegistry = <?= json_encode($savedRollSpecs ?? []) ?>;
 const savedColorsRegistry = <?= json_encode($savedColors ?? []) ?>;
 const savedDesignsRegistry = <?= json_encode($savedDesigns ?? []) ?>;
 
-let rollCounter = 1;
+let rollCounter = 0;
 let otherCounter = 0;
 let finishedCounter = 0;
 let currentHsnTarget = { type: 'rolls', id: 1 };
@@ -871,8 +714,22 @@ function escapeHtml(text) {
         .replace(/'/g, '&#039;');
 }
 
-function generateRollCode(num) {
-    return 'FB' + (112660 + num);
+function generateRollCode(num, name = '') {
+    const clean = (name || '').trim().toUpperCase().replace(/\s+/g, '-');
+    if (clean) {
+        return 'ROLL-' + clean;
+    }
+    return 'ROLL-' + (num < 10 ? '0' + num : num);
+}
+
+function updateRollHeaderCode(id) {
+    const card = document.getElementById('rollCard_' + id);
+    if (!card) return;
+    const input = card.querySelector('.roll-input-code');
+    const badge = card.querySelector('.roll-code-badge');
+    if (badge) {
+        badge.textContent = generateRollCode(id, input ? input.value : '');
+    }
 }
 
 function getHsnOptionsHtml(selectedVal = '') {
@@ -1840,6 +1697,7 @@ function addRollRow() {
     rollCounter++;
     const rollCode = generateRollCode(rollCounter);
     const container = document.getElementById('rollsContainer');
+    document.getElementById('noRollsPlaceholder')?.classList.add('d-none');
     const div = document.createElement('div');
     div.className = 'roll-card card border mb-4 shadow-sm rounded-3';
     div.id = 'rollCard_' + rollCounter;
@@ -1871,7 +1729,7 @@ function addRollRow() {
             <div class="d-flex align-items-center gap-2">
                 <i class="bi bi-layers text-primary"></i>
                 <span class="fw-bold text-dark font-monospace">ROLL #${rollCounter}</span>
-                <span class="badge bg-dark font-monospace px-2 py-1 roll-code-badge">${rollCode}</span>
+                <span class="badge bg-dark font-monospace px-2 py-1 roll-code-badge" id="rollCodeBadge_${rollCounter}">${rollCode}</span>
             </div>
             <button type="button" class="btn btn-outline-danger btn-sm py-0 px-2" onclick="removeRollRow(${rollCounter})">
                 <i class="bi bi-trash3 me-1"></i> Delete
@@ -1883,7 +1741,7 @@ function addRollRow() {
             <div class="row g-2 mb-2 align-items-end">
                 <div class="col-md-2">
                 <label class="form-label small fw-semibold mb-1">Fabric Name <span class="text-danger">*</span></label>
-                <input type="text" name="rolls[${rollCounter}][roll_code]" class="form-control form-control-sm font-monospace text-uppercase roll-input-code" placeholder="E.G. COTTON" value="" required oninput="syncRollsTable()">
+                <input type="text" name="rolls[${rollCounter}][roll_code]" class="form-control form-control-sm font-monospace text-uppercase roll-input-code" placeholder="E.G. COTTON" value="" required oninput="updateRollHeaderCode(${rollCounter}); syncRollsTable()">
                 </div>
                 <div class="col-md-2">
                     <label class="form-label small fw-semibold mb-1">Color / Shade <span class="text-danger">*</span></label>
@@ -1898,14 +1756,14 @@ function addRollRow() {
                     <input type="number" min="1" step="1" name="rolls[${rollCounter}][rq]" class="form-control form-control-sm roll-input-rq" placeholder="1" value="1" required oninput="onRollColorOrPatternChange(${rollCounter}); syncRollsTable()">
                 </div>
                 <div class="col-md-2">
-                    <label class="form-label small fw-semibold mb-1">Weight (kg) <span class="text-danger">*</span></label>
+                    <label class="form-label small fw-semibold mb-1">Overall Weight (kg) <span class="text-danger">*</span></label>
                     <div class="input-group input-group-sm">
                         <input type="number" step="0.01" min="0.01" name="rolls[${rollCounter}][weight]" class="form-control form-control-sm roll-input-weight" placeholder="0.00" value="" required oninput="syncRollsTable()">
                         <span class="input-group-text small bg-light text-muted">kg</span>
                     </div>
                 </div>
                 <div class="col-md-2">
-                    <label class="form-label small fw-semibold mb-1">Price (₹) <span class="text-danger">*</span></label>
+                    <label class="form-label small fw-semibold mb-1">Unit Price (₹) <span class="text-danger">*</span></label>
                     <div class="input-group input-group-sm">
                         <span class="input-group-text small bg-light text-muted">₹</span>
                         <input type="number" step="0.01" min="0.01" name="rolls[${rollCounter}][price]" class="form-control form-control-sm roll-input-price" placeholder="0.00" value="" required oninput="syncRollsTable()">
@@ -1984,11 +1842,6 @@ function addRollRow() {
 }
 
 function removeRollRow(id) {
-    const cards = document.querySelectorAll('#rollsContainer .roll-card');
-    if (cards.length <= 1) {
-        alert('At least one fabric roll is recommended.');
-        return;
-    }
     const card = document.getElementById('rollCard_' + id);
     if (card) {
         card.remove();
@@ -2152,9 +2005,34 @@ function syncRollsTable() {
     let totalTax = 0;
     let colors = new Set();
 
+    document.getElementById('rollBadgeCount').textContent = totalRolls;
+    document.getElementById('rollCountHeader').textContent = totalRolls;
+    document.getElementById('overviewRollsCount').textContent = totalRolls;
+
+    if (totalRolls === 0) {
+        document.getElementById('noRollsPlaceholder')?.classList.remove('d-none');
+        tbody.innerHTML = '<tr><td colspan="13" class="text-center py-3 text-muted">Add fabric rolls to see inventory details.</td></tr>';
+        document.getElementById('overviewRollsWeight').textContent = '0.00';
+        document.getElementById('overviewRollsVal').textContent = '₹0.00';
+        document.getElementById('metricRolls').textContent = '0 Rolls';
+        document.getElementById('metricRq').textContent = '0';
+        document.getElementById('metricColorsDesigns').textContent = '0 Colors';
+        document.getElementById('metricWeight').textContent = '0.00 kg';
+        document.getElementById('metricTotalInclTax').textContent = '₹0.00';
+        recalcOverallSummary();
+        return;
+    }
+
+    document.getElementById('noRollsPlaceholder')?.classList.add('d-none');
+
     cards.forEach(function(card, idx) {
         const id = card.id.replace('rollCard_', '');
-        const code = card.querySelector('.roll-input-code')?.value || ('ROLL #' + (idx + 1));
+        const rawCode = card.querySelector('.roll-input-code')?.value?.trim() || '';
+        const code = rawCode || ('ROLL #' + (idx + 1));
+        const rollBadgeCode = generateRollCode(parseInt(id) || (idx + 1), rawCode);
+        const headerBadge = card.querySelector('.roll-code-badge');
+        if (headerBadge) headerBadge.textContent = rollBadgeCode;
+
         const color = card.querySelector('.roll-input-color')?.value || '-';
         const pattern = card.querySelector('.roll-input-pattern')?.value || '-';
         const rq = parseInt(card.querySelector('.roll-input-rq')?.value) || 1;
@@ -2186,7 +2064,7 @@ function syncRollsTable() {
         tr.innerHTML = `
             <td>${idx + 1}</td>
             <td>${photoHtml}</td>
-            <td class="fw-bold font-monospace text-dark">${code} <small class="text-muted d-block">${generateRollCode(parseInt(id))}</small></td>
+            <td class="fw-bold font-monospace text-dark">${escapeHtml(code)} <small class="text-muted d-block">${escapeHtml(rollBadgeCode)}</small></td>
             <td class="font-monospace">${hsn}</td>
             <td>${color}</td>
             <td>${pattern}</td>
@@ -2415,22 +2293,18 @@ function addFinishedRow() {
             </button>
         </div>
         <div class="card-body p-3">
-            <!-- Row 1: Product, Weight, Qty, Supplier Cost -->
+            <!-- Row 1: Product, Qty, Unit Price of Supplier Cost -->
             <div class="row g-2 mb-3 align-items-end">
                 <div class="col-md-5">
                     <label class="form-label small fw-semibold mb-1">Product <span class="text-danger">*</span></label>
                     <input type="text" name="finished_goods[${finishedCounter}][product]" class="form-control form-control-sm text-uppercase fg-input-product" placeholder="e.g. RED SHIRT" value="" required oninput="syncFinishedTable()">
                 </div>
-                <div class="col-md-2">
-                    <label class="form-label small fw-semibold mb-1">Weight (kg)</label>
-                    <input type="number" step="0.001" name="finished_goods[${finishedCounter}][weight]" class="form-control form-control-sm fg-input-weight" placeholder="0.000" value="" oninput="syncFinishedTable()">
-                </div>
-                <div class="col-md-2">
+                <div class="col-md-3">
                     <label class="form-label small fw-semibold mb-1">Qty (Pcs) <span class="text-danger">*</span></label>
                     <input type="number" step="1" min="1" name="finished_goods[${finishedCounter}][quantity]" class="form-control form-control-sm fg-input-qty" placeholder="0" value="" required oninput="syncFinishedTable()">
                 </div>
-                <div class="col-md-3">
-                    <label class="form-label small fw-semibold mb-1">Supplier Cost (₹) <span class="text-danger">*</span></label>
+                <div class="col-md-4">
+                    <label class="form-label small fw-semibold mb-1">Unit Price of Supplier Cost (₹) <span class="text-danger">*</span></label>
                     <div class="input-group input-group-sm">
                         <span class="input-group-text small bg-light text-muted">₹</span>
                         <input type="number" step="0.01" min="0.01" name="finished_goods[${finishedCounter}][supplier_cost]" class="form-control form-control-sm fg-input-cost" placeholder="0.00" value="" required oninput="syncFinishedTable()">
@@ -2515,7 +2389,7 @@ function syncFinishedTable() {
 
     if (cards.length === 0) {
         document.getElementById('noFinishedPlaceholder').classList.remove('d-none');
-        tbody.innerHTML = '<tr><td colspan="9" class="text-center py-3 text-muted">Add finished goods to see inventory details.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center py-3 text-muted">Add finished goods to see inventory details.</td></tr>';
         document.getElementById('overviewFinishedVal').textContent = '₹0.00';
         recalcOverallSummary();
         return;
@@ -2528,7 +2402,6 @@ function syncFinishedTable() {
     cards.forEach(function(card, idx) {
         const product = card.querySelector('.fg-input-product')?.value || '-';
         const hsn = card.querySelector('.fg-input-hsn')?.value || '-';
-        const weight = parseFloat(card.querySelector('.fg-input-weight')?.value) || 0;
         const qty = parseInt(card.querySelector('.fg-input-qty')?.value) || 0;
         const cost = parseFloat(card.querySelector('.fg-input-cost')?.value) || 0;
 
@@ -2541,7 +2414,6 @@ function syncFinishedTable() {
             <td>${idx + 1}</td>
             <td class="fw-bold text-dark text-start">${escapeHtml(product)}</td>
             <td class="font-monospace">${escapeHtml(hsn)}</td>
-            <td>${weight.toFixed(3)}</td>
             <td class="fw-bold">${qty}</td>
             <td>₹${cost.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
             <td>${taxInfo.badge}</td>
@@ -2612,7 +2484,7 @@ function loadInitialData() {
 
         existingRolls.forEach(function(r) {
             rollCounter++;
-            const rollCode = r.item_code || ('ROLL #' + rollCounter);
+            const rollCode = generateRollCode(rollCounter, r.item_code);
             const div = document.createElement('div');
             div.className = 'roll-card card border mb-4 shadow-sm rounded-3';
             div.id = 'rollCard_' + rollCounter;
@@ -2670,7 +2542,7 @@ function loadInitialData() {
                     <div class="d-flex align-items-center gap-2">
                         <i class="bi bi-layers text-primary"></i>
                         <span class="fw-bold text-dark font-monospace">ROLL #${rollCounter}</span>
-                        <span class="badge bg-dark font-monospace px-2 py-1 roll-code-badge">${escapeHtml(rollCode)}</span>
+                        <span class="badge bg-dark font-monospace px-2 py-1 roll-code-badge" id="rollCodeBadge_${rollCounter}">${escapeHtml(rollCode)}</span>
                     </div>
                     <button type="button" class="btn btn-outline-danger btn-sm py-0 px-2" onclick="removeRollRow(${rollCounter})">
                         <i class="bi bi-trash3 me-1"></i> Delete
@@ -2684,7 +2556,7 @@ function loadInitialData() {
                     <div class="row g-2 mb-3 align-items-end">
                         <div class="col-md-2">
                             <label class="form-label small fw-semibold mb-1">Fabric Name <span class="text-danger">*</span></label>
-                            <input type="text" name="rolls[${rollCounter}][roll_code]" class="form-control form-control-sm font-monospace text-uppercase roll-input-code" placeholder="E.G. COTTON" value="${escapeHtml(r.item_code || ('ROLL #' + rollCounter))}" required oninput="syncRollsTable()">
+                            <input type="text" name="rolls[${rollCounter}][roll_code]" class="form-control form-control-sm font-monospace text-uppercase roll-input-code" placeholder="E.G. COTTON" value="${escapeHtml(r.item_code || '')}" required oninput="updateRollHeaderCode(${rollCounter}); syncRollsTable()">
                         </div>
                         <div class="col-md-2">
                             <label class="form-label small fw-semibold mb-1">Color / Shade <span class="text-danger">*</span></label>
@@ -2699,14 +2571,14 @@ function loadInitialData() {
                             <input type="number" min="1" step="1" name="rolls[${rollCounter}][rq]" class="form-control form-control-sm roll-input-rq" placeholder="1" value="${parseInt(r.rq_qty) || 1}" required oninput="onRollColorOrPatternChange(${rollCounter}); syncRollsTable()">
                         </div>
                         <div class="col-md-2">
-                            <label class="form-label small fw-semibold mb-1">Weight (kg) <span class="text-danger">*</span></label>
+                            <label class="form-label small fw-semibold mb-1">Overall Weight (kg) <span class="text-danger">*</span></label>
                             <div class="input-group input-group-sm">
                                 <input type="number" step="0.01" min="0.01" name="rolls[${rollCounter}][weight]" class="form-control form-control-sm roll-input-weight" placeholder="0.00" value="${parseFloat(r.net_weight) || ''}" required oninput="syncRollsTable()">
                                 <span class="input-group-text small bg-light text-muted">kg</span>
                             </div>
                         </div>
                         <div class="col-md-2">
-                            <label class="form-label small fw-semibold mb-1">Price (₹) <span class="text-danger">*</span></label>
+                            <label class="form-label small fw-semibold mb-1">Unit Price (₹) <span class="text-danger">*</span></label>
                             <div class="input-group input-group-sm">
                                 <span class="input-group-text small bg-light text-muted">₹</span>
                                 <input type="number" step="0.01" min="0.01" name="rolls[${rollCounter}][price]" class="form-control form-control-sm roll-input-price" placeholder="0.00" value="${parseFloat(r.unit_price) || ''}" required oninput="syncRollsTable()">
@@ -2812,7 +2684,6 @@ function loadInitialData() {
                 if (card.querySelector('.fg-input-variant')) card.querySelector('.fg-input-variant').value = f.specification || 'M';
                 if (card.querySelector('.fg-input-sku')) card.querySelector('.fg-input-sku').value = f.item_code || '';
                 if (card.querySelector('.fg-input-hsn')) card.querySelector('.fg-input-hsn').value = f.hsn_code || '';
-                if (card.querySelector('.fg-input-weight')) card.querySelector('.fg-input-weight').value = parseFloat(f.net_weight) || '';
                 if (card.querySelector('.fg-input-qty')) card.querySelector('.fg-input-qty').value = parseInt(f.qty) || 1;
                 if (card.querySelector('.fg-input-cost')) card.querySelector('.fg-input-cost').value = parseFloat(f.unit_price) || 0;
                 if (card.querySelector('.fg-input-mrp')) card.querySelector('.fg-input-mrp').value = parseFloat(f.mrp) || '';

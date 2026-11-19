@@ -202,9 +202,9 @@
 
                 <div class="col-6 col-md-2">
                     <select name="status" class="form-select form-select-sm">
-                        <option value="">-- All Status --</option>
-                        <option value="in_stock" <?= ($statusFilter === 'in_stock') ? 'selected' : '' ?>>In Stock (Completed)</option>
-                        <option value="pending" <?= ($statusFilter === 'pending') ? 'selected' : '' ?>>Pending Inward</option>
+                        <option value="" <?= ($statusFilter === '' || $statusFilter === 'in_stock') ? 'selected' : '' ?>>In Stock (Completed)</option>
+                        <option value="pending" <?= ($statusFilter === 'pending') ? 'selected' : '' ?>>Pending Inward (Awaiting Add to Stock)</option>
+                        <option value="all" <?= ($statusFilter === 'all') ? 'selected' : '' ?>>All Purchase Items</option>
                     </select>
                 </div>
 
@@ -270,7 +270,7 @@
                                     <td colspan="11" class="text-center py-5 text-muted">
                                         <i class="bi bi-stack display-6 text-secondary d-block mb-2"></i>
                                         <strong>No fabric roll specifications registered yet.</strong>
-                                        <div class="small mt-1">Record a purchase bill to automatically populate the Color & Design roll stock registry.</div>
+                                        <div class="small mt-1">Record a purchase bill and click <strong>Add to Stock</strong> in Label Generation to automatically populate the Color & Design roll stock registry.</div>
                                     </td>
                                 </tr>
                             <?php else: ?>
@@ -576,7 +576,7 @@
                                     <td colspan="14" class="text-center py-5 text-muted">
                                         <i class="bi bi-stack display-6 text-secondary d-block mb-2"></i>
                                         <strong>No fabric rolls found in purchase stock.</strong>
-                                        <div class="small mt-1">Record a purchase bill with fabric rolls to track roll inventory.</div>
+                                        <div class="small mt-1">Record a purchase bill with fabric rolls and click <strong>Add to Stock</strong> in Label Generation to track roll inventory.</div>
                                     </td>
                                 </tr>
                             <?php else: ?>
@@ -713,7 +713,7 @@
                                     <td colspan="11" class="text-center py-5 text-muted">
                                         <i class="bi bi-scissors display-6 text-secondary d-block mb-2"></i>
                                         <strong>No garment supplies or trims found in purchase stock.</strong>
-                                        <div class="small mt-1">Record buttons, threads, zippers, or labels in purchase billing.</div>
+                                        <div class="small mt-1">Record buttons, threads, zippers, or trims in purchase billing and inward them via <strong>Add to Stock</strong> in Label Generation.</div>
                                     </td>
                                 </tr>
                             <?php else: ?>
@@ -873,7 +873,7 @@
                                     <td colspan="14" class="text-center py-5 text-muted">
                                         <i class="bi bi-bag-check display-6 text-secondary d-block mb-2"></i>
                                         <strong>No finished goods found in purchase stock.</strong>
-                                        <div class="small mt-1">Record ready-made garments or apparel purchases in purchase billing.</div>
+                                        <div class="small mt-1">Record finished garments in purchase billing and inward them via <strong>Add to Stock</strong> in Label Generation.</div>
                                     </td>
                                 </tr>
                             <?php else: ?>

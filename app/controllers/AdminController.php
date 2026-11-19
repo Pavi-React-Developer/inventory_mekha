@@ -224,7 +224,7 @@ class AdminController extends Controller {
 
             AuditLog::log('CREATE_CONCERN', 'concerns', $concernId, null, ['name' => $name, 'code' => $code]);
 
-            $this->flash('success', "Concern '{$name}' ({$code}) successfully created with " . count($pickedModuleIds) . " active modules!");
+            $this->flash('success', "Concern '{$name}' ({$code}) successfully created with " . count($pickedModuleIds) . " active modules! You can download the Concern Creation Dossier anytime from the Actions column.");
             $this->redirect('/admin/concerns');
         } catch (Exception $e) {
             DB::rollBack();
@@ -675,6 +675,636 @@ class AdminController extends Controller {
             \App\Services\ExportService::downloadCsv($filename, $headers, $rows, $totals);
         } else {
             \App\Services\ExportService::downloadExcel($filename, 'Enterprise Concerns Directory Report', $metadata, $headers, $rows, $totals);
+        }
+    }
+
+    public function downloadConcernDossier(): void {
+        $id = (int)($_GET['id'] ?? 0);
+        $format = strtolower(trim($_GET['format'] ?? 'pdf'));
+
+        $concern = DB::fetch("SELECT * FROM concerns WHERE id = ?", [$id]);
+        if (!$concern) {
+            $this->flash('error', 'Concern not found for dossier generation.');
+            $this->redirect('/admin/concerns');
+            return;
+        }
+
+        // 1. Fetch Primary Admin User
+        $adminUser = DB::fetch(
+            "SELECT u.name, u.email, u.phone, u.status, u.created_at, r.name as role_name
+             FROM users u
+             LEFT JOIN roles r ON u.role_id = r.id
+             WHERE u.concern_id = ?
+             ORDER BY u.id ASC LIMIT 1",
+            [$id]
+        );
+
+        // 2. Fetch Modules with enabled status
+        $modules = DB::fetchAll(
+            "SELECT m.id, m.code, m.name, m.group_name, m.icon, COALESCE(cm.enabled, 0) as enabled
+             FROM modules m
+             LEFT JOIN concern_modules cm ON m.id = cm.module_id AND cm.concern_id = ?
+             WHERE m.is_super_admin_only = 0
+             ORDER BY m.sort_order ASC",
+            [$id]
+        );
+
+        // 3. Fetch Document Series
+        $docSeries = DB::fetchAll(
+            "SELECT doc_type, prefix, next_no FROM doc_series WHERE concern_id = ? ORDER BY doc_type ASC",
+            [$id]
+        );
+
+        // 4. Fetch Cash Accounts
+        $cashAccounts = DB::fetchAll(
+            "SELECT name, account_type, balance FROM cash_accounts WHERE concern_id = ? ORDER BY id ASC",
+            [$id]
+        );
+
+        // 5. Fetch Categories
+        $categories = DB::fetchAll(
+            "SELECT c.name as category_name, s.name as subcategory_name
+             FROM categories c
+             LEFT JOIN subcategories s ON c.id = s.category_id
+             WHERE c.concern_id = ?
+             ORDER BY c.id ASC",
+            [$id]
+        );
+
+        if ($format === 'pdf') {
+            $this->renderConcernDossierPdf($concern, $adminUser, $modules, $docSeries, $cashAccounts, $categories);
+            return;
+        }
+
+        $activeModulesCount = 0;
+        foreach ($modules as $m) {
+            if (!empty($m['enabled'])) {
+                $activeModulesCount++;
+            }
+        }
+
+        $headers = ['Section', 'Attribute / Parameter', 'Configured Value', 'System Provisioning Status'];
+        $rows = [
+            ['1. Concern Business Profile', 'Concern Business Legal Name', $concern['name'], 'CONFIRMED'],
+            ['1. Concern Business Profile', 'Concern Reference Code', $concern['code'], 'SYSTEM ALLOCATED'],
+            ['1. Concern Business Profile', 'GSTIN / Tax Registration', $concern['gstin'] ?: 'Unregistered / Exempted', $concern['gstin'] ? 'REGISTERED' : 'UNREGISTERED'],
+            ['1. Concern Business Profile', 'Primary Contact Phone', $concern['phone'] ?: 'Not specified', '-'],
+            ['1. Concern Business Profile', 'Corporate Email', $concern['email'] ?: 'Not specified', '-'],
+            ['1. Concern Business Profile', 'Registered Business Address', $concern['address'] ?: 'Not specified', '-'],
+            ['1. Concern Business Profile', 'Concern Operating Status', strtoupper($concern['status']), strtoupper($concern['status'])],
+            ['1. Concern Business Profile', 'Creation & Provisioning Timestamp', date('d M Y, h:i A', strtotime($concern['created_at'])), 'AUDITED'],
+
+            ['2. Initial Tenant Admin Account', 'Administrator Full Name', $adminUser['name'] ?? 'Not Provisioned', 'ACTIVE'],
+            ['2. Initial Tenant Admin Account', 'Admin Login Email', $adminUser['email'] ?? 'Not Provisioned', 'CREDENTIAL SEEDED'],
+            ['2. Initial Tenant Admin Account', 'Admin Contact Phone', $adminUser['phone'] ?? '-', '-'],
+            ['2. Initial Tenant Admin Account', 'Assigned Security Role', $adminUser['role_name'] ?? 'Concern Administrator', 'SUPER PRIVILEGED'],
+            ['2. Initial Tenant Admin Account', 'Tenant Sign-in URL', \App\Core\Controller::url('/login'), 'ONLINE'],
+
+            ['3. Baseline Document Series', 'Total Series Initialized', count($docSeries) . ' Series Configured', 'ACTIVE'],
+        ];
+
+        foreach ($docSeries as $ds) {
+            $rows[] = [
+                '3. Baseline Document Series',
+                'Series: ' . $ds['doc_type'],
+                'Prefix: ' . $ds['prefix'] . ' (Starts at #' . $ds['next_no'] . ')',
+                'INITIALIZED'
+            ];
+        }
+
+        foreach ($cashAccounts as $ca) {
+            $rows[] = [
+                '4. Seeded Financial Accounts',
+                $ca['name'] . ' (' . ucfirst($ca['account_type']) . ')',
+                'Initial Balance: ₹' . number_format((float)$ca['balance'], 2),
+                'OPEN'
+            ];
+        }
+
+        foreach ($categories as $cat) {
+            $rows[] = [
+                '5. Master Inventory Classification',
+                $cat['category_name'],
+                'Subcategory: ' . ($cat['subcategory_name'] ?? 'Default'),
+                'SEEDED'
+            ];
+        }
+
+        foreach ($modules as $mod) {
+            $isEn = !empty($mod['enabled']);
+            $rows[] = [
+                '6. Module Entitlements (' . $mod['group_name'] . ')',
+                $mod['name'] . ' [' . $mod['code'] . ']',
+                $mod['group_name'] . ' Functional Unit',
+                $isEn ? 'PROVISIONED & ACTIVE' : 'RESTRICTED / DISABLED'
+            ];
+        }
+
+        $metadata = [
+            'Dossier Type' => 'Business Unit Creation & Tenant Provisioning Dossier',
+            'Concern Code' => $concern['code'],
+            'Business Name' => $concern['name'],
+            'GSTIN' => $concern['gstin'] ?: 'Unregistered',
+            'Tenant Admin' => ($adminUser['name'] ?? '-') . ' (' . ($adminUser['email'] ?? '-') . ')',
+            'Provisioned Modules' => $activeModulesCount . ' of ' . count($modules) . ' Modules Active',
+            'Dossier Generated' => date('d M Y, h:i A'),
+        ];
+
+        $totals = ['Total Modules Evaluated: ' . count($modules), $activeModulesCount . ' Provisioned & Active', '', ''];
+        $cleanCode = preg_replace('/[^a-zA-Z0-9]+/', '_', $concern['code']);
+        $filename = 'concern_creation_dossier_' . strtolower($cleanCode) . '_' . date('Ymd_His');
+
+        if ($format === 'csv') {
+            \App\Services\ExportService::downloadCsv($filename, $headers, $rows, $totals);
+        } else {
+            \App\Services\ExportService::downloadExcel($filename, 'Concern Creation & Tenant Provisioning Dossier: ' . $concern['name'], $metadata, $headers, $rows, $totals);
+        }
+    }
+
+    private function renderConcernDossierPdf(array $concern, ?array $adminUser, array $modules, array $docSeries, array $cashAccounts, array $categories): void {
+        $activeModulesCount = 0;
+        $groupedModules = [];
+        foreach ($modules as $m) {
+            if (!empty($m['enabled'])) {
+                $activeModulesCount++;
+            }
+            $grp = $m['code'] === 'catalog_mapping' ? 'Purchase' : $m['group_name'];
+            $groupedModules[$grp][] = $m;
+        }
+
+        $dossierRef = 'DOS-' . preg_replace('/[^A-Z0-9]/', '', strtoupper($concern['code'])) . '-' . date('Ymd');
+        $backUrl = \App\Core\Controller::url('/admin/concerns');
+        $excelUrl = \App\Core\Controller::url('/admin/concerns/download?id=' . $concern['id'] . '&format=excel');
+        $csvUrl = \App\Core\Controller::url('/admin/concerns/download?id=' . $concern['id'] . '&format=csv');
+        $loginUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . \App\Core\Controller::url('/login');
+        ?>
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <title><?= htmlspecialchars($concern['name']) ?> (<?= htmlspecialchars($concern['code']) ?>) - Concern Creation Dossier</title>
+            <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+            <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+            <style>
+                @page {
+                    size: A4 portrait;
+                    margin: 10mm 12mm 12mm 12mm;
+                }
+                body {
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+                    background: #f1f5f9;
+                    color: #0f172a;
+                    font-size: 12px;
+                    line-height: 1.5;
+                }
+                .dossier-wrapper {
+                    max-width: 900px;
+                    margin: 20px auto 40px auto;
+                    background: #ffffff;
+                    padding: 36px 42px;
+                    border-radius: 14px;
+                    box-shadow: 0 10px 25px -5px rgba(0,0,0,0.08), 0 8px 10px -6px rgba(0,0,0,0.04);
+                    border: 1px solid #e2e8f0;
+                }
+                .action-bar {
+                    background: #0f172a;
+                    color: #ffffff;
+                    padding: 14px 24px;
+                    border-radius: 12px;
+                    margin-bottom: 24px;
+                    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
+                }
+                .dossier-header {
+                    border-bottom: 2px solid #2563eb;
+                    padding-bottom: 18px;
+                    margin-bottom: 22px;
+                }
+                .section-header {
+                    background: #f8fafc;
+                    border-left: 4px solid #2563eb;
+                    padding: 8px 14px;
+                    font-weight: 700;
+                    font-size: 12.5px;
+                    color: #1e3a8a;
+                    margin-bottom: 12px;
+                    margin-top: 18px;
+                    border-radius: 0 6px 6px 0;
+                }
+                .prop-label {
+                    color: #64748b;
+                    font-size: 11px;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                    letter-spacing: 0.04em;
+                    margin-bottom: 2px;
+                }
+                .prop-value {
+                    color: #0f172a;
+                    font-weight: 600;
+                    font-size: 12.5px;
+                }
+                .table-dossier th {
+                    background: #1e293b !important;
+                    color: #ffffff !important;
+                    font-size: 10.5px;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                    letter-spacing: 0.04em;
+                    padding: 7px 10px !important;
+                }
+                .table-dossier td {
+                    padding: 6px 10px !important;
+                    font-size: 11.5px;
+                    border-color: #e2e8f0 !important;
+                    vertical-align: middle;
+                }
+                .sign-box {
+                    border: 1px dashed #94a3b8;
+                    border-radius: 8px;
+                    padding: 16px;
+                    min-height: 110px;
+                    background: #fafafa;
+                }
+                @media print {
+                    body {
+                        background: #ffffff !important;
+                    }
+                    .dossier-wrapper {
+                        box-shadow: none !important;
+                        padding: 0 !important;
+                        margin: 0 !important;
+                        max-width: 100% !important;
+                        border: none !important;
+                    }
+                    .no-print {
+                        display: none !important;
+                    }
+                }
+            </style>
+        </head>
+        <body>
+            <div class="dossier-wrapper">
+                <!-- Action Toolbar for Browser Screen -->
+                <div class="no-print action-bar d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center gap-3">
+                        <div style="width: 40px; height: 40px; border-radius: 8px; background: rgba(37,99,235,0.2); display: flex; align-items: center; justify-content: center; font-size: 1.3rem;">
+                            <i class="bi bi-file-earmark-lock text-info"></i>
+                        </div>
+                        <div>
+                            <div class="fw-bold fs-6">Concern Creation Dossier Ready</div>
+                            <div class="small text-light text-opacity-75">Print to PDF, export to Excel, or save for tenant onboarding records.</div>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <a href="<?= htmlspecialchars($backUrl) ?>" class="btn btn-sm btn-outline-light px-3">
+                            <i class="bi bi-arrow-left me-1"></i> Back
+                        </a>
+                        <a href="<?= htmlspecialchars($excelUrl) ?>" class="btn btn-sm btn-success px-3 fw-semibold">
+                            <i class="bi bi-file-earmark-excel me-1"></i> Download Excel
+                        </a>
+                        <a href="<?= htmlspecialchars($csvUrl) ?>" class="btn btn-sm btn-secondary px-3 fw-semibold">
+                            <i class="bi bi-file-earmark-text me-1"></i> Download CSV
+                        </a>
+                        <button type="button" class="btn btn-sm btn-primary px-4 fw-bold shadow-sm" onclick="window.print()" style="background: #2563eb; border: none;">
+                            <i class="bi bi-printer me-1"></i> Print / Save as PDF
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Document Header -->
+                <div class="dossier-header d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="text-uppercase tracking-wider small fw-bold text-primary mb-1">
+                            <i class="bi bi-shield-check me-1"></i> INVENTO Multi-Concern Enterprise Management System
+                        </div>
+                        <h3 class="fw-bold text-dark mb-1">Concern Creation & Onboarding Dossier</h3>
+                        <p class="text-muted small mb-0">Official Business Unit Provisioning Certificate & Tenant Configuration Record</p>
+                    </div>
+                    <div class="text-end">
+                        <span class="badge bg-dark font-monospace fs-6 px-3 py-2"><?= htmlspecialchars($concern['code']) ?></span>
+                        <div class="small text-muted mt-1">Ref: <span class="font-monospace text-dark fw-semibold"><?= htmlspecialchars($dossierRef) ?></span></div>
+                        <div class="small text-muted">Created: <?= date('d M Y, h:i A', strtotime($concern['created_at'])) ?></div>
+                    </div>
+                </div>
+
+                <!-- Section 1: Business Unit Profile -->
+                <div class="section-header d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-building me-2"></i> 1. Legal Entity & Business Profile</span>
+                    <span class="badge <?= $concern['status'] === 'active' ? 'bg-success' : 'bg-secondary' ?> text-uppercase"><?= htmlspecialchars($concern['status']) ?></span>
+                </div>
+                <div class="card border rounded-3 p-3 mb-3 bg-white">
+                    <div class="row g-3">
+                        <div class="col-md-7">
+                            <div class="prop-label">Business Legal Name</div>
+                            <div class="prop-value fs-6 text-primary"><?= htmlspecialchars($concern['name']) ?></div>
+                        </div>
+                        <div class="col-md-5">
+                            <div class="prop-label">Concern System Code</div>
+                            <div class="prop-value font-monospace"><?= htmlspecialchars($concern['code']) ?></div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="prop-label">GSTIN / Tax ID</div>
+                            <div class="prop-value font-monospace"><?= htmlspecialchars($concern['gstin'] ?: 'Unregistered / Exempt') ?></div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="prop-label">Primary Contact Phone</div>
+                            <div class="prop-value"><?= htmlspecialchars($concern['phone'] ?: 'Not specified') ?></div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="prop-label">Corporate Email</div>
+                            <div class="prop-value"><?= htmlspecialchars($concern['email'] ?: 'Not specified') ?></div>
+                        </div>
+                        <div class="col-12">
+                            <div class="prop-label">Registered Business Address</div>
+                            <div class="prop-value text-secondary fw-normal"><?= htmlspecialchars($concern['address'] ?: 'No physical address specified') ?></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 2: Tenant Admin Account -->
+                <div class="section-header">
+                    <i class="bi bi-person-badge me-2"></i> 2. Initial Tenant Administrator Credentials & Access
+                </div>
+                <div class="card border rounded-3 p-3 mb-3 bg-white">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <div class="prop-label">Designated Administrator</div>
+                            <div class="prop-value text-dark"><?= htmlspecialchars($adminUser['name'] ?? 'Not Provisioned') ?></div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="prop-label">Login Email Address</div>
+                            <div class="prop-value font-monospace text-primary"><?= htmlspecialchars($adminUser['email'] ?? 'Not Provisioned') ?></div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="prop-label">Security Role</div>
+                            <div class="prop-value"><?= htmlspecialchars($adminUser['role_name'] ?? 'Concern Administrator') ?></div>
+                        </div>
+                        <div class="col-md-8">
+                            <div class="prop-label">Tenant Login Portal URL</div>
+                            <div class="prop-value font-monospace small text-muted"><?= htmlspecialchars($loginUrl) ?></div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="prop-label">Credential Status</div>
+                            <div class="prop-value text-success"><i class="bi bi-check-circle-fill me-1"></i> Provisioned (bcrypt)</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 3: Module Licensing Matrix -->
+                <div class="section-header d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-grid-3x3-gap me-2"></i> 3. Module Licensing & Feature Provisioning Matrix</span>
+                    <span class="badge bg-primary"><?= $activeModulesCount ?> / <?= count($modules) ?> Active</span>
+                </div>
+                <div class="table-responsive mb-3">
+                    <table class="table table-sm table-bordered table-dossier mb-0">
+                        <thead>
+                            <tr>
+                                <th style="width: 22%;">Functional Group</th>
+                                <th style="width: 38%;">Module Name</th>
+                                <th style="width: 20%;">Identifier Code</th>
+                                <th style="width: 20%; text-align: center;">Provisioning Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($groupedModules as $grp => $mods): ?>
+                                <?php foreach ($mods as $idx => $m): ?>
+                                    <tr>
+                                        <?php if ($idx === 0): ?>
+                                            <td rowspan="<?= count($mods) ?>" class="fw-bold bg-light align-middle text-dark">
+                                                <?= htmlspecialchars($grp) ?>
+                                            </td>
+                                        <?php endif; ?>
+                                        <td>
+                                            <i class="bi <?= htmlspecialchars($m['icon']) ?> text-muted me-1"></i>
+                                            <?= htmlspecialchars($m['name']) ?>
+                                        </td>
+                                        <td class="font-monospace text-muted small"><?= htmlspecialchars($m['code']) ?></td>
+                                        <td class="text-center">
+                                            <?php if (!empty($m['enabled'])): ?>
+                                                <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-2 py-1">
+                                                    <i class="bi bi-check-circle-fill me-1"></i> PROVISIONED
+                                                </span>
+                                            <?php else: ?>
+                                                <span class="badge bg-secondary bg-opacity-10 text-secondary border px-2 py-1">
+                                                    <i class="bi bi-slash-circle me-1"></i> RESTRICTED
+                                                </span>
+                                            <?php endif; ?>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Section 4: Document Series & Baseline Financial Setup -->
+                <div class="section-header">
+                    <i class="bi bi-receipt me-2"></i> 4. Baseline Document Series & Initial Master Setup
+                </div>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <div class="card border rounded-3 p-3 h-100 bg-white">
+                            <h6 class="fw-bold text-dark mb-2 small"><i class="bi bi-123 text-primary me-1"></i> Document Numbering Series</h6>
+                            <table class="table table-sm table-borderless small mb-0">
+                                <thead>
+                                    <tr class="text-muted border-bottom">
+                                        <th>Series Type</th>
+                                        <th>Prefix Pattern</th>
+                                        <th class="text-end">Next No</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($docSeries as $ds): ?>
+                                        <tr>
+                                            <td class="fw-semibold text-dark"><?= htmlspecialchars($ds['doc_type']) ?></td>
+                                            <td class="font-monospace text-muted"><?= htmlspecialchars($ds['prefix']) ?></td>
+                                            <td class="font-monospace text-end text-primary">#<?= (int)$ds['next_no'] ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card border rounded-3 p-3 h-100 bg-white">
+                            <h6 class="fw-bold text-dark mb-2 small"><i class="bi bi-wallet2 text-success me-1"></i> Seeded Financial & Master Setup</h6>
+                            <div class="mb-3">
+                                <div class="prop-label">Initial Cash Drawer</div>
+                                <?php if (!empty($cashAccounts)): ?>
+                                    <?php foreach ($cashAccounts as $ca): ?>
+                                        <div class="prop-value small text-dark d-flex justify-content-between">
+                                            <span><?= htmlspecialchars($ca['name']) ?> (<?= htmlspecialchars(ucfirst($ca['account_type'])) ?>)</span>
+                                            <span class="font-monospace text-success">₹<?= number_format((float)$ca['balance'], 2) ?></span>
+                                        </div>
+                                    <?php endforeach; ?>
+                                <?php else: ?>
+                                    <div class="text-muted small">Main Cash Drawer provisioned</div>
+                                <?php endif; ?>
+                            </div>
+                            <div>
+                                <div class="prop-label">Master Raw Material Classification</div>
+                                <?php if (!empty($categories)): ?>
+                                    <?php foreach ($categories as $cat): ?>
+                                        <div class="prop-value small text-dark">
+                                            <i class="bi bi-tag text-muted me-1"></i> <?= htmlspecialchars($cat['category_name']) ?>
+                                            <span class="badge bg-light text-secondary border ms-1"><?= htmlspecialchars($cat['subcategory_name'] ?? 'Default') ?></span>
+                                        </div>
+                                    <?php endforeach; ?>
+                                <?php else: ?>
+                                    <div class="text-muted small">General Raw Materials (Default)</div>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 5: Authorization & Handover Sign-off -->
+                <div class="section-header">
+                    <i class="bi bi-pen me-2"></i> 5. Enterprise Verification, Authorization & Handover Sign-off
+                </div>
+                <div class="row g-3 mb-4">
+                    <div class="col-md-6">
+                        <div class="sign-box d-flex flex-column justify-content-between">
+                            <div>
+                                <div class="prop-label">Provisioned & Authorized By</div>
+                                <div class="fw-bold text-dark mt-1">Enterprise Super Administrator</div>
+                                <div class="small text-muted">INVENTO Central Management System</div>
+                            </div>
+                            <div class="pt-4 border-top mt-3 d-flex justify-content-between small text-muted">
+                                <span>Signature: ______________________</span>
+                                <span>Date: <?= date('d M Y') ?></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="sign-box d-flex flex-column justify-content-between">
+                            <div>
+                                <div class="prop-label">Received & Accepted By</div>
+                                <div class="fw-bold text-dark mt-1"><?= htmlspecialchars($adminUser['name'] ?? $concern['name']) ?></div>
+                                <div class="small text-muted">Authorized Concern Signatory & Administrator</div>
+                            </div>
+                            <div class="pt-4 border-top mt-3 d-flex justify-content-between small text-muted">
+                                <span>Signature: ______________________</span>
+                                <span>Seal / Date: _________________</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Document Footer Note -->
+                <div class="border-top pt-3 text-center text-muted small">
+                    <span>INVENTO Multi-Concern ERP System &bull; Confidential Business Unit Provisioning Dossier &bull; Generated <?= date('d M Y, h:i A') ?></span>
+                </div>
+            </div>
+        </body>
+        </html>
+        <?php
+        if (php_sapi_name() !== 'cli') {
+            exit;
+        }
+    }
+
+    public function downloadConcernTemplate(): void {
+        $format = strtolower(trim($_GET['format'] ?? 'excel'));
+
+        $headers = [
+            'Concern Legal Name *',
+            'Code Prefix (2-5 Uppercase Chars)',
+            'GSTIN (15 Alphanumeric)',
+            'Primary Phone *',
+            'Corporate Email',
+            'Registered Business Address',
+            'Admin Full Name *',
+            'Admin Login Email *',
+            'Admin Initial Password *',
+            'Initial Cash Account Name',
+            'Master Raw Material Category',
+            'Assigned Module Codes (Comma-separated or ALL)'
+        ];
+
+        $sampleRow1 = [
+            'Apex Apparel Mills',
+            'APEX',
+            '33AAAAA0000A1Z5',
+            '9876543210',
+            'info@apexapparel.com',
+            'Plot 45, SIPCOT Industrial Park, Tirupur - 641603',
+            'Rajesh Sharma',
+            'admin@apexapparel.com',
+            'ApexSecure#2026',
+            'Main Cash Drawer',
+            'General Raw Materials',
+            'ALL'
+        ];
+
+        $sampleRow2 = [
+            'Sundaram Spinning Co',
+            'SSC',
+            '33BBBBB1111B2Z6',
+            '9842100055',
+            'admin@sundaramspinning.com',
+            '12 Weavers Colony, Coimbatore - 641001',
+            'Suresh Kumar',
+            'suresh@sundaram.com',
+            'SpinMaster@2026',
+            'Main Cash Drawer',
+            'General Raw Materials',
+            'purchase_billing, purchase_stocks, catalog_mapping, stocks, inward'
+        ];
+
+        $blankTemplateRow = [
+            '[Enter Business Legal Name]',
+            '[e.g. GRM]',
+            '[15-digit GSTIN or leave blank]',
+            '[10 to 15 digits]',
+            '[Email address or leave blank]',
+            '[Full street address]',
+            '[Administrator Name]',
+            '[Unique Admin Email]',
+            '[Minimum 8 chars with letter & number]',
+            'Main Cash Drawer',
+            'General Raw Materials',
+            'ALL'
+        ];
+
+        $allModules = DB::fetchAll("SELECT code, name, group_name FROM modules WHERE is_super_admin_only = 0 ORDER BY sort_order ASC");
+        $moduleListStr = implode(', ', array_column($allModules, 'code'));
+
+        $rows = [
+            $sampleRow1,
+            $sampleRow2,
+            $blankTemplateRow,
+            ['', '', '', '', '', '', '', '', '', '', '', ''],
+            ['--- MODULE CODE REFERENCE DIRECTORY ---', '', '', '', '', '', '', '', '', '', '', ''],
+            ['Specify individual module codes separated by comma or specify ALL to grant all modules.', '', '', '', '', '', '', '', '', '', '', ''],
+            ['All Available Module Codes:', $moduleListStr, '', '', '', '', '', '', '', '', '', '']
+        ];
+
+        foreach ($allModules as $mod) {
+            $rows[] = [
+                'Module Code: ' . $mod['code'],
+                'Name: ' . $mod['name'],
+                'Functional Group: ' . $mod['group_name'],
+                'Valid input for Assigned Module Codes column',
+                '', '', '', '', '', '', '', ''
+            ];
+        }
+
+        $metadata = [
+            'Template' => 'INVENTO ERP - Concern Creation & Tenant Onboarding Specification Sheet',
+            'Purpose' => 'Offline concern setup data collection, drafting and onboarding specification',
+            'Instructions' => 'Fill the required fields marked with *. For Assigned Module Codes, enter ALL or comma-separated module codes from the directory below.',
+            'Available Modules Count' => count($allModules) . ' Modules available for provisioning',
+            'Generated On' => date('d M Y, h:i A')
+        ];
+
+        $totals = ['Module Codes Available: ' . count($allModules), 'Ready for Super Admin Provisioning', '', '', '', '', '', '', '', '', '', ''];
+        $filename = 'concern_creation_template_' . date('Ymd_His');
+
+        if ($format === 'csv') {
+            \App\Services\ExportService::downloadCsv($filename, $headers, array_slice($rows, 0, 3), []);
+        } else {
+            \App\Services\ExportService::downloadExcel($filename, 'INVENTO ERP - Concern Creation Onboarding Template', $metadata, $headers, $rows, $totals);
         }
     }
 

@@ -4,9 +4,21 @@
             <h4 class="fw-bold mb-1 text-dark">Concern & Tenant Management</h4>
             <p class="text-secondary small mb-0">Create new business concerns, toggle licensed modules, and configure tenant isolation.</p>
         </div>
-        <button class="btn btn-primary shadow-sm" data-bs-toggle="modal" data-bs-target="#modalCreateConcern">
-            <i class="bi bi-plus-circle me-1"></i> Create New Concern
-        </button>
+        <div class="d-flex align-items-center gap-2">
+            <div class="dropdown">
+                <button class="btn btn-outline-secondary dropdown-toggle shadow-sm" type="button" data-bs-toggle="dropdown">
+                    <i class="bi bi-file-earmark-arrow-down me-1"></i> Creation Template
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                    <li><h6 class="dropdown-header small text-muted">Offline Concern Creation</h6></li>
+                    <li><a class="dropdown-item small" href="<?= \App\Core\Controller::url('/admin/concerns/template?format=excel') ?>"><i class="bi bi-file-earmark-excel text-success me-2"></i>Excel Template (.xls)</a></li>
+                    <li><a class="dropdown-item small" href="<?= \App\Core\Controller::url('/admin/concerns/template?format=csv') ?>"><i class="bi bi-file-earmark-text text-primary me-2"></i>CSV Template</a></li>
+                </ul>
+            </div>
+            <button class="btn btn-primary shadow-sm" data-bs-toggle="modal" data-bs-target="#modalCreateConcern">
+                <i class="bi bi-plus-circle me-1"></i> Create New Concern
+            </button>
+        </div>
     </div>
 
     <!-- Export Intelligence Toolbar -->
@@ -67,6 +79,17 @@
                             </td>
                             <td class="text-end">
                                 <div class="d-inline-flex align-items-center gap-1">
+                                    <div class="dropdown d-inline">
+                                        <button class="btn btn-sm btn-outline-success dropdown-toggle" type="button" data-bs-toggle="dropdown" title="Download Concern Creation Dossier">
+                                            <i class="bi bi-download"></i> Dossier
+                                        </button>
+                                        <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                                            <li><h6 class="dropdown-header small text-muted">Concern Creation Dossier</h6></li>
+                                            <li><a class="dropdown-item small" href="<?= \App\Core\Controller::url('/admin/concerns/download?id=' . $c['id'] . '&format=pdf') ?>" target="_blank"><i class="bi bi-file-earmark-pdf text-danger me-2"></i>Print / PDF Dossier</a></li>
+                                            <li><a class="dropdown-item small" href="<?= \App\Core\Controller::url('/admin/concerns/download?id=' . $c['id'] . '&format=excel') ?>"><i class="bi bi-file-earmark-excel text-success me-2"></i>Excel Dossier (.xls)</a></li>
+                                            <li><a class="dropdown-item small" href="<?= \App\Core\Controller::url('/admin/concerns/download?id=' . $c['id'] . '&format=csv') ?>"><i class="bi bi-file-earmark-text text-primary me-2"></i>CSV Dossier</a></li>
+                                        </ul>
+                                    </div>
                                     <button type="button" class="btn btn-sm btn-outline-info" onclick='openViewConcernModal(<?= json_encode($c, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>)' title="View Concern Details">
                                         <i class="bi bi-eye"></i>
                                     </button>
@@ -163,6 +186,20 @@
             </div>
 
             <div class="modal-body p-4">
+                <div class="alert alert-light border d-flex align-items-center justify-content-between py-2 px-3 mb-4 rounded-3">
+                    <div class="small text-muted">
+                        <i class="bi bi-info-circle text-primary me-1"></i> Drafting concern onboarding parameters offline?
+                    </div>
+                    <div class="d-flex gap-2">
+                        <a href="<?= \App\Core\Controller::url('/admin/concerns/template?format=excel') ?>" class="btn btn-sm btn-outline-success py-1 px-2 small">
+                            <i class="bi bi-file-earmark-excel me-1"></i> Download Excel Template
+                        </a>
+                        <a href="<?= \App\Core\Controller::url('/admin/concerns/template?format=csv') ?>" class="btn btn-sm btn-outline-primary py-1 px-2 small">
+                            <i class="bi bi-file-earmark-text me-1"></i> CSV Template
+                        </a>
+                    </div>
+                </div>
+
                 <div class="row g-4">
                     <!-- Column 1: Details & Initial Admin -->
                     <div class="col-lg-5 border-end">
@@ -382,7 +419,18 @@
                     </li>
                 </ul>
             </div>
-            <div class="modal-footer border-top px-4 py-2 bg-light">
+            <div class="modal-footer border-top px-4 py-2 bg-light d-flex justify-content-between align-items-center">
+                <div class="btn-group">
+                    <a href="#" id="view_concern_pdf_btn" class="btn btn-sm btn-outline-danger" target="_blank" title="Download / Print PDF Dossier">
+                        <i class="bi bi-file-earmark-pdf me-1"></i> PDF Dossier
+                    </a>
+                    <a href="#" id="view_concern_excel_btn" class="btn btn-sm btn-outline-success" title="Download Excel Dossier">
+                        <i class="bi bi-file-earmark-excel me-1"></i> Excel Dossier
+                    </a>
+                    <a href="#" id="view_concern_csv_btn" class="btn btn-sm btn-outline-secondary" title="Download CSV Dossier">
+                        <i class="bi bi-file-earmark-text me-1"></i> CSV
+                    </a>
+                </div>
                 <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
@@ -390,9 +438,8 @@
 </div>
 
 <script>
-<<<<<<< HEAD
 const createConcernModal = document.getElementById('modalCreateConcern');
-const createConcernForm = createConcernModal.querySelector('form');
+const createConcernForm = createConcernModal ? createConcernModal.querySelector('form') : null;
 const newConcernName = document.getElementById('newConcernName');
 const newConcernCode = document.getElementById('newConcernCode');
 const moduleSelectionError = document.getElementById('newConcernModuleError');
@@ -405,37 +452,40 @@ function concernCodePreview(name) {
     return token ? `CON-${token}` : '';
 }
 
-newConcernName.addEventListener('input', () => {
-    newConcernCode.value = concernCodePreview(newConcernName.value);
-});
-
-createConcernModal.addEventListener('show.bs.modal', () => {
-    createConcernForm.reset();
-    createConcernForm.querySelectorAll('input:not([type="hidden"]):not([type="checkbox"])').forEach(field => {
-        field.value = '';
-        field.setCustomValidity('');
+if (newConcernName && newConcernCode) {
+    newConcernName.addEventListener('input', () => {
+        newConcernCode.value = concernCodePreview(newConcernName.value);
     });
-    createConcernForm.querySelectorAll('textarea').forEach(field => field.value = '');
-    moduleSelectionError.classList.add('d-none');
-});
+}
 
-createConcernForm.addEventListener('submit', event => {
-    const hasSelectedModule = createConcernForm.querySelector('.module-check:checked');
-    if (!hasSelectedModule) {
-        event.preventDefault();
-        moduleSelectionError.classList.remove('d-none');
-    }
-});
+if (createConcernModal && createConcernForm) {
+    createConcernModal.addEventListener('show.bs.modal', () => {
+        createConcernForm.reset();
+        createConcernForm.querySelectorAll('input:not([type="hidden"]):not([type="checkbox"])').forEach(field => {
+            field.value = '';
+            field.setCustomValidity('');
+        });
+        createConcernForm.querySelectorAll('textarea').forEach(field => field.value = '');
+        if (moduleSelectionError) moduleSelectionError.classList.add('d-none');
+    });
 
-createConcernForm.querySelectorAll('.module-check').forEach(checkbox => {
-    checkbox.addEventListener('change', () => {
-        if (createConcernForm.querySelector('.module-check:checked')) {
-            moduleSelectionError.classList.add('d-none');
+    createConcernForm.addEventListener('submit', event => {
+        const hasSelectedModule = createConcernForm.querySelector('.module-check:checked');
+        if (!hasSelectedModule) {
+            event.preventDefault();
+            if (moduleSelectionError) moduleSelectionError.classList.remove('d-none');
         }
     });
-});
 
-=======
+    createConcernForm.querySelectorAll('.module-check').forEach(checkbox => {
+        checkbox.addEventListener('change', () => {
+            if (createConcernForm.querySelector('.module-check:checked')) {
+                if (moduleSelectionError) moduleSelectionError.classList.add('d-none');
+            }
+        });
+    });
+}
+
 function openViewConcernModal(con) {
     if (!con) return;
     document.getElementById('view_concern_name').innerText = con.name || 'Concern';
@@ -456,9 +506,18 @@ function openViewConcernModal(con) {
         statusBadge.innerText = 'Inactive';
     }
 
+    const downloadBaseUrl = '<?= \App\Core\Controller::url('/admin/concerns/download') ?>';
+    const pdfBtn = document.getElementById('view_concern_pdf_btn');
+    const excelBtn = document.getElementById('view_concern_excel_btn');
+    const csvBtn = document.getElementById('view_concern_csv_btn');
+    if (pdfBtn) pdfBtn.href = `${downloadBaseUrl}?id=${encodeURIComponent(con.id)}&format=pdf`;
+    if (excelBtn) excelBtn.href = `${downloadBaseUrl}?id=${encodeURIComponent(con.id)}&format=excel`;
+    if (csvBtn) csvBtn.href = `${downloadBaseUrl}?id=${encodeURIComponent(con.id)}&format=csv`;
+
     const modal = new bootstrap.Modal(document.getElementById('modalViewConcern'));
     modal.show();
 }
+
 function openEditConcernModal(con) {
     if (!con) return;
     document.getElementById('edit_concern_id').value = con.id || '';
@@ -473,7 +532,6 @@ function openEditConcernModal(con) {
     const modal = new bootstrap.Modal(document.getElementById('modalEditConcern'));
     modal.show();
 }
->>>>>>> ddd9e83ddd4d6689ac8e63081f824f6478e49dbe
 function selectAllModules(check) {
     document.querySelectorAll('.module-check').forEach(cb => cb.checked = check);
     moduleSelectionError.classList.toggle('d-none', check);

@@ -89,12 +89,10 @@ class Auth {
                AND c.id IN (
                    SELECT concern_id FROM user_concerns WHERE user_id = ?
                    UNION
-                   SELECT concern_id FROM staff WHERE user_id = ? AND status = 'active'
-                   UNION
                    SELECT concern_id FROM users WHERE id = ? AND concern_id IS NOT NULL AND status = 'active'
                )
              ORDER BY c.name ASC",
-            [$userId, $userId, $userId]
+            [$userId, $userId]
         );
     }
 

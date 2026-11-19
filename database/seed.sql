@@ -41,7 +41,8 @@ INSERT INTO `modules` (`code`, `name`, `icon`, `sort_order`, `group_name`, `is_s
 
 ('expense', 'Expense', 'bi-wallet2', 60, 'Finance', 0),
 ('cash', 'Cash', 'bi-cash-coin', 61, 'Finance', 0),
-('cash_flow', 'Cash & Cash Flow', 'bi-cash-coin', 62, 'Finance', 0)
+('cash_flow', 'Cash & Cash Flow', 'bi-cash-coin', 62, 'Finance', 0),
+('staff', 'Staff', 'bi-people-fill', 90, 'Staff', 0)
 ON DUPLICATE KEY UPDATE `name`=VALUES(`name`), `icon`=VALUES(`icon`), `group_name`=VALUES(`group_name`);
 
 -- 2. ROLES (Super Admin role: id = 1)
@@ -62,15 +63,12 @@ INSERT INTO `concerns` (`id`, `code`, `name`, `address`, `gstin`, `phone`, `emai
 (2, 'CON-APEX', 'Apex Fashion Mills', '45 Industrial Estate, Coimbatore, Tamil Nadu - 641001', '33BBBCG5678F2Z1', '9842100002', 'contact@apexfashion.com', 'active')
 ON DUPLICATE KEY UPDATE `name`=VALUES(`name`);
 
--- Enable all 22 concern modules for Concern 1 (GRM)
+-- Enable all concern modules for Concern 1 (GRM) & Concern 2 (Apex)
 INSERT IGNORE INTO `concern_modules` (`concern_id`, `module_id`, `enabled`)
 SELECT 1, `id`, 1 FROM `modules` WHERE `is_super_admin_only` = 0;
 
--- Enable subset of modules for Concern 2 (Apex) - (e.g. No production cutting/stitching, proving module toggle)
 INSERT IGNORE INTO `concern_modules` (`concern_id`, `module_id`, `enabled`)
-SELECT 2, `id`, 1 FROM `modules` 
-WHERE `is_super_admin_only` = 0 
-  AND `code` NOT IN ('cutting_wastage', 'stitching_wastage', 'catalog_program');
+SELECT 2, `id`, 1 FROM `modules` WHERE `is_super_admin_only` = 0;
 
 -- Concern 1 Admin Role & User
 INSERT INTO `roles` (`id`, `concern_id`, `name`, `description`) VALUES
@@ -116,38 +114,6 @@ INSERT INTO `cash_accounts` (`id`, `concern_id`, `name`, `account_type`, `accoun
 (3, 2, 'Apex Cash Counter', 'cash', NULL, 15000.00),
 (4, 2, 'SBI Current A/c', 'bank', '30998877665', 180000.00)
 ON DUPLICATE KEY UPDATE `balance`=VALUES(`balance`);
-
--- Categories for Concern 1
-INSERT INTO `categories` (`id`, `concern_id`, `name`, `code`, `default_hsn`, `default_gst_rate`) VALUES
-(1, 1, 'Raw Fabric', 'RF', '5208', 5.00),
-(2, 1, 'Apparel Finished Goods', 'FG', '6109', 5.00),
-(3, 1, 'Accessories & Trims', 'AT', '6109', 12.00),
-(4, 2, 'Yarn', 'YN', '5205', 5.00),
-(5, 2, 'Finished Knits', 'FK', '6006', 5.00),
-(6, 1, 'KIDS', 'K', '107', 5.00)
-ON DUPLICATE KEY UPDATE `name`=VALUES(`name`), `code`=VALUES(`code`), `default_hsn`=VALUES(`default_hsn`), `default_gst_rate`=VALUES(`default_gst_rate`);
-
--- Subcategories
-INSERT INTO `subcategories` (`id`, `concern_id`, `category_id`, `name`, `code`) VALUES
-(1, 1, 1, '100% Combed Cotton Single Jersey', 'SJ'),
-(2, 1, 1, 'Poly Cotton Rib 2x2', 'RB'),
-(3, 1, 2, 'Men Crew Neck T-Shirt', 'MC'),
-(4, 1, 2, 'Women Polo T-Shirt', 'WP'),
-(5, 1, 3, 'Woven Neck Labels', 'NL'),
-(6, 2, 4, '30s Combed Cotton Yarn', '30S'),
-(7, 2, 5, 'Bio-Washed Knitted Fabric', 'BW'),
-(8, 1, 6, 'BABY', 'B')
-ON DUPLICATE KEY UPDATE `name`=VALUES(`name`), `code`=VALUES(`code`);
-
--- Sub-Subcategories
-INSERT INTO `sub_subcategories` (`id`, `concern_id`, `subcategory_id`, `name`, `code`) VALUES
-(1, 1, 8, 'DRESS', 'D')
-ON DUPLICATE KEY UPDATE `name`=VALUES(`name`), `code`=VALUES(`code`);
-
--- Sample Product Style (Catalog)
-INSERT INTO `catalogs` (`id`, `concern_id`, `code`, `style_code`, `short_code`, `category_id`, `subcategory_id`, `sub_sub_category_id`, `main_category_code`, `sub_category_code`, `sub_sub_category_code`, `hierarchy_path`, `hsn_code`, `gst_rate`, `sizes`, `status`, `name`) VALUES
-(1, 1, 'GRM-STY-0001', 'GRM-STY-0001', 'KBD', 6, 8, 1, 'K', 'B', 'D', 'KIDS > BABY > DRESS', '107', 5.00, '["S","M","L"]', 'in_house', 'KIDS - BABY - DRESS')
-ON DUPLICATE KEY UPDATE `style_code`=VALUES(`style_code`), `short_code`=VALUES(`short_code`), `name`=VALUES(`name`);
 
 -- Brands
 INSERT INTO `brands` (`id`, `concern_id`, `name`) VALUES

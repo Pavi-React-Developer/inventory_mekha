@@ -51,6 +51,8 @@ $router->get('/admin/dashboard/export', [AdminController::class, 'exportReports'
 $router->get('/admin/switch-concern', [AdminController::class, 'switchConcern'], 'super_admin');
 $router->get('/admin/concerns', [AdminController::class, 'concerns'], 'super_admin');
 $router->get('/admin/concerns/export', [AdminController::class, 'exportConcerns'], 'super_admin');
+$router->get('/admin/concerns/download', [AdminController::class, 'downloadConcernDossier'], 'super_admin');
+$router->get('/admin/concerns/template', [AdminController::class, 'downloadConcernTemplate'], 'super_admin');
 $router->post('/admin/concerns/store', [AdminController::class, 'storeConcern'], 'super_admin');
 $router->post('/admin/concerns/update', [AdminController::class, 'updateConcern'], 'super_admin');
 $router->post('/admin/concerns/delete', [AdminController::class, 'deleteConcern'], 'super_admin');

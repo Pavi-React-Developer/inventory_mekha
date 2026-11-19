@@ -118,36 +118,5 @@ if ($hsnCount === 0) {
     }
 }
 
-// 7. Seed sample categories for first available Concern if present
-$targetConcernId = (int)DB::fetchValue("SELECT id FROM concerns ORDER BY id ASC LIMIT 1");
-if ($targetConcernId > 0) {
-    $kidsCat = DB::fetch("SELECT id FROM categories WHERE name = 'KIDS' AND concern_id = ?", [$targetConcernId]);
-    if (!$kidsCat) {
-        DB::query("INSERT INTO categories (concern_id, name, code, default_hsn, default_gst_rate, status) VALUES (?, 'KIDS', 'K', '107', 5.00, 'active')", [$targetConcernId]);
-        $kidsCatId = (int)DB::lastInsertId();
-    } else {
-        $kidsCatId = (int)$kidsCat['id'];
-        DB::query("UPDATE categories SET code = 'K', default_hsn = '107', default_gst_rate = 5.00 WHERE id = ?", [$kidsCatId]);
-    }
-
-    $babySub = DB::fetch("SELECT id FROM subcategories WHERE name = 'BABY' AND category_id = ?", [$kidsCatId]);
-    if (!$babySub) {
-        DB::query("INSERT INTO subcategories (concern_id, category_id, name, code, status) VALUES (?, ?, 'BABY', 'B', 'active')", [$targetConcernId, $kidsCatId]);
-        $babySubId = (int)DB::lastInsertId();
-    } else {
-        $babySubId = (int)$babySub['id'];
-        DB::query("UPDATE subcategories SET code = 'B' WHERE id = ?", [$babySubId]);
-    }
-
-    $dressSubSub = DB::fetch("SELECT id FROM sub_subcategories WHERE name = 'DRESS' AND subcategory_id = ?", [$babySubId]);
-    if (!$dressSubSub) {
-        DB::query("INSERT INTO sub_subcategories (concern_id, subcategory_id, name, code, status) VALUES (?, ?, 'DRESS', 'D', 'active')", [$targetConcernId, $babySubId]);
-    }
-}
-
-// Also check and update existing categories codes
-DB::query("UPDATE categories SET code = 'RF', default_hsn = '5208', default_gst_rate = 5.00 WHERE name = 'Raw Fabric' AND (code IS NULL OR code = '')");
-DB::query("UPDATE categories SET code = 'FG', default_hsn = '6109', default_gst_rate = 5.00 WHERE name = 'Apparel Finished Goods' AND (code IS NULL OR code = '')");
-DB::query("UPDATE categories SET code = 'AT', default_hsn = '6109', default_gst_rate = 12.00 WHERE name = 'Accessories & Trims' AND (code IS NULL OR code = '')");
-
-echo "Catalog schema migration & seed completed successfully!\n";
+// 7. Seed sample categories removed - all categories are user-defined and dynamic
+echo "Catalog schema migration completed successfully!\n";

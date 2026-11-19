@@ -1,0 +1,68 @@
+# ========================================================
+# INVENTO Multi-Concern Inventory System - .gitignore
+# ========================================================
+
+# 1. Environment & Sensitive Security Credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.pfx
+*.p12
+*.cer
+auth.json
+
+# 2. Uploads, Media & User Generated Storage
+/storage/uploads/*
+!/storage/uploads/.gitkeep
+/storage/uploads/bills/*
+!/storage/uploads/bills/.gitkeep
+/storage/uploads/rolls/*
+!/storage/uploads/rolls/.gitkeep
+/storage/logs/*
+!/storage/logs/.gitkeep
+/storage/cache/*
+!/storage/cache/.gitkeep
+/storage/sessions/*
+!/storage/sessions/.gitkeep
+
+# 3. Application Logs & Error Dumps
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 4. Dependencies & Package Managers
+/vendor/
+/node_modules/
+
+# 5. Database Backups, Dumps & Temporary SQL
+*.sql.bak
+*.sql.gz
+*.dump
+*.backup
+/database/backups/*
+!/database/backups/.gitkeep
+
+# 6. IDE, Editors & OS System Files
+.vscode/
+!.vscode/settings.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+ehthumbs.db
+
+# 7. Temporary / Scratch / Cache Files
+/temp/
+/tmp/
+*.tmp
+.phpunit.result.cache
