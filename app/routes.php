@@ -17,6 +17,7 @@ use App\Controllers\ProductionController;
 use App\Controllers\CatalogMappingController;
 use App\Controllers\FinanceController;
 use App\Controllers\DamageController;
+use App\Controllers\StaffController;
 
 /** @var Router $router */
 
@@ -38,6 +39,9 @@ $router->get('/', function() {
 $router->get('/login', [AuthController::class, 'showLogin']);
 $router->post('/login', [AuthController::class, 'login']);
 $router->get('/logout', [AuthController::class, 'logout']);
+$router->get('/select-concern', [AuthController::class, 'selectConcern']);
+$router->post('/select-concern', [AuthController::class, 'setConcern']);
+$router->get('/switch-concern', [AuthController::class, 'switchConcernAction']);
 
 // ==========================================
 // SUPER ADMIN MODULES (guarded 'super_admin')
@@ -122,13 +126,15 @@ $router->get('/m/purchase_billing/download_items', [PurchaseController::class, '
 // Purchase Stocks (3 Sections: Rolls, Trims/Other Garments, Finished Goods)
 $router->get('/m/purchase_stocks', [PurchaseStockController::class, 'index'], 'purchase_stocks', 'view');
 $router->post('/m/purchase_stocks/update_consolidated_roll', [PurchaseStockController::class, 'updateConsolidatedRoll'], 'purchase_stocks', 'edit');
+$router->post('/m/purchase_stocks/update_item', [PurchaseStockController::class, 'updateStockItem'], 'purchase_stocks', 'edit');
 $router->get('/m/purchase_stocks/export', [PurchaseStockController::class, 'export'], 'purchase_stocks', 'view');
 
 $router->get('/m/purchase_damage', [PurchaseController::class, 'damage'], 'purchase_damage', 'view');
-$router->get('/m/purchase_damage/export', [PurchaseController::class, 'exportDamage'], 'purchase_damage', 'view');
+$router->post('/m/purchase_damage/scan', [PurchaseController::class, 'scanPurchaseDamageTag'], 'purchase_damage', 'add');
+$router->post('/m/purchase_damage/reasons/add', [PurchaseController::class, 'addDamageReason'], 'purchase_damage', 'add');
 $router->post('/m/purchase_damage/store', [PurchaseController::class, 'storeDamage'], 'purchase_damage', 'add');
-$router->post('/m/purchase_damage/update', [PurchaseController::class, 'updateDamage'], 'purchase_damage', 'edit');
-$router->post('/m/purchase_damage/delete', [PurchaseController::class, 'deleteDamage'], 'purchase_damage', 'delete');
+$router->post('/m/purchase_damage/update', [PurchaseController::class, 'updateDamageRecord'], 'purchase_damage', 'edit');
+$router->post('/m/purchase_damage/delete', [PurchaseController::class, 'deleteDamageRecord'], 'purchase_damage', 'delete');
 
 // Concern Damage
 $router->get('/m/concern_damage', [DamageController::class, 'index'], 'concern_damage', 'view');
@@ -305,3 +311,10 @@ $router->post('/m/cash_flow/shift/open', [FinanceController::class, 'openShift']
 $router->post('/m/cash_flow/shift/close', [FinanceController::class, 'closeShift'], 'cash_flow', 'add');
 $router->post('/m/cash/shift/open', [FinanceController::class, 'openShift'], 'cash', 'add');
 $router->post('/m/cash/shift/close', [FinanceController::class, 'closeShift'], 'cash', 'add');
+
+// Staff Management
+$router->get('/m/staff', [StaffController::class, 'index'], 'staff', 'view');
+$router->get('/m/staff/export', [StaffController::class, 'export'], 'staff', 'view');
+$router->post('/m/staff/store', [StaffController::class, 'store'], 'staff', 'add');
+$router->post('/m/staff/update', [StaffController::class, 'update'], 'staff', 'edit');
+$router->post('/m/staff/delete', [StaffController::class, 'delete'], 'staff', 'delete');

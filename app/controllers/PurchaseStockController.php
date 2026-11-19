@@ -6,6 +6,8 @@ use App\Core\Auth;
 use App\Core\DB;
 use App\Core\ModuleGuard;
 use App\Services\AuditLog;
+use App\Services\PurchaseDamageService;
+use App\Services\PurchaseStockItemOverrideService;
 use App\Services\RollRegistryService;
 
 class PurchaseStockController extends Controller {
@@ -33,6 +35,8 @@ class PurchaseStockController extends Controller {
         $search = trim($_GET['q'] ?? '');
         $supplierFilter = (int)($_GET['supplier_id'] ?? 0);
         $statusFilter = trim($_GET['status'] ?? '');
+        PurchaseDamageService::initTable();
+        PurchaseStockItemOverrideService::initTable();
 
         // Base where condition builder
         $buildWhere = function(string $secType) use ($selectedCid, $search, $supplierFilter, $statusFilter) {
@@ -94,16 +98,33 @@ class PurchaseStockController extends Controller {
         $otherWhere = $buildWhere('garment_other');
         $garmentOther = DB::fetchAll(
             "SELECT pbi.*, pb.bill_no, pb.bill_date, pb.supplier_invoice_no, pb.inward_status, pb.payment_status,
+                    COALESCE(damage.damaged_qty, 0) AS damaged_qty,
+                    COALESCE(damage.damaged_weight, 0) AS damaged_weight,
+                    COALESCE(damage.estimated_loss, 0) AS estimated_loss,
                     s.name AS supplier_name, s.company_name AS supplier_company,
                     c.name AS concern_name, c.code AS concern_code
              FROM purchase_bill_items pbi
              JOIN purchase_bills pb ON pbi.purchase_bill_id = pb.id
              LEFT JOIN suppliers s ON pb.supplier_id = s.id
              LEFT JOIN concerns c ON pbi.concern_id = c.id
+             LEFT JOIN (
+                 SELECT purchase_bill_item_id, SUM(qty) AS damaged_qty,
+                        SUM(damaged_weight) AS damaged_weight, SUM(estimated_loss) AS estimated_loss
+                 FROM purchase_damage_quarantine
+                 WHERE item_type = 'garment_other'
+                 GROUP BY purchase_bill_item_id
+             ) damage ON damage.purchase_bill_item_id = pbi.id
              WHERE {$otherWhere['sql']}
              ORDER BY pbi.id DESC",
             $otherWhere['params']
         );
+        $garmentOther = PurchaseStockItemOverrideService::applyToItems($garmentOther);
+        foreach ($garmentOther as &$item) {
+            $item['available_qty'] = max(0.0, (float)$item['qty'] - (float)$item['damaged_qty']);
+            $item['available_weight'] = max(0.0, (float)($item['net_weight'] ?? 0) - (float)$item['damaged_weight']);
+            $item['available_value'] = max(0.0, (float)$item['total_price'] - (float)$item['estimated_loss']);
+        }
+        unset($item);
 
         // 3. Fetch Finished Goods
         $finishedWhere = $buildWhere('finished_goods');
@@ -111,30 +132,80 @@ class PurchaseStockController extends Controller {
             "SELECT pbi.*, pb.bill_no, pb.bill_date, pb.supplier_invoice_no, pb.inward_status, pb.payment_status,
                     s.name AS supplier_name, s.company_name AS supplier_company,
                     c.name AS concern_name, c.code AS concern_code,
-                    v.sku_code AS variant_sku, v.name AS variant_name, v.size AS variant_size,
-                    (SELECT st.qty FROM stocks st WHERE st.variant_id = pbi.variant_id AND st.concern_id = pbi.concern_id AND st.location = 'Main Store' LIMIT 1) AS live_variant_stock
+                    v.sku_code AS variant_sku, v.name AS variant_name, v.size AS variant_size, v.mrp AS variant_mrp,
+                    cat.name AS category_name,
+                    (SELECT st.qty FROM stocks st WHERE st.variant_id = pbi.variant_id AND st.concern_id = pbi.concern_id AND st.location = 'Main Store' LIMIT 1) AS live_variant_stock,
+                    COALESCE(label_jobs.generated_qty, 0) AS label_generated_qty,
+                    label_jobs.label_latest_job_id AS label_latest_job_id,
+                    (SELECT lj.qr_payload FROM label_jobs lj
+                     WHERE lj.concern_id = pbi.concern_id AND lj.ref_id = pbi.id AND lj.label_type = 'purchase_fg'
+                       AND lj.id > COALESCE((SELECT stock_override.label_job_baseline_id
+                                             FROM purchase_stock_item_overrides stock_override
+                                             WHERE stock_override.concern_id = pbi.concern_id
+                                               AND stock_override.purchase_bill_item_id = pbi.id), 0)
+                     ORDER BY lj.id DESC LIMIT 1) AS fg_label_qr_payload,
+                    (SELECT lj.item_title FROM label_jobs lj
+                     WHERE lj.concern_id = pbi.concern_id AND lj.ref_id = pbi.id AND lj.label_type = 'purchase_fg'
+                       AND lj.id > COALESCE((SELECT stock_override.label_job_baseline_id
+                                             FROM purchase_stock_item_overrides stock_override
+                                             WHERE stock_override.concern_id = pbi.concern_id
+                                               AND stock_override.purchase_bill_item_id = pbi.id), 0)
+                     ORDER BY lj.id DESC LIMIT 1) AS fg_label_title,
+                    (SELECT lj.item_code FROM label_jobs lj
+                     WHERE lj.concern_id = pbi.concern_id AND lj.ref_id = pbi.id AND lj.label_type = 'purchase_fg'
+                       AND lj.id > COALESCE((SELECT stock_override.label_job_baseline_id
+                                             FROM purchase_stock_item_overrides stock_override
+                                             WHERE stock_override.concern_id = pbi.concern_id
+                                               AND stock_override.purchase_bill_item_id = pbi.id), 0)
+                     ORDER BY lj.id DESC LIMIT 1) AS fg_label_code
              FROM purchase_bill_items pbi
              JOIN purchase_bills pb ON pbi.purchase_bill_id = pb.id
              LEFT JOIN suppliers s ON pb.supplier_id = s.id
              LEFT JOIN concerns c ON pbi.concern_id = c.id
              LEFT JOIN variants v ON pbi.variant_id = v.id
+             LEFT JOIN categories cat ON v.category_id = cat.id
+             LEFT JOIN (
+                 SELECT lj.concern_id, lj.ref_id, SUM(lj.qty) AS generated_qty,
+                        MAX(lj.id) AS label_latest_job_id
+                 FROM label_jobs lj
+                 LEFT JOIN purchase_stock_item_overrides stock_override
+                   ON stock_override.concern_id = lj.concern_id
+                  AND stock_override.purchase_bill_item_id = lj.ref_id
+                  AND stock_override.section_type = 'finished_goods'
+                 WHERE lj.label_type = 'purchase_fg'
+                   AND lj.id > COALESCE(stock_override.label_job_baseline_id, 0)
+                 GROUP BY lj.concern_id, lj.ref_id
+             ) label_jobs ON label_jobs.concern_id = pbi.concern_id AND label_jobs.ref_id = pbi.id
              WHERE {$finishedWhere['sql']}
              ORDER BY pbi.id DESC",
             $finishedWhere['params']
         );
+        $finishedGoods = PurchaseStockItemOverrideService::applyToItems($finishedGoods);
+        foreach ($finishedGoods as &$item) {
+            $item['label_generation_complete'] =
+                (float)$item['qty'] > 0 &&
+                (float)$item['label_generated_qty'] >= (float)$item['qty'] &&
+                !empty($item['fg_label_qr_payload']) &&
+                (int)($item['label_latest_job_id'] ?? 0) > (int)($item['label_job_baseline_id'] ?? 0);
+        }
+        unset($item);
 
         // Calculate KPI Metrics across current concern scope (unfiltered by search for accurate totals)
         $metricWhere = $selectedCid ? "WHERE pbi.concern_id = ?" : "";
         $metricParams = $selectedCid ? [$selectedCid] : [];
 
         $allMetrics = DB::fetchAll(
-            "SELECT pbi.section_type, 
-                    SUM(pbi.qty) AS total_qty, 
+            "SELECT pbi.section_type,
+                    SUM(COALESCE(stock_override.qty, pbi.qty)) AS total_qty,
                     SUM(COALESCE(pbi.net_weight, 0)) AS total_weight,
-                    SUM(pbi.total_price) AS total_val,
-                    SUM(COALESCE(pbi.mrp, 0) * pbi.qty) AS total_mrp_val,
+                    SUM(COALESCE(stock_override.total_value, pbi.total_price)) AS total_val,
+                    SUM(COALESCE(stock_override.mrp, pbi.mrp, 0) * COALESCE(stock_override.qty, pbi.qty)) AS total_mrp_val,
                     COUNT(pbi.id) AS item_count
              FROM purchase_bill_items pbi
+             LEFT JOIN purchase_stock_item_overrides stock_override
+               ON stock_override.concern_id = pbi.concern_id
+              AND stock_override.purchase_bill_item_id = pbi.id
+              AND stock_override.section_type = pbi.section_type
              {$metricWhere}
              GROUP BY pbi.section_type",
             $metricParams
@@ -175,6 +246,35 @@ class PurchaseStockController extends Controller {
             }
             $metrics['grand_value'] += (float)$m['total_val'];
         }
+        $damageMetrics = DB::fetchAll(
+            "SELECT item_type, SUM(qty) AS damaged_qty, SUM(estimated_loss) AS estimated_loss
+             FROM purchase_damage_quarantine
+             WHERE (? = 0 OR concern_id = ?)
+             GROUP BY item_type",
+            [$selectedCid ?: 0, $selectedCid ?: 0]
+        );
+        foreach ($damageMetrics as $damageMetric) {
+            $damagedQty = (float)$damageMetric['damaged_qty'];
+            $estimatedLoss = (float)$damageMetric['estimated_loss'];
+            if ($damageMetric['item_type'] === 'garment_other') {
+                $metrics['other_qty'] = max(0.0, $metrics['other_qty'] - $damagedQty);
+                $metrics['other_value'] = max(0.0, $metrics['other_value'] - $estimatedLoss);
+                $metrics['grand_value'] -= $estimatedLoss;
+            } elseif ($damageMetric['item_type'] === 'finished_goods') {
+                $metrics['finished_qty'] = max(0.0, $metrics['finished_qty'] - $damagedQty);
+                $metrics['finished_value'] = max(0.0, $metrics['finished_value'] - $estimatedLoss);
+                $metrics['grand_value'] -= $estimatedLoss;
+            }
+        }
+        $damagedFinishedMrp = (float)DB::fetchValue(
+            "SELECT COALESCE(SUM(q.qty * COALESCE(v.mrp, 0)), 0)
+             FROM purchase_damage_quarantine q
+             LEFT JOIN variants v ON v.id = q.variant_id
+             WHERE q.item_type = 'finished_goods'
+               AND (? = 0 OR q.concern_id = ?)",
+            [$selectedCid ?: 0, $selectedCid ?: 0]
+        );
+        $metrics['finished_mrp_val'] = max(0.0, $metrics['finished_mrp_val'] - $damagedFinishedMrp);
         $sourceRollValue = $metrics['rolls_value'];
         $metrics['rolls_qty'] = array_sum(array_map(
             static fn(array $roll): float => (float)$roll['qty'],
@@ -203,6 +303,7 @@ class PurchaseStockController extends Controller {
 
         $allConcerns = $isSuperAdmin ? DB::fetchAll("SELECT id, name, code FROM concerns ORDER BY name ASC") : [];
         $canEditRollStock = $isSuperAdmin || Auth::can('purchase_stocks', 'edit');
+        $canEditPurchaseStock = $canEditRollStock;
 
         $this->render('concern/purchase_stocks', [
             'pageTitle'         => 'Purchase Stocks & Inventory',
@@ -218,6 +319,7 @@ class PurchaseStockController extends Controller {
             'allConcerns'       => $allConcerns,
             'selectedCid'       => $selectedCid,
             'canEditRollStock'  => $canEditRollStock,
+            'canEditPurchaseStock' => $canEditPurchaseStock,
             'search'            => $search,
             'supplierFilter'    => $supplierFilter,
             'statusFilter'      => $statusFilter,
@@ -321,8 +423,129 @@ class PurchaseStockController extends Controller {
         $this->redirect($returnUrl);
     }
 
+    public function updateStockItem(): void {
+        ModuleGuard::enforce('purchase_stocks', 'edit');
+        $this->validateCsrf();
+
+        $itemId = (int)($_POST['item_id'] ?? 0);
+        $sectionType = trim((string)($_POST['section_type'] ?? ''));
+        $concernId = Auth::isSuperAdmin()
+            ? (int)($_POST['concern_id'] ?? 0)
+            : Auth::concernId();
+        $returnUrl = '/m/purchase_stocks?tab=' . rawurlencode($sectionType);
+        if (Auth::isSuperAdmin() && $concernId) {
+            $returnUrl .= '&concern_id=' . $concernId;
+        }
+
+        if (!$itemId || !$concernId || !in_array($sectionType, ['garment_other', 'finished_goods'], true)) {
+            $this->flash('error', 'Select a valid purchase stock item before editing.');
+            $this->redirect('/m/purchase_stocks?tab=garment_other');
+            return;
+        }
+
+        $sourceItem = DB::fetch(
+            "SELECT id, concern_id, section_type, qty
+             FROM purchase_bill_items
+             WHERE id = ? AND concern_id = ? AND section_type = ?",
+            [$itemId, $concernId, $sectionType]
+        );
+        if (!$sourceItem) {
+            $this->flash('error', 'This purchase stock item was not found or is outside the selected concern.');
+            $this->redirect($returnUrl);
+            return;
+        }
+
+        $textFields = [
+            'item_name' => ['Item name', 255],
+            'item_code' => ['Item code', 100],
+            'specification' => ['Specification', 255],
+            'color' => ['Color', 100],
+            'unit' => ['Unit', 50],
+        ];
+        $values = [];
+        foreach ($textFields as $field => [$label, $maxLength]) {
+            $rawValue = $_POST[$field] ?? '';
+            if (!is_scalar($rawValue)) {
+                $this->flash('error', "{$label} is invalid.");
+                $this->redirect($returnUrl);
+                return;
+            }
+            $value = trim((string)$rawValue);
+            if (($field === 'item_name' || $field === 'unit') && $value === '') {
+                $this->flash('error', "{$label} is required.");
+                $this->redirect($returnUrl);
+                return;
+            }
+            if (strlen($value) > $maxLength) {
+                $this->flash('error', "{$label} is too long.");
+                $this->redirect($returnUrl);
+                return;
+            }
+            $values[$field] = $value;
+        }
+
+        foreach ([
+            'qty' => 'Quantity',
+            'unit_price' => 'Unit price',
+            'mrp' => 'MRP',
+            'total_value' => 'Stock value',
+        ] as $field => $label) {
+            $rawValue = $_POST[$field] ?? null;
+            if (!is_scalar($rawValue) || !is_numeric($rawValue)) {
+                $this->flash('error', "{$label} must be a valid number.");
+                $this->redirect($returnUrl);
+                return;
+            }
+            $number = (float)$rawValue;
+            if (!is_finite($number) || $number < 0 || $number > 9999999999.99) {
+                $this->flash('error', "{$label} must be between 0 and 9,999,999,999.99.");
+                $this->redirect($returnUrl);
+                return;
+            }
+            $values[$field] = $number;
+        }
+
+        if ($sectionType === 'garment_other') {
+            PurchaseDamageService::initTable();
+            $damagedQty = (float)DB::fetchValue(
+                "SELECT COALESCE(SUM(qty), 0) FROM purchase_damage_quarantine
+                 WHERE concern_id = ? AND purchase_bill_item_id = ? AND item_type = 'garment_other'",
+                [$concernId, $itemId]
+            );
+            if ($values['qty'] < $damagedQty) {
+                $this->flash('error', 'Quantity cannot be lower than the amount already in damage quarantine.');
+                $this->redirect($returnUrl);
+                return;
+            }
+        }
+
+        $result = PurchaseStockItemOverrideService::saveItemOverride(
+            $concernId,
+            $itemId,
+            $sectionType,
+            $values,
+            Auth::id()
+        );
+        if (!$result) {
+            $this->flash('error', 'This stock item could not be updated. Please refresh and try again.');
+            $this->redirect($returnUrl);
+            return;
+        }
+
+        AuditLog::log(
+            'UPDATE',
+            'purchase_stock_item_overrides',
+            $result['id'],
+            $result['before'],
+            $result['after']
+        );
+        $this->flash('success', 'Purchase stock item updated. Purchase bill history was not changed.');
+        $this->redirect($returnUrl);
+    }
+
     public function export(): void {
         ModuleGuard::enforce('purchase_stocks', 'view');
+        PurchaseDamageService::initTable();
 
         $isSuperAdmin = Auth::isSuperAdmin();
         $userCid = Auth::concernId();
@@ -346,11 +569,21 @@ class PurchaseStockController extends Controller {
         $items = DB::fetchAll(
             "SELECT pbi.*, pb.bill_no, pb.bill_date, pb.supplier_invoice_no, pb.inward_status,
                     s.name AS supplier_name, s.company_name AS supplier_company,
-                    c.name AS concern_name, c.code AS concern_code
+                    c.name AS concern_name, c.code AS concern_code,
+                    COALESCE(damage.damaged_qty, 0) AS damaged_qty,
+                    GREATEST(0, pbi.qty - COALESCE(damage.damaged_qty, 0)) AS available_qty,
+                    GREATEST(0, pbi.total_price - COALESCE(damage.estimated_loss, 0)) AS available_value
              FROM purchase_bill_items pbi
              JOIN purchase_bills pb ON pbi.purchase_bill_id = pb.id
              LEFT JOIN suppliers s ON pb.supplier_id = s.id
              LEFT JOIN concerns c ON pbi.concern_id = c.id
+             LEFT JOIN (
+                 SELECT purchase_bill_item_id, SUM(qty) AS damaged_qty,
+                        SUM(estimated_loss) AS estimated_loss
+                 FROM purchase_damage_quarantine
+                 WHERE item_type = 'garment_other'
+                 GROUP BY purchase_bill_item_id
+             ) damage ON damage.purchase_bill_item_id = pbi.id
              WHERE " . implode(' AND ', $where) . "
              ORDER BY pbi.id DESC",
             $params
@@ -411,7 +644,7 @@ class PurchaseStockController extends Controller {
                 }
             }
         } elseif ($tab === 'garment_other') {
-            fputcsv($out, ['Item Code', 'Item Name', 'Specification', 'Unit', 'Qty Inwarded', 'Unit Price (INR)', 'Total Value (INR)', 'Bill No', 'Bill Date', 'Supplier', 'Inward Status']);
+            fputcsv($out, ['Item Code', 'Item Name', 'Specification', 'Unit', 'Qty Inwarded', 'Qty Available', 'Unit Price (INR)', 'Available Value (INR)', 'Bill No', 'Bill Date', 'Supplier', 'Inward Status']);
             foreach ($items as $g) {
                 fputcsv($out, [
                     $g['item_code'] ?: '-',
@@ -419,8 +652,9 @@ class PurchaseStockController extends Controller {
                     $g['specification'] ?: '-',
                     $g['unit'] ?: 'Pcs',
                     $g['qty'],
+                    $g['available_qty'],
                     $g['unit_price'],
-                    $g['total_price'],
+                    $g['available_value'],
                     $g['bill_no'],
                     $g['bill_date'],
                     $g['supplier_name'] ?: '-',

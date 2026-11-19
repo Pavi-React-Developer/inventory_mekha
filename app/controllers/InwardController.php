@@ -16,10 +16,14 @@ class InwardController extends Controller {
 
         $sql = "SELECT i.*, s.name AS supplier_name, pb.bill_no, u.name AS user_name,
                        con.name AS concern_name, con.code AS concern_code,
+                       fc.name AS from_concern_name, fc.code AS from_concern_code,
+                       o.outward_no,
                        (SELECT COUNT(*) FROM inward_items ii WHERE ii.inward_id = i.id) AS items_count,
                        (SELECT COALESCE(SUM(qty), 0) FROM inward_items ii WHERE ii.inward_id = i.id) AS total_qty
                 FROM inwards i
                 LEFT JOIN concerns con ON i.concern_id = con.id
+                LEFT JOIN concerns fc ON i.from_concern_id = fc.id
+                LEFT JOIN outwards o ON i.outward_id = o.id
                 LEFT JOIN suppliers s ON i.supplier_id = s.id
                 LEFT JOIN purchase_bills pb ON i.purchase_bill_id = pb.id
                 LEFT JOIN users u ON i.created_by = u.id";
@@ -32,6 +36,26 @@ class InwardController extends Controller {
         $sql .= " ORDER BY i.id DESC";
         $inwards = DB::fetchAll($sql, $params);
 
+        // Fetch pending incoming transfers from production units / other concerns dispatched specifically to this concern
+        $pendingTransfersSql = "SELECT o.*, oi.variant_id, oi.qty AS transfer_qty,
+                                       con.name AS from_concern_name, con.code AS from_concern_code,
+                                       v.name AS variant_name, v.sku_code, v.size, v.weight, v.weight_unit, v.price, v.mrp,
+                                       v.category_id, v.subcategory_id, v.brand_id, v.catalog_id, v.attributes
+                                FROM outwards o
+                                JOIN outward_items oi ON o.id = oi.outward_id
+                                JOIN concerns con ON o.concern_id = con.id
+                                JOIN variants v ON oi.variant_id = v.id
+                                WHERE o.transfer_type = 'concern' AND o.status IN ('prepared', 'dispatched')";
+        $pendingParams = [];
+        if ($cid) {
+            $pendingTransfersSql .= " AND o.destination_concern_id = ?";
+            $pendingParams[] = $cid;
+        }
+        $pendingTransfersSql .= " ORDER BY o.id DESC";
+        $pendingTransfers = DB::fetchAll($pendingTransfersSql, $pendingParams);
+
+        $allConcerns = DB::fetchAll("SELECT id, name, code FROM concerns WHERE status = 'active' ORDER BY name ASC");
+
         if ($cid) {
             $suppliers = DB::fetchAll("SELECT id, name FROM suppliers WHERE concern_id = ? AND status = 'active'", [$cid]);
             $variants  = DB::fetchAll("SELECT id, sku_code, name, size, weight_unit FROM variants WHERE concern_id = ? AND status = 'active'", [$cid]);
@@ -41,12 +65,14 @@ class InwardController extends Controller {
         }
 
         $this->render('concern/inward', [
-            'pageTitle'     => 'Inward Stock Consignments',
-            'currentModule' => 'inward',
-            'inwards'       => $inwards,
-            'suppliers'     => $suppliers,
-            'variants'      => $variants,
-            'selectedCid'   => $cid,
+            'pageTitle'        => 'Inward Stock Consignments',
+            'currentModule'    => 'inward',
+            'inwards'          => $inwards,
+            'pendingTransfers' => $pendingTransfers,
+            'suppliers'        => $suppliers,
+            'variants'         => $variants,
+            'allConcerns'      => $allConcerns,
+            'selectedCid'      => $cid,
         ]);
     }
 
@@ -59,28 +85,116 @@ class InwardController extends Controller {
             $this->redirect('/m/inward');
         }
 
-        $supplierId = !empty($_POST['supplier_id']) ? (int)$_POST['supplier_id'] : null;
+        $inwardType = trim($_POST['inward_type'] ?? 'purchase');
+        $outwardId  = !empty($_POST['outward_id']) ? (int)$_POST['outward_id'] : null;
+
         $inwardDate = $_POST['inward_date'] ?: date('Y-m-d');
         $location   = trim($_POST['location'] ?? 'Main Store');
         $remarks    = trim($_POST['remarks'] ?? '');
 
-        $variantId = (int)($_POST['variant_id'] ?? 0);
-        $qty       = (float)($_POST['qty'] ?? 0);
-        $unitCost  = (float)($_POST['unit_cost'] ?? 0);
-
-        if (!$variantId || $qty <= 0) {
-            $this->flash('error', 'Please select a valid variant and specify a quantity greater than zero.');
-            $this->redirect('/m/inward');
-        }
-
         DB::beginTransaction();
         try {
+            $fromConcernId = null;
+            $supplierId = null;
+
+            if ($inwardType === 'transfer' && $outwardId) {
+                // Inter-concern transfer receiving
+                $outward = DB::fetch(
+                    "SELECT o.*, oi.variant_id AS source_variant_id, oi.qty AS transfer_qty,
+                            con.name AS from_concern_name, con.code AS from_concern_code
+                     FROM outwards o
+                     JOIN outward_items oi ON o.id = oi.outward_id
+                     JOIN concerns con ON o.concern_id = con.id
+                     WHERE o.id = ?",
+                    [$outwardId]
+                );
+
+                if (!$outward) {
+                    throw new Exception("Outward transfer consignment #{$outwardId} not found.");
+                }
+
+                // STRICT TENANT ISOLATION: Must match destination concern selected during outward!
+                if ((int)$outward['destination_concern_id'] !== (int)$cid) {
+                    throw new Exception("Security Violation: This outward was dispatched to concern #{$outward['destination_concern_id']} and cannot be inwarded into this concern.");
+                }
+
+                if ($outward['status'] === 'received') {
+                    throw new Exception("This outward consignment has already been inwarded.");
+                }
+
+                $fromConcernId = (int)$outward['concern_id'];
+                $qty = (float)($_POST['qty'] ?? $outward['transfer_qty']);
+                if ($qty <= 0) {
+                    $qty = (float)$outward['transfer_qty'];
+                }
+                $unitCost = (float)($_POST['unit_cost'] ?? 0);
+
+                // Resolve/maintain product variant in the receiving concern ($cid)
+                $srcVariant = DB::fetch("SELECT * FROM variants WHERE id = ?", [$outward['source_variant_id']]);
+                if (!$srcVariant) {
+                    throw new Exception("Source variant not found for inward transfer.");
+                }
+
+                // Check if receiving concern already has this variant SKU/name
+                $existingVariant = DB::fetch(
+                    "SELECT * FROM variants WHERE concern_id = ? AND sku_code = ?",
+                    [$cid, $srcVariant['sku_code']]
+                );
+
+                if ($existingVariant) {
+                    $variantId = (int)$existingVariant['id'];
+                } else {
+                    // Safe category and subcategory fallback for integrity constraints
+                    $catId = $srcVariant['category_id'] ?: (int)DB::fetchValue("SELECT id FROM categories LIMIT 1");
+                    $subId = $srcVariant['subcategory_id'] ?: (int)DB::fetchValue("SELECT id FROM subcategories WHERE category_id = ? LIMIT 1", [$catId]);
+                    if (!$subId) {
+                        $subId = (int)DB::fetchValue("SELECT id FROM subcategories LIMIT 1");
+                    }
+
+                    // Create a separate product variant record belonging strictly to this receiving concern
+                    DB::query(
+                        "INSERT INTO variants (concern_id, catalog_id, sku_code, name, category_id, subcategory_id, brand_id, size, weight, weight_unit, attributes, price, mrp, creation_date, status, created_at)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURDATE(), 'active', NOW())",
+                        [
+                            $cid,
+                            $srcVariant['catalog_id'],
+                            $srcVariant['sku_code'],
+                            $srcVariant['name'],
+                            $catId,
+                            $subId,
+                            $srcVariant['brand_id'],
+                            $srcVariant['size'] ?: 'Standard',
+                            $srcVariant['weight'] ?: 0.00,
+                            $srcVariant['weight_unit'] ?: 'pcs',
+                            $srcVariant['attributes'],
+                            $srcVariant['price'] ?: 0.00,
+                            $srcVariant['mrp'] ?: 0.00
+                        ]
+                    );
+                    $variantId = (int)DB::lastInsertId();
+                }
+
+                $transferRemarks = "Received transfer from {$outward['from_concern_name']} (Gate Pass #{$outward['outward_no']})";
+                $remarks = $remarks ? "{$transferRemarks} - {$remarks}" : $transferRemarks;
+
+            } else {
+                // Standard Purchase / Supplier Inward
+                $supplierId = !empty($_POST['supplier_id']) ? (int)$_POST['supplier_id'] : null;
+                $variantId  = (int)($_POST['variant_id'] ?? 0);
+                $qty        = (float)($_POST['qty'] ?? 0);
+                $unitCost   = (float)($_POST['unit_cost'] ?? 0);
+
+                if (!$variantId || $qty <= 0) {
+                    throw new Exception("Please select a valid variant and specify a quantity greater than zero.");
+                }
+            }
+
             $inwardNo = NumberSeries::getNext($cid, 'INWARD');
 
             DB::query(
-                "INSERT INTO inwards (concern_id, inward_no, supplier_id, inward_date, location, remarks, created_by, created_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, NOW())",
-                [$cid, $inwardNo, $supplierId, $inwardDate, $location, $remarks, Auth::id()]
+                "INSERT INTO inwards (concern_id, inward_no, outward_id, from_concern_id, inward_type, supplier_id, inward_date, location, remarks, created_by, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())",
+                [$cid, $inwardNo, $outwardId, $fromConcernId, $inwardType, $supplierId, $inwardDate, $location, $remarks, Auth::id()]
             );
             $inwardId = (int)DB::lastInsertId();
 
@@ -89,7 +203,7 @@ class InwardController extends Controller {
                 [$cid, $inwardId, $variantId, $qty, $unitCost]
             );
 
-            // Single stock gateway: Inward adds quantity
+            // Single stock gateway: Inward adds quantity strictly to this concern!
             StockService::move(
                 $cid,
                 $variantId,
@@ -101,6 +215,11 @@ class InwardController extends Controller {
                 "Inward consignment {$inwardNo}" . ($remarks ? ": {$remarks}" : ""),
                 Auth::id()
             );
+
+            // If this was from an outward, update outward status to 'received'
+            if ($outwardId) {
+                DB::query("UPDATE outwards SET status = 'received' WHERE id = ?", [$outwardId]);
+            }
 
             DB::commit();
 
@@ -171,6 +290,11 @@ class InwardController extends Controller {
                 );
             }
 
+            // Revert outward status to 'dispatched' if linked
+            if (!empty($inward['outward_id'])) {
+                DB::query("UPDATE outwards SET status = 'dispatched' WHERE id = ?", [$inward['outward_id']]);
+            }
+
             DB::query("DELETE FROM inward_items WHERE inward_id = ?", [$id]);
             DB::query("DELETE FROM inwards WHERE id = ?", [$id]);
 
@@ -196,10 +320,12 @@ class InwardController extends Controller {
 
         $sql = "SELECT i.*, s.name AS supplier_name, pb.bill_no, u.name AS user_name,
                        con.name AS concern_name, con.code AS concern_code,
+                       fc.name AS from_concern_name, fc.code AS from_concern_code,
                        (SELECT COUNT(*) FROM inward_items ii WHERE ii.inward_id = i.id) AS items_count,
                        (SELECT COALESCE(SUM(qty), 0) FROM inward_items ii WHERE ii.inward_id = i.id) AS total_qty
                 FROM inwards i
                 LEFT JOIN concerns con ON i.concern_id = con.id
+                LEFT JOIN concerns fc ON i.from_concern_id = fc.id
                 LEFT JOIN suppliers s ON i.supplier_id = s.id
                 LEFT JOIN purchase_bills pb ON i.purchase_bill_id = pb.id
                 LEFT JOIN users u ON i.created_by = u.id";
@@ -235,7 +361,7 @@ class InwardController extends Controller {
             $rows[] = [
                 $in['inward_no'],
                 date('d M Y', strtotime($in['inward_date'])),
-                $in['supplier_name'] ?: 'Direct Consignment',
+                $in['supplier_name'] ?: ($in['from_concern_name'] ? "Transfer from {$in['from_concern_name']}" : 'Direct Consignment'),
                 $in['bill_no'] ?: '-',
                 (int)($in['items_count'] ?? 0),
                 (float)($in['total_qty'] ?? 0),

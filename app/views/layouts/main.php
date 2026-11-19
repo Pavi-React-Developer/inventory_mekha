@@ -228,10 +228,12 @@
             $activeRoute = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
             $grouped = [];
             foreach ($sidebarModules as $m) {
-                $grouped[$m['group_name']][] = $m;
+                $groupName = $m['code'] === 'catalog_mapping' ? 'Purchase' : $m['group_name'];
+                $grouped[$groupName][] = $m;
             }
 
             foreach ($grouped as $groupName => $mods):
+                if ($groupName === 'Staff') continue; // Rendered as the last module below Masters
                 // If Finance group, merge 'cash' and 'cash_flow' into a single 'Cash & Cash Flow' module
                 if ($groupName === 'Finance') {
                     $hasCashOrFlow = false;
@@ -297,6 +299,12 @@
                 <i class="bi bi-tags"></i>
                 <span>Product Variants</span>
             </a>
+
+            <div class="nav-group-title">Staff</div>
+            <a href="<?= \App\Core\Controller::url('/m/staff') ?>" class="nav-link <?= (isset($currentModule) && $currentModule === 'staff') ? 'active' : '' ?>">
+                <i class="bi bi-people-fill"></i>
+                <span>Staff</span>
+            </a>
         </div>
     </nav>
 
@@ -339,10 +347,47 @@
                             <?php endforeach; ?>
                         </ul>
                     </div>
-                <?php elseif ($currentConcern): ?>
-                    <span class="concern-pill" title="Concern GSTIN: <?= htmlspecialchars($currentConcern['code']) ?>">
-                        <i class="bi bi-building"></i> <span class="text-truncate" style="max-width: 160px;"><?= htmlspecialchars($currentConcern['name']) ?></span>
-                    </span>
+                <?php else: ?>
+                    <?php 
+                        $userConcerns = \App\Core\Auth::check() ? \App\Core\Auth::getUserConcerns(\App\Core\Auth::id()) : [];
+                    ?>
+                    <?php if (count($userConcerns) > 1): ?>
+                        <!-- CONCERN SWITCHER FOR MULTI-CONCERN STAFF / USERS -->
+                        <div class="dropdown">
+                            <button class="btn btn-sm <?= $currentConcern && \App\Core\Auth::isShopConcern($currentConcern['id']) ? 'btn-success' : 'btn-primary' ?> dropdown-toggle d-flex align-items-center gap-1.5 fw-semibold shadow-sm concern-switcher-btn" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Switch Location / Shop">
+                                <i class="bi <?= $currentConcern && \App\Core\Auth::isShopConcern($currentConcern['id']) ? 'bi-shop' : 'bi-building' ?>"></i>
+                                <span class="text-truncate" style="max-width: 155px;"><?= $currentConcern ? htmlspecialchars($currentConcern['name']) : 'Select Concern' ?></span>
+                            </button>
+                            <ul class="dropdown-menu shadow">
+                                <li class="dropdown-header text-uppercase small fw-bold">Switch Location / Shop</li>
+                                <?php foreach ($userConcerns as $con): 
+                                    $isSel = ($currentConcern && $currentConcern['id'] == $con['id']);
+                                    $conIsShop = \App\Core\Auth::isShopConcern((int)$con['id']);
+                                ?>
+                                    <li>
+                                        <a class="dropdown-item d-flex align-items-center justify-content-between <?= $isSel ? 'active fw-bold' : '' ?>" href="<?= \App\Core\Controller::url('/switch-concern?id=' . $con['id']) ?>">
+                                            <span>
+                                                <i class="bi <?= $conIsShop ? 'bi-shop' : 'bi-building' ?> me-2 <?= $isSel ? 'text-white' : ($conIsShop ? 'text-success' : 'text-primary') ?>"></i> 
+                                                <?= htmlspecialchars($con['name']) ?> 
+                                                <small class="<?= $isSel ? 'text-white-50' : 'text-muted' ?>">(<?= htmlspecialchars($con['code']) ?>)</small>
+                                            </span>
+                                            <?php if ($isSel): ?><i class="bi bi-check-lg ms-2"></i><?php endif; ?>
+                                        </a>
+                                    </li>
+                                <?php endforeach; ?>
+                                <li><hr class="dropdown-divider"></li>
+                                <li>
+                                    <a class="dropdown-item small text-secondary d-flex align-items-center gap-2" href="<?= \App\Core\Controller::url('/select-concern?switch=1') ?>">
+                                        <i class="bi bi-grid"></i> View All Locations Card
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                    <?php elseif ($currentConcern): ?>
+                        <span class="concern-pill" title="Concern GSTIN: <?= htmlspecialchars($currentConcern['code']) ?>">
+                            <i class="bi bi-building"></i> <span class="text-truncate" style="max-width: 160px;"><?= htmlspecialchars($currentConcern['name']) ?></span>
+                        </span>
+                    <?php endif; ?>
                 <?php endif; ?>
             </div>
 
