@@ -201,10 +201,10 @@ class ProductionController extends Controller {
 
         // Fetch categories and subcategories for filter dropdowns
         if ($cid) {
-            $categories = DB::fetchAll("SELECT * FROM categories WHERE concern_id = ? AND status = 'active' ORDER BY name ASC", [$cid]);
-            $subcategories = DB::fetchAll("SELECT * FROM subcategories WHERE concern_id = ? AND status = 'active' ORDER BY name ASC", [$cid]);
-            $variants = DB::fetchAll("SELECT id, sku_code, name FROM variants WHERE concern_id = ? AND status = 'active'", [$cid]);
-            $catalogs = DB::fetchAll("SELECT id, name, style_code FROM catalogs WHERE concern_id = ? ORDER BY id DESC", [$cid]);
+            $categories = DB::fetchAll("SELECT * FROM categories WHERE (concern_id = ? OR concern_id = 1 OR concern_id IS NULL) AND status = 'active' ORDER BY name ASC", [$cid]);
+            $subcategories = DB::fetchAll("SELECT * FROM subcategories WHERE (concern_id = ? OR concern_id = 1 OR concern_id IS NULL) AND status = 'active' ORDER BY name ASC", [$cid]);
+            $variants = DB::fetchAll("SELECT id, sku_code, name FROM variants WHERE (concern_id = ? OR concern_id = 1 OR concern_id IS NULL) AND status = 'active'", [$cid]);
+            $catalogs = DB::fetchAll("SELECT id, name, style_code FROM catalogs WHERE (concern_id = ? OR concern_id = 1 OR concern_id IS NULL) ORDER BY id DESC", [$cid]);
         } else {
             $categories = DB::fetchAll("SELECT * FROM categories WHERE status = 'active' ORDER BY name ASC");
             $subcategories = DB::fetchAll("SELECT * FROM subcategories WHERE status = 'active' ORDER BY name ASC");
@@ -254,7 +254,7 @@ class ProductionController extends Controller {
         $cid = Auth::concernId();
 
         if ($cid) {
-            $categories = DB::fetchAll("SELECT * FROM categories WHERE concern_id = ? AND status = 'active' ORDER BY name ASC", [$cid]);
+            $categories = DB::fetchAll("SELECT * FROM categories WHERE (concern_id = ? OR concern_id = 1 OR concern_id IS NULL) AND status = 'active' ORDER BY name ASC", [$cid]);
             $hsnList = DB::fetchAll("SELECT * FROM hsn_masters WHERE (concern_id = ? OR concern_id IS NULL) ORDER BY hsn_code ASC", [$cid]);
         } else {
             $categories = DB::fetchAll("SELECT * FROM categories WHERE status = 'active' ORDER BY name ASC");
@@ -299,10 +299,10 @@ class ProductionController extends Controller {
         }
 
         if ($cid) {
-            $categories = DB::fetchAll("SELECT * FROM categories WHERE concern_id = ? AND status = 'active' ORDER BY name ASC", [$cid]);
+            $categories = DB::fetchAll("SELECT * FROM categories WHERE (concern_id = ? OR concern_id = 1 OR concern_id IS NULL) AND status = 'active' ORDER BY name ASC", [$cid]);
             $hsnList = DB::fetchAll("SELECT * FROM hsn_masters WHERE (concern_id = ? OR concern_id IS NULL) ORDER BY hsn_code ASC", [$cid]);
-            $subcategories = $style['category_id'] ? DB::fetchAll("SELECT * FROM subcategories WHERE category_id = ? AND concern_id = ? ORDER BY name ASC", [$style['category_id'], $cid]) : [];
-            $subSubcategories = $style['subcategory_id'] ? DB::fetchAll("SELECT * FROM sub_subcategories WHERE subcategory_id = ? AND concern_id = ? ORDER BY name ASC", [$style['subcategory_id'], $cid]) : [];
+            $subcategories = $style['category_id'] ? DB::fetchAll("SELECT * FROM subcategories WHERE category_id = ? AND (concern_id = ? OR concern_id = 1 OR concern_id IS NULL) ORDER BY name ASC", [$style['category_id'], $cid]) : [];
+            $subSubcategories = $style['subcategory_id'] ? DB::fetchAll("SELECT * FROM sub_subcategories WHERE subcategory_id = ? AND (concern_id = ? OR concern_id = 1 OR concern_id IS NULL) ORDER BY name ASC", [$style['subcategory_id'], $cid]) : [];
         } else {
             $categories = DB::fetchAll("SELECT * FROM categories WHERE status = 'active' ORDER BY name ASC");
             $hsnList = DB::fetchAll("SELECT * FROM hsn_masters ORDER BY hsn_code ASC");
@@ -726,7 +726,7 @@ class ProductionController extends Controller {
         $sql = "SELECT id, name, code FROM subcategories WHERE category_id = ? AND status = 'active'";
         $params = [$catId];
         if ($cid) {
-            $sql .= " AND concern_id = ?";
+            $sql .= " AND (concern_id = ? OR concern_id = 1 OR concern_id IS NULL)";
             $params[] = $cid;
         }
         $sql .= " ORDER BY name ASC";
@@ -750,7 +750,7 @@ class ProductionController extends Controller {
         $sql = "SELECT id, name, code FROM sub_subcategories WHERE subcategory_id = ? AND status = 'active'";
         $params = [$subcatId];
         if ($cid) {
-            $sql .= " AND concern_id = ?";
+            $sql .= " AND (concern_id = ? OR concern_id = 1 OR concern_id IS NULL)";
             $params[] = $cid;
         }
         $sql .= " ORDER BY name ASC";
@@ -1105,11 +1105,11 @@ class ProductionController extends Controller {
 
         // Load Categories for 3-tier hierarchy
         if ($cid) {
-            $categories = DB::fetchAll("SELECT * FROM categories WHERE concern_id = ? AND status = 'active' ORDER BY name ASC", [$cid]);
-            $catalogs = DB::fetchAll("SELECT id, style_code, short_code, name FROM catalogs WHERE concern_id = ? AND status != 'inactive' ORDER BY id DESC", [$cid]);
+            $categories = DB::fetchAll("SELECT * FROM categories WHERE (concern_id = ? OR concern_id = 1 OR concern_id IS NULL) AND status = 'active' ORDER BY name ASC", [$cid]);
+            $catalogs = DB::fetchAll("SELECT id, style_code, short_code, name, category_id, subcategory_id, sub_sub_category_id FROM catalogs WHERE (concern_id = ? OR concern_id = 1 OR concern_id IS NULL) AND status != 'inactive' ORDER BY id DESC", [$cid]);
         } else {
             $categories = DB::fetchAll("SELECT * FROM categories WHERE status = 'active' ORDER BY name ASC");
-            $catalogs = DB::fetchAll("SELECT id, style_code, short_code, name FROM catalogs WHERE status != 'inactive' ORDER BY id DESC");
+            $catalogs = DB::fetchAll("SELECT id, style_code, short_code, name, category_id, subcategory_id, sub_sub_category_id FROM catalogs WHERE status != 'inactive' ORDER BY id DESC");
         }
 
         $this->render('concern/program_create', [
@@ -1343,6 +1343,20 @@ class ProductionController extends Controller {
             $subcatId = !empty($r['subcategory_id']) ? (int)$r['subcategory_id'] : null;
             $subSubcatId = !empty($r['sub_sub_category_id']) ? (int)$r['sub_sub_category_id'] : null;
             $catalogId = !empty($r['catalog_id']) ? (int)$r['catalog_id'] : null;
+
+            // Auto-resolve catalog from 3-tier hierarchy if not explicitly chosen
+            if (!$catalogId && $subSubcatId) {
+                $matchedCat = DB::fetch("SELECT id FROM catalogs WHERE sub_sub_category_id = ? AND (concern_id = ? OR concern_id = 1 OR concern_id IS NULL) LIMIT 1", [$subSubcatId, $programConcernId]);
+                if ($matchedCat) {
+                    $catalogId = (int)$matchedCat['id'];
+                }
+            }
+            if (!$catalogId && $subcatId && $catId) {
+                $matchedCat = DB::fetch("SELECT id FROM catalogs WHERE subcategory_id = ? AND category_id = ? AND (concern_id = ? OR concern_id = 1 OR concern_id IS NULL) LIMIT 1", [$subcatId, $catId, $programConcernId]);
+                if ($matchedCat) {
+                    $catalogId = (int)$matchedCat['id'];
+                }
+            }
 
             if ($allocatedQty <= 0) {
                 $this->flash('error', "Roll #" . ($index + 1) . ": Allocated quantity must be greater than zero.");
@@ -1656,13 +1670,29 @@ class ProductionController extends Controller {
 
         $existingRolls = DB::fetchAll(
             "SELECT pr.*, 
-                    pbi.item_code AS current_roll_code, pbi.item_name AS current_roll_name, pbi.color AS current_roll_color, pbi.unit AS current_unit, pbi.qty AS original_total_qty
+                    pbi.item_code AS current_roll_code, pbi.item_name AS current_roll_name, pbi.color AS current_roll_color, pbi.unit AS current_unit, pbi.qty AS original_total_qty,
+                    cat.name AS category_name, sub.name AS subcategory_name, subsub.name AS subsub_name,
+                    COALESCE(c.id, c_match.id) AS resolved_catalog_id,
+                    COALESCE(c.name, c_match.name) AS catalog_name,
+                    COALESCE(c.style_code, c_match.style_code) AS catalog_style_code
              FROM program_rolls pr
              LEFT JOIN purchase_bill_items pbi ON pr.purchase_bill_item_id = pbi.id
+             LEFT JOIN categories cat ON pr.category_id = cat.id
+             LEFT JOIN subcategories sub ON pr.subcategory_id = sub.id
+             LEFT JOIN sub_subcategories subsub ON pr.sub_sub_category_id = subsub.id
+             LEFT JOIN catalogs c ON pr.catalog_id = c.id
+             LEFT JOIN catalogs c_match ON (pr.sub_sub_category_id IS NOT NULL AND pr.sub_sub_category_id = c_match.sub_sub_category_id)
              WHERE pr.program_id = ?
              ORDER BY pr.id ASC",
             [$id]
         );
+
+        foreach ($existingRolls as &$er) {
+            if (empty($er['catalog_id']) && !empty($er['resolved_catalog_id'])) {
+                $er['catalog_id'] = $er['resolved_catalog_id'];
+            }
+        }
+        unset($er);
 
         // Load Available Fabric Rolls for this concern, discounting allocations in OTHER programs
         $rollsSql = "SELECT pbi.id, pbi.concern_id, pbi.item_code, pbi.item_name, pbi.pattern, pbi.color, pbi.unit,
@@ -1739,10 +1769,13 @@ class ProductionController extends Controller {
         }
         unset($r);
 
-        $categories = DB::fetchAll("SELECT * FROM categories WHERE concern_id = ? AND status = 'active' ORDER BY name ASC", [$cid]);
-        $subcategories = DB::fetchAll("SELECT * FROM subcategories WHERE concern_id = ? AND status = 'active' ORDER BY name ASC", [$cid]);
-        $subSubcategories = DB::fetchAll("SELECT * FROM sub_subcategories WHERE concern_id = ? AND status = 'active' ORDER BY name ASC", [$cid]);
-        $catalogs = DB::fetchAll("SELECT id, style_code, short_code, name FROM catalogs WHERE concern_id = ? AND status != 'inactive' ORDER BY id DESC", [$cid]);
+        $catWhere = $cid ? "(concern_id = ? OR concern_id = 1 OR concern_id IS NULL)" : "1=1";
+        $catParams = $cid ? [$cid] : [];
+
+        $categories = DB::fetchAll("SELECT * FROM categories WHERE {$catWhere} AND status = 'active' ORDER BY name ASC", $catParams);
+        $subcategories = DB::fetchAll("SELECT * FROM subcategories WHERE {$catWhere} AND status = 'active' ORDER BY name ASC", $catParams);
+        $subSubcategories = DB::fetchAll("SELECT * FROM sub_subcategories WHERE {$catWhere} AND status = 'active' ORDER BY name ASC", $catParams);
+        $catalogs = DB::fetchAll("SELECT id, style_code, short_code, name, category_id, subcategory_id, sub_sub_category_id FROM catalogs WHERE {$catWhere} AND status != 'inactive' ORDER BY id DESC", $catParams);
 
         $this->render('concern/program_edit', [
             'pageTitle'        => 'Edit Production Program: ' . $program['program_no'],
@@ -1819,6 +1852,20 @@ class ProductionController extends Controller {
             $subcatId = !empty($r['subcategory_id']) ? (int)$r['subcategory_id'] : null;
             $subSubcatId = !empty($r['sub_sub_category_id']) ? (int)$r['sub_sub_category_id'] : null;
             $catalogId = !empty($r['catalog_id']) ? (int)$r['catalog_id'] : null;
+
+            // Auto-resolve catalog from 3-tier hierarchy if not explicitly chosen
+            if (!$catalogId && $subSubcatId) {
+                $matchedCat = DB::fetch("SELECT id FROM catalogs WHERE sub_sub_category_id = ? AND (concern_id = ? OR concern_id = 1 OR concern_id IS NULL) LIMIT 1", [$subSubcatId, $programConcernId]);
+                if ($matchedCat) {
+                    $catalogId = (int)$matchedCat['id'];
+                }
+            }
+            if (!$catalogId && $subcatId && $catId) {
+                $matchedCat = DB::fetch("SELECT id FROM catalogs WHERE subcategory_id = ? AND category_id = ? AND (concern_id = ? OR concern_id = 1 OR concern_id IS NULL) LIMIT 1", [$subcatId, $catId, $programConcernId]);
+                if ($matchedCat) {
+                    $catalogId = (int)$matchedCat['id'];
+                }
+            }
 
             if ($allocatedQty <= 0) {
                 $this->flash('error', "Roll #" . ($index + 1) . ": Allocated quantity must be greater than zero.");
@@ -2176,6 +2223,7 @@ class ProductionController extends Controller {
         // 1. Fetch Cutting Batches
         $sql = "SELECT cl.*, 
                        pp.program_no, pp.program_name, pp.planned_qty AS program_planned_qty,
+                       c.name AS catalog_name, c.style_code AS catalog_code,
                        COALESCE(cl.cutting_master_name, cm.name) AS master_name,
                        con.name AS concern_name,
                        (SELECT COUNT(*) FROM cutting_items WHERE cutting_id = cl.id) AS variant_count,
@@ -2183,6 +2231,7 @@ class ProductionController extends Controller {
                        (SELECT COUNT(DISTINCT program_roll_id) FROM cutting_items WHERE cutting_id = cl.id) AS rolls_used_count
                 FROM cutting_logs cl
                 LEFT JOIN production_programs pp ON cl.program_id = pp.id
+                LEFT JOIN catalogs c ON pp.catalog_id = c.id
                 LEFT JOIN cutting_masters cm ON cl.cutting_master_id = cm.id
                 LEFT JOIN concerns con ON cl.concern_id = con.id";
         $params = [];
@@ -2332,10 +2381,19 @@ class ProductionController extends Controller {
         $rolls = DB::fetchAll(
             "SELECT pr.*, 
                     pbi.item_code, pbi.item_name, pbi.pattern, pbi.color, pbi.unit, pbi.net_weight, pbi.unit_price,
-                    c.id AS roll_catalog_id, c.name AS roll_catalog_name, c.style_code AS roll_style_code, c.sizes AS roll_catalog_sizes
+                    cat.name AS category_name, sub.name AS subcategory_name, subsub.name AS subsub_name,
+                    COALESCE(c.id, c_hier.id, " . ($program['catalog_id'] ? (int)$program['catalog_id'] : "NULL") . ") AS roll_catalog_id,
+                    COALESCE(c.name, c_hier.name, c_prog.name) AS roll_catalog_name,
+                    COALESCE(c.style_code, c_hier.style_code, c_prog.style_code) AS roll_style_code,
+                    COALESCE(c.sizes, c_hier.sizes, c_prog.sizes) AS roll_catalog_sizes
              FROM program_rolls pr
              LEFT JOIN purchase_bill_items pbi ON pr.purchase_bill_item_id = pbi.id
+             LEFT JOIN categories cat ON pr.category_id = cat.id
+             LEFT JOIN subcategories sub ON pr.subcategory_id = sub.id
+             LEFT JOIN sub_subcategories subsub ON pr.sub_sub_category_id = subsub.id
              LEFT JOIN catalogs c ON pr.catalog_id = c.id
+             LEFT JOIN catalogs c_hier ON (pr.sub_sub_category_id IS NOT NULL AND pr.sub_sub_category_id = c_hier.sub_sub_category_id)
+             LEFT JOIN catalogs c_prog ON " . ($program['catalog_id'] ? (int)$program['catalog_id'] : "0") . " = c_prog.id
              WHERE pr.program_id = ?
                AND pr.id NOT IN (
                    SELECT DISTINCT program_roll_id 
@@ -2371,7 +2429,13 @@ class ProductionController extends Controller {
             $totalWeight += $weight;
             $totalPrice += $price;
 
-            $catId = $r['catalog_id'] ?: $program['catalog_id'];
+            $hierParts = array_filter([$r['category_name'] ?? '', $r['subcategory_name'] ?? '', $r['subsub_name'] ?? '']);
+            $r['hierarchy_display'] = !empty($hierParts) ? implode(' > ', $hierParts) : '';
+            if (empty($r['roll_catalog_name']) && !empty($r['hierarchy_display'])) {
+                $r['roll_catalog_name'] = $r['hierarchy_display'];
+            }
+
+            $catId = $r['roll_catalog_id'] ?: ($r['catalog_id'] ?: $program['catalog_id']);
             $variants = [];
 
             if ($catId) {
@@ -3480,14 +3544,23 @@ class ProductionController extends Controller {
         $rawItems = DB::fetchAll(
             "SELECT ci.*, 
                     pr.catalog_id AS roll_catalog_id,
-                    c.id AS cat_id, c.name AS cat_name, c.style_code AS cat_code,
+                    pr.category_id, pr.subcategory_id, pr.sub_sub_category_id,
+                    cat.name AS category_name, sub.name AS subcategory_name, subsub.name AS subsub_name,
+                    COALESCE(c.id, c_hier.id, " . ($cutting['prog_catalog_id'] ? (int)$cutting['prog_catalog_id'] : "NULL") . ") AS cat_id,
+                    COALESCE(c.name, c_hier.name, c_prog.name) AS cat_name,
+                    COALESCE(c.style_code, c_hier.style_code, c_prog.style_code) AS cat_code,
                     v.id AS var_id, v.name AS var_name, v.sku_code AS var_sku, v.size AS var_size,
                     v.catalog_id AS var_cat_id, v.mrp AS var_mrp, v.price AS var_sp,
                     COALESCE(pr.color, pbi.color, 'Standard') AS roll_color
              FROM cutting_items ci
              LEFT JOIN program_rolls pr ON ci.program_roll_id = pr.id
              LEFT JOIN purchase_bill_items pbi ON pr.purchase_bill_item_id = pbi.id
-             LEFT JOIN catalogs c ON COALESCE(pr.catalog_id, " . ($cutting['prog_catalog_id'] ? (int)$cutting['prog_catalog_id'] : "NULL") . ") = c.id
+             LEFT JOIN categories cat ON pr.category_id = cat.id
+             LEFT JOIN subcategories sub ON pr.subcategory_id = sub.id
+             LEFT JOIN sub_subcategories subsub ON pr.sub_sub_category_id = subsub.id
+             LEFT JOIN catalogs c ON pr.catalog_id = c.id
+             LEFT JOIN catalogs c_hier ON (pr.sub_sub_category_id IS NOT NULL AND pr.sub_sub_category_id = c_hier.sub_sub_category_id)
+             LEFT JOIN catalogs c_prog ON " . ($cutting['prog_catalog_id'] ? (int)$cutting['prog_catalog_id'] : "0") . " = c_prog.id
              LEFT JOIN variants v ON ci.variant_id = v.id
              WHERE ci.cutting_id = ?
              ORDER BY ci.id ASC",
@@ -3510,8 +3583,23 @@ class ProductionController extends Controller {
 
         foreach ($rawItems as $it) {
             $catId = $it['cat_id'] ?: ($it['var_cat_id'] ?: ($cutting['prog_catalog_id'] ?: 0));
-            $catName = $it['cat_name'] ?: 'Catalog Item';
-            $catCode = $it['cat_code'] ?: 'CAT';
+            $catName = $it['cat_name'];
+            $catCode = $it['cat_code'];
+
+            if (!$catName) {
+                $hierParts = array_filter([$it['category_name'] ?? '', $it['subcategory_name'] ?? '', $it['subsub_name'] ?? '']);
+                if (!empty($hierParts)) {
+                    $catName = implode(' > ', $hierParts);
+                    $catCode = 'HIER';
+                    if (!$catId) {
+                        $catId = 'cat_' . ($it['category_id'] ?? 0) . '_' . ($it['subcategory_id'] ?? 0) . '_' . ($it['sub_sub_category_id'] ?? 0);
+                    }
+                } else {
+                    $catName = 'Catalog Item';
+                    $catCode = 'CAT';
+                }
+            }
+
             $basePrice = (float)($it['var_mrp'] ?: 0.00);
             $discPrice = (float)($it['var_sp'] ?: 0.00);
 

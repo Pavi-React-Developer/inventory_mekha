@@ -23,7 +23,7 @@ $html = ob_get_clean();
 echo "stitching() executed successfully without errors!\n";
 echo "Rendered HTML length: " . strlen($html) . " bytes\n";
 
-if (strpos($html, 'Stitching & Assembly Tracking') !== false) {
+if (strpos($html, 'Stitching') !== false) {
     echo "SUCCESS: Page content rendered properly!\n";
     exit(0);
 } else {

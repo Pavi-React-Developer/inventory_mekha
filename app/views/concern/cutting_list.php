@@ -241,9 +241,14 @@
                                     </td>
                                     <td>
                                         <div class="fw-bold text-dark"><?= htmlspecialchars($b['cutting_name'] ?: 'Lot #' . $b['id']) ?></div>
-                                        <small class="text-muted">
-                                            <?= htmlspecialchars($b['program_no'] ?? 'Unscheduled') ?> • <?= htmlspecialchars($b['program_name'] ?? '') ?>
-                                        </small>
+                                        <div class="small text-muted d-flex align-items-center gap-1 flex-wrap">
+                                            <span><?= htmlspecialchars($b['program_no'] ?? 'Unscheduled') ?> • <?= htmlspecialchars($b['program_name'] ?? '') ?></span>
+                                            <?php if (!empty($b['catalog_name'])): ?>
+                                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle py-0.5 px-1.5 font-monospace" style="font-size: 0.70rem;">
+                                                    <i class="bi bi-tag-fill me-0.5"></i><?= htmlspecialchars(($b['catalog_code'] ? '[' . $b['catalog_code'] . '] ' : '') . $b['catalog_name']) ?>
+                                                </span>
+                                            <?php endif; ?>
+                                        </div>
                                     </td>
                                     <td>
                                         <span class="text-secondary"><?= htmlspecialchars($b['master_name'] ?: 'Not Assigned') ?></span>

@@ -357,8 +357,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 lblCuttingCodes.textContent = `[${data.cutting.program_no || 'PRG'}] [${data.cutting.batch_no || 'CUT'}]`;
                 lblCuttingUsableWeight.textContent = `${parseFloat(data.cutting.usable_weight || 0).toFixed(2)} kg Usable`;
 
-                let catalogNames = (data.catalogs || []).map(c => c.name).join(', ');
-                lblCuttingCatalogs.textContent = 'Assigned Catalog: ' + (catalogNames || 'Standard');
+                let catalogNames = (data.catalogs || []).map(c => `${c.name}${c.style_code ? ' [' + c.style_code + ']' : ''}`).join(', ');
+                lblCuttingCatalogs.innerHTML = `<strong>Assigned Catalog:</strong> <span class="badge bg-primary text-white ms-1">${escapeHtml(catalogNames || 'Standard')}</span>`;
 
                 // Populate bulk catalog dropdown
                 bulkCatalogSelect.innerHTML = '<option value="">-- All Catalogs in Batch --</option>';
@@ -500,6 +500,30 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 
+    // Bulk Catalog Select Change -> pre-fill pricing & highlight rows
+    bulkCatalogSelect.addEventListener('change', function () {
+        const selectedId = this.value;
+        const opt = this.options[this.selectedIndex];
+        if (opt && opt.value) {
+            const base = parseFloat(opt.dataset.base || 0);
+            const disc = parseFloat(opt.dataset.disc || 0);
+            if (base > 0) document.getElementById('bulkBasePrice').value = base.toFixed(2);
+            if (disc > 0) document.getElementById('bulkDiscPrice').value = disc.toFixed(2);
+        }
+
+        // Highlight matching rows in table
+        const rows = tbody.querySelectorAll('tr');
+        rows.forEach(tr => {
+            if (!selectedId || tr.dataset.catalogId === selectedId) {
+                tr.style.opacity = '1';
+                tr.classList.remove('table-light');
+            } else {
+                tr.style.opacity = '0.45';
+                tr.classList.add('table-light');
+            }
+        });
+    });
+
     // Apply Bulk Pricing to Table
     btnApplyBulkPricing.addEventListener('click', function () {
         const targetCatalogId = bulkCatalogSelect.value;
@@ -525,6 +549,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
 
+        recalculateTotals();
         alert(`Updated prices for ${matchedCount} variant row(s).`);
     });
 

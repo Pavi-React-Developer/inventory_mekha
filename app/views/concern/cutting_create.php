@@ -82,6 +82,15 @@
                                     </option>
                                 <?php endforeach; ?>
                             </select>
+                            <div id="selectedProgramCatalogInfo" class="mt-2 d-none">
+                                <div class="p-2 border rounded-3 bg-light d-flex align-items-center justify-content-between">
+                                    <div class="small">
+                                        <span class="text-muted"><i class="bi bi-tag-fill text-primary me-1"></i> Catalog:</span>
+                                        <strong id="selectedProgCatalogName" class="text-primary ms-1"></strong>
+                                    </div>
+                                    <span id="selectedProgRollsCount" class="badge bg-secondary text-white"></span>
+                                </div>
+                            </div>
 
                             <?php if (empty($programs)): ?>
                                 <div class="alert alert-warning py-2 px-3 small mt-2 mb-0 rounded-3 d-flex align-items-center gap-2">
@@ -384,6 +393,21 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
 
                 currentProgramData = data;
+
+                // Update program catalog info box
+                const infoBox = document.getElementById('selectedProgramCatalogInfo');
+                const catNameEl = document.getElementById('selectedProgCatalogName');
+                const countEl = document.getElementById('selectedProgRollsCount');
+                if (infoBox && catNameEl) {
+                    const firstRoll = data.rolls && data.rolls[0];
+                    const catDisplayName = (data.program && data.program.catalog_name) 
+                        ? `${data.program.catalog_code ? '[' + data.program.catalog_code + '] ' : ''}${data.program.catalog_name}`
+                        : (firstRoll ? (firstRoll.roll_catalog_name || firstRoll.hierarchy_display || 'General / Per Roll') : 'General');
+                    catNameEl.textContent = catDisplayName;
+                    if (countEl) countEl.textContent = `${(data.rolls || []).length} Roll(s)`;
+                    infoBox.classList.remove('d-none');
+                }
+
                 renderDynamicBreakdown(data);
                 recalcAnalytics();
             })
@@ -395,6 +419,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function resetToEmptyState() {
         currentProgramData = null;
+        document.getElementById('selectedProgramCatalogInfo')?.classList.add('d-none');
         noProgramState.classList.remove('d-none');
         activeProgramContainer.classList.add('d-none');
         rollSelectionBar.classList.add('d-none');
@@ -440,12 +465,25 @@ document.addEventListener('DOMContentLoaded', function() {
             const rollLabel = `${rollTag} ${roll.fabric_name || 'Fabric'}`;
             const isActive = idx === 0;
 
+            const catalogName = roll.roll_catalog_name || roll.hierarchy_display || '';
+            const catalogCode = roll.roll_style_code || '';
+            let catalogBadgeHtml = '';
+            if (catalogName) {
+                catalogBadgeHtml = `
+                    <span class="badge bg-primary text-white border-0 py-1 px-2.5 shadow-xs" title="Assigned Catalog Style">
+                        <i class="bi bi-tag-fill me-1"></i> Catalog: ${catalogCode ? `[${catalogCode}] ` : ''}${catalogName}
+                    </span>
+                `;
+            } else {
+                catalogBadgeHtml = `<span class="badge bg-white text-secondary border">No Catalog Assigned</span>`;
+            }
+
             // Roll Tab Button
             const tabBtn = document.createElement('button');
             tabBtn.type = 'button';
             tabBtn.className = `btn btn-sm ${isActive ? 'btn-primary' : 'btn-outline-secondary'} rounded-pill px-3 py-1 fw-semibold roll-tab-btn`;
             tabBtn.dataset.rollId = roll.id;
-            tabBtn.innerHTML = `<i class="bi bi-box-seam me-1"></i> ${rollLabel} <span class="badge ${isActive ? 'bg-white text-primary' : 'bg-secondary text-white'} ms-1">${parseFloat(roll.calculated_weight).toFixed(2)} kg</span>`;
+            tabBtn.innerHTML = `<i class="bi bi-box-seam me-1"></i> ${rollLabel} ${catalogCode ? `<span class="badge bg-dark text-white ms-1 font-monospace" style="font-size: 0.70rem;">${catalogCode}</span>` : ''} <span class="badge ${isActive ? 'bg-white text-primary' : 'bg-secondary text-white'} ms-1">${parseFloat(roll.calculated_weight).toFixed(2)} kg</span>`;
             tabBtn.addEventListener('click', () => switchRollTab(roll.id));
             rollTabsContainer.appendChild(tabBtn);
 
@@ -490,10 +528,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
             panel.innerHTML = `
                 <div class="card border rounded-3 p-3 mb-3 bg-light">
-                    <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
-                        <div>
-                            <span class="fw-bold text-dark">${rollLabel}</span>
-                            <span class="badge bg-white text-secondary border ms-1">${roll.color || 'Standard'}</span>
+                    <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom flex-wrap gap-2">
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            <span class="fw-bold text-dark fs-6">${rollLabel}</span>
+                            <span class="badge bg-white text-secondary border">${roll.color || 'Standard'}</span>
+                            ${catalogBadgeHtml}
                         </div>
                         <div class="small text-muted font-monospace">
                             Roll Weight: <strong class="text-primary">${parseFloat(roll.calculated_weight).toFixed(2)} kg</strong> | 
