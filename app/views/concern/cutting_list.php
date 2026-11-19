@@ -124,7 +124,7 @@
                             <th class="text-end">Total Price</th>
                             <th class="text-end">Received</th>
                             <th>Date</th>
-                            <th class="text-center pe-3" style="width: 80px;">Action</th>
+                            <th class="text-center pe-3" style="width: 125px;">ACTIONS</th>
                         </tr>
                     </thead>
                     <tbody class="small">
@@ -170,10 +170,20 @@
                                         <?= date('d M Y', strtotime($s['sale_date'])) ?>
                                     </td>
                                     <td class="text-center pe-3">
-                                        <button type="button" class="btn btn-sm btn-outline-danger p-1 rounded-3" title="Delete Scrap Sale"
-                                                onclick="confirmDeleteScrapSale(<?= $s['id'] ?>, '<?= htmlspecialchars(addslashes($s['sale_no'])) ?>', '<?= number_format($s['total_price'], 2) ?>')">
-                                            <i class="bi bi-trash"></i>
-                                        </button>
+                                        <div class="d-inline-flex align-items-center gap-1">
+                                            <button type="button" class="btn btn-sm btn-outline-info p-1.5 rounded-3" title="View Details"
+                                                    onclick="showScrapSaleDetails(<?= $s['id'] ?>)">
+                                                <i class="bi bi-eye"></i>
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-outline-primary p-1.5 rounded-3" title="Edit Scrap Sale"
+                                                    onclick='openEditScrapSaleModal(<?= json_encode($s, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>)'>
+                                                <i class="bi bi-pencil"></i>
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-outline-danger p-1.5 rounded-3" title="Delete Scrap Sale"
+                                                    onclick="confirmDeleteScrapSale(<?= $s['id'] ?>, '<?= htmlspecialchars(addslashes($s['sale_no'])) ?>', '<?= number_format($s['total_price'], 2) ?>')">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
@@ -356,6 +366,143 @@
             <div class="modal-footer bg-light">
                 <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
                 <button type="submit" class="btn btn-danger btn-sm px-3"><i class="bi bi-trash me-1"></i> Delete Sale</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- QUICK VIEW SCRAP SALE MODAL -->
+<div class="modal fade" id="modalViewScrapSale" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4">
+            <div class="modal-header bg-light border-bottom">
+                <h6 class="modal-title fw-bold text-dark d-flex align-items-center gap-2">
+                    <i class="bi bi-receipt-cutoff text-primary"></i> Wastage Scrap Sale Details
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4" id="viewScrapSaleContent">
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status"></div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light py-2">
+                <button type="button" class="btn btn-secondary btn-sm px-3" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- EDIT SCRAP SALE MODAL -->
+<div class="modal fade" id="modalEditScrapSale" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <form action="<?= \App\Core\Controller::url('/production/cutting/wastage/update') ?>" method="POST" class="modal-content border-0 shadow-lg rounded-4">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
+            <input type="hidden" name="id" id="edit_sale_id" value="">
+
+            <div class="modal-header border-bottom py-3">
+                <h5 class="modal-title fw-bold text-dark d-flex align-items-center gap-2">
+                    <i class="bi bi-pencil-square text-primary"></i> Edit Wastage Scrap Sale
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+
+            <div class="modal-body p-4">
+                <!-- Batch Info Chip (Readonly) -->
+                <div class="card border rounded-3 p-3 bg-light mb-3">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <div>
+                            <div class="text-muted small">Associated Cutting Batch</div>
+                            <strong class="font-monospace text-dark fs-6" id="edit_sale_batch_no">-</strong>
+                            <div class="small text-muted" id="edit_sale_cutting_name"></div>
+                        </div>
+                        <div class="text-md-end">
+                            <span class="badge bg-dark font-monospace fs-6" id="edit_sale_no_badge">-</span>
+                            <div class="small text-muted mt-1">Available Scrap in Batch: <strong class="text-success" id="edit_sale_max_weight">-</strong></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Buyer Info -->
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold text-secondary">Scrap Buyer / Vendor Name <span class="text-danger">*</span></label>
+                        <input type="text" name="buyer_name" id="edit_buyer_name" class="form-control" required placeholder="e.g. Ramesh Thread Waste Traders">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold text-secondary">Buyer Phone / Mobile <span class="text-danger">*</span> (10 digits)</label>
+                        <input type="tel" name="buyer_phone" id="edit_buyer_phone" class="form-control" required maxlength="10" placeholder="10-digit mobile number">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold text-secondary">Buyer Company / Business Name</label>
+                        <input type="text" name="buyer_company" id="edit_buyer_company" class="form-control" placeholder="e.g. Tirupur Recycled Cotton Co.">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold text-secondary">Wastage Category <span class="text-danger">*</span></label>
+                        <select name="wastage_category" id="edit_wastage_category" class="form-select" required>
+                            <option value="Cutting End-Bits (Short length ends & trims)">Cutting End-Bits (Short length ends & trims)</option>
+                            <option value="Selvedge Trims & Border Edges">Selvedge Trims & Border Edges</option>
+                            <option value="Damaged Roll Cut-Offs">Damaged Roll Cut-Offs</option>
+                            <option value="Pattern Clippings & Shavings">Pattern Clippings & Shavings</option>
+                            <option value="Mixed Fabric Scrap">Mixed Fabric Scrap</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Pricing Card -->
+                <div class="card border rounded-3 p-3 bg-light mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="fw-semibold text-dark small"><i class="bi bi-calculator me-1"></i> SELLING PRICE & QUANTITY</span>
+                        <span class="badge bg-secondary-subtle text-secondary small">Real-time Calculation</span>
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold text-secondary">Sold Weight (kg) <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <input type="number" step="0.01" min="0.01" name="wastage_weight" id="edit_wastage_weight" class="form-control fw-bold" required>
+                                <span class="input-group-text">kg</span>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold text-secondary">Selling Rate (₹/kg) <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <span class="input-group-text">₹</span>
+                                <input type="number" step="0.01" min="0.00" name="selling_rate" id="edit_selling_rate" class="form-control fw-bold" required>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold text-secondary">Total Sale Price (₹) <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-success-subtle text-success">₹</span>
+                                <input type="number" step="0.01" min="0.00" name="total_price" id="edit_total_price" class="form-control fw-bold text-success" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold text-secondary">Amount Received (₹) <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <span class="input-group-text">₹</span>
+                                <input type="number" step="0.01" min="0.00" name="amount_received" id="edit_amount_received" class="form-control" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold text-secondary">Sale Date <span class="text-danger">*</span></label>
+                            <input type="date" name="sale_date" id="edit_sale_date" class="form-control" required>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-0">
+                    <label class="form-label small fw-semibold text-secondary">Notes / Remarks</label>
+                    <textarea name="notes" id="edit_notes" class="form-control" rows="2" placeholder="Payment mode, scrap pickup details, etc."></textarea>
+                </div>
+            </div>
+
+            <div class="modal-footer border-top bg-light py-3 d-flex justify-content-between">
+                <button type="button" class="btn btn-light border px-4" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-primary px-4 shadow-sm">
+                    <i class="bi bi-check2-circle me-1"></i> Update Wastage Sale
+                </button>
             </div>
         </form>
     </div>
@@ -686,4 +833,140 @@ function confirmDeleteScrapSale(id, code, amt) {
     document.getElementById('deleteScrapSaleAmount').textContent = '₹' + amt;
     new bootstrap.Modal(document.getElementById('modalDeleteScrapSale')).show();
 }
+
+function showScrapSaleDetails(id) {
+    const modal = new bootstrap.Modal(document.getElementById('modalViewScrapSale'));
+    const container = document.getElementById('viewScrapSaleContent');
+    container.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div></div>';
+    modal.show();
+
+    fetch('<?= \App\Core\Controller::url('/api/cutting/wastage/details?id=') ?>' + id)
+        .then(r => r.json())
+        .then(res => {
+            if (!res.success) {
+                container.innerHTML = `<div class="alert alert-danger">${res.message || 'Error loading details'}</div>`;
+                return;
+            }
+            const s = res.sale;
+            const statusBadge = (s.payment_status === 'paid')
+                ? '<span class="badge bg-success">PAID</span>'
+                : (s.payment_status === 'partial' ? '<span class="badge bg-warning text-dark">PARTIAL</span>' : '<span class="badge bg-danger">PENDING</span>');
+
+            container.innerHTML = `
+                <div class="d-flex justify-content-between align-items-center pb-3 mb-3 border-bottom">
+                    <div>
+                        <span class="badge bg-dark font-monospace fs-6">${s.sale_no}</span>
+                        <div class="text-muted small mt-1"><i class="bi bi-calendar-event me-1"></i>Date: <strong>${s.sale_date || '-'}</strong></div>
+                    </div>
+                    <div>${statusBadge}</div>
+                </div>
+
+                <div class="row g-3 mb-3 small">
+                    <div class="col-6">
+                        <div class="text-muted small">Cutting Batch</div>
+                        <div class="fw-bold font-monospace text-dark fs-6">${s.batch_no || '-'}</div>
+                        <div class="text-muted">${s.cutting_name || ''}</div>
+                    </div>
+                    <div class="col-6">
+                        <div class="text-muted small">Production Program</div>
+                        <div class="fw-semibold text-primary font-monospace">${s.program_no || '-'}</div>
+                        <div class="text-muted">${s.program_name || ''}</div>
+                    </div>
+                    <div class="col-6">
+                        <div class="text-muted small">Buyer / Vendor</div>
+                        <div class="fw-semibold text-dark">${s.buyer_name || '-'}</div>
+                        <div class="text-muted">${s.buyer_phone ? '📞 ' + s.buyer_phone : ''}</div>
+                    </div>
+                    <div class="col-6">
+                        <div class="text-muted small">Company / Business</div>
+                        <div class="fw-semibold text-dark">${s.buyer_company || '-'}</div>
+                    </div>
+                    <div class="col-12">
+                        <div class="text-muted small">Wastage Category</div>
+                        <span class="badge bg-light text-secondary border mt-1">${s.wastage_category || '-'}</span>
+                    </div>
+                </div>
+
+                <div class="card border rounded-3 bg-light p-3 mb-3 small">
+                    <div class="d-flex justify-content-between mb-1.5">
+                        <span class="text-muted">Sold Scrap Weight:</span>
+                        <strong class="text-danger font-monospace fs-6">${parseFloat(s.wastage_weight || 0).toFixed(2)} kg</strong>
+                    </div>
+                    <div class="d-flex justify-content-between mb-1.5">
+                        <span class="text-muted">Selling Rate:</span>
+                        <strong class="font-monospace">₹${parseFloat(s.selling_rate || 0).toFixed(2)} / kg</strong>
+                    </div>
+                    <div class="d-flex justify-content-between mb-1.5 border-top pt-1.5">
+                        <span class="fw-bold text-dark">Total Sale Price:</span>
+                        <strong class="text-success fs-5 font-monospace">₹${parseFloat(s.total_price || 0).toFixed(2)}</strong>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span class="text-muted">Amount Received:</span>
+                        <strong class="text-dark font-monospace">₹${parseFloat(s.amount_received || 0).toFixed(2)}</strong>
+                    </div>
+                </div>
+
+                ${s.notes ? `<div class="small text-muted p-2 bg-light rounded border"><i class="bi bi-card-text me-1"></i><strong>Notes:</strong> ${s.notes}</div>` : ''}
+            `;
+        })
+        .catch(err => {
+            container.innerHTML = `<div class="alert alert-danger">Network error loading details.</div>`;
+        });
+}
+
+function openEditScrapSaleModal(s) {
+    if (!s) return;
+    document.getElementById('edit_sale_id').value = s.id;
+    document.getElementById('edit_sale_no_badge').textContent = s.sale_no || '-';
+    document.getElementById('edit_sale_batch_no').textContent = s.batch_no || '-';
+    document.getElementById('edit_sale_cutting_name').textContent = s.cutting_name ? `${s.cutting_name} (${s.program_no || '-'})` : '';
+
+    const maxAllowed = ((parseFloat(s.wastage_qty || 0) - parseFloat(s.sold_wastage_qty || 0)) + parseFloat(s.wastage_weight || 0));
+    document.getElementById('edit_sale_max_weight').textContent = maxAllowed.toFixed(2) + ' kg';
+    document.getElementById('edit_wastage_weight').max = maxAllowed.toFixed(2);
+
+    document.getElementById('edit_buyer_name').value = s.buyer_name || '';
+    document.getElementById('edit_buyer_phone').value = s.buyer_phone || '';
+    document.getElementById('edit_buyer_company').value = s.buyer_company || '';
+    document.getElementById('edit_wastage_category').value = s.wastage_category || 'Cutting End-Bits (Short length ends & trims)';
+    document.getElementById('edit_wastage_weight').value = parseFloat(s.wastage_weight || 0).toFixed(2);
+    document.getElementById('edit_selling_rate').value = parseFloat(s.selling_rate || 0).toFixed(2);
+    document.getElementById('edit_total_price').value = parseFloat(s.total_price || 0).toFixed(2);
+    document.getElementById('edit_amount_received').value = parseFloat(s.amount_received || 0).toFixed(2);
+    document.getElementById('edit_sale_date').value = s.sale_date ? s.sale_date.substring(0, 10) : '';
+    document.getElementById('edit_notes').value = s.notes || '';
+
+    new bootstrap.Modal(document.getElementById('modalEditScrapSale')).show();
+}
+
+// Real-time calculation for Edit modal
+document.addEventListener('DOMContentLoaded', function() {
+    const editWeight = document.getElementById('edit_wastage_weight');
+    const editRate = document.getElementById('edit_selling_rate');
+    const editTotal = document.getElementById('edit_total_price');
+    const editReceived = document.getElementById('edit_amount_received');
+
+    if (editWeight && editRate && editTotal) {
+        function recalcEdit(trigger = 'rate') {
+            const w = parseFloat(editWeight.value) || 0;
+            let r = parseFloat(editRate.value) || 0;
+            let p = parseFloat(editTotal.value) || 0;
+
+            if (trigger === 'rate') {
+                p = w * r;
+                editTotal.value = p.toFixed(2);
+            } else if (trigger === 'price') {
+                r = w > 0 ? (p / w) : 0;
+                editRate.value = r.toFixed(2);
+            }
+            if (editReceived) {
+                editReceived.value = p.toFixed(2);
+            }
+        }
+
+        editWeight.addEventListener('input', () => recalcEdit('rate'));
+        editRate.addEventListener('input', () => recalcEdit('rate'));
+        editTotal.addEventListener('input', () => recalcEdit('price'));
+    }
+});
 </script>

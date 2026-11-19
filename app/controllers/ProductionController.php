@@ -2212,7 +2212,7 @@ class ProductionController extends Controller {
 
         // 3. Scrap Sales History
         $salesSql = "SELECT cws.*, 
-                            cl.batch_no, cl.cutting_name, pp.program_no,
+                            cl.batch_no, cl.cutting_name, cl.wastage_qty, cl.sold_wastage_qty, pp.program_no,
                             con.name AS concern_name
                      FROM cutting_wastage_sales cws
                      JOIN cutting_logs cl ON cws.cutting_id = cl.id
@@ -2778,6 +2778,150 @@ class ProductionController extends Controller {
         }
 
         $this->redirect('/production/cutting?tab=wastage');
+    }
+
+    /**
+     * Update Individual Wastage Scrap Sale
+     */
+    public function updateWastageSale(): void {
+        $this->ensureCuttingSchema();
+        $this->validateCsrf();
+        $cid = Auth::concernId();
+        $id = (int)($_POST['id'] ?? 0);
+
+        if (!$id) {
+            $this->flash('error', 'Invalid scrap sale ID.');
+            $this->redirect('/production/cutting?tab=wastage');
+        }
+
+        $sale = DB::fetch("SELECT * FROM cutting_wastage_sales WHERE id = ?" . ($cid ? " AND concern_id = ?" : ""), $cid ? [$id, $cid] : [$id]);
+        if (!$sale) {
+            $this->flash('error', 'Scrap sale record not found or access denied.');
+            $this->redirect('/production/cutting?tab=wastage');
+        }
+
+        $cutting = DB::fetch("SELECT * FROM cutting_logs WHERE id = ?", [$sale['cutting_id']]);
+        if (!$cutting) {
+            $this->flash('error', 'Associated cutting batch not found.');
+            $this->redirect('/production/cutting?tab=wastage');
+        }
+
+        $buyerName       = trim($_POST['buyer_name'] ?? '');
+        $buyerPhone      = trim($_POST['buyer_phone'] ?? '');
+        $buyerCompany    = trim($_POST['buyer_company'] ?? '');
+        $wastageCategory = trim($_POST['wastage_category'] ?? $sale['wastage_category']);
+        $newWeight       = (float)($_POST['wastage_weight'] ?? 0);
+        $sellingRate     = (float)($_POST['selling_rate'] ?? 0);
+        $totalPrice      = (float)($_POST['total_price'] ?? 0);
+        $amountReceived  = (float)($_POST['amount_received'] ?? 0);
+        $saleDate        = !empty($_POST['sale_date']) ? $_POST['sale_date'] : $sale['sale_date'];
+        $notes           = trim($_POST['notes'] ?? '');
+
+        if (empty($buyerName)) {
+            $this->flash('error', 'Buyer / Vendor name is required.');
+            $this->redirect('/production/cutting?tab=wastage');
+        }
+
+        $cleanPhone = preg_replace('/[^0-9]/', '', $buyerPhone);
+        if (strlen($cleanPhone) < 10) {
+            $this->flash('error', 'Buyer phone must be at least 10 digits.');
+            $this->redirect('/production/cutting?tab=wastage');
+        }
+
+        if ($newWeight <= 0) {
+            $this->flash('error', 'Wastage weight must be greater than zero.');
+            $this->redirect('/production/cutting?tab=wastage');
+        }
+
+        // Available scrap on the batch including this sale's current weight
+        $maxAllowed = (float)$cutting['wastage_qty'] - ((float)$cutting['sold_wastage_qty'] - (float)$sale['wastage_weight']);
+        if ($newWeight > ($maxAllowed + 0.001)) {
+            $this->flash('error', "Weight ({$newWeight} kg) exceeds maximum available scrap balance ({$maxAllowed} kg).");
+            $this->redirect('/production/cutting?tab=wastage');
+        }
+
+        if ($totalPrice <= 0 && $sellingRate > 0) {
+            $totalPrice = round($newWeight * $sellingRate, 2);
+        }
+
+        $paymentStatus = ($amountReceived >= $totalPrice && $totalPrice > 0) ? 'paid' : ($amountReceived > 0 ? 'partial' : 'pending');
+        $weightDiff = $newWeight - (float)$sale['wastage_weight'];
+
+        DB::beginTransaction();
+        try {
+            DB::query(
+                "UPDATE cutting_wastage_sales SET 
+                    buyer_name = ?, buyer_phone = ?, buyer_company = ?, wastage_category = ?,
+                    wastage_weight = ?, selling_rate = ?, total_price = ?, amount_received = ?,
+                    sale_date = ?, payment_status = ?, notes = ?
+                 WHERE id = ?",
+                [
+                    $buyerName, $cleanPhone, $buyerCompany, $wastageCategory,
+                    $newWeight, $sellingRate, $totalPrice, $amountReceived,
+                    $saleDate, $paymentStatus, $notes,
+                    $id
+                ]
+            );
+
+            // Update cutting_logs.sold_wastage_qty with the difference
+            if (abs($weightDiff) > 0.0001) {
+                DB::query("UPDATE cutting_logs SET sold_wastage_qty = GREATEST(0, COALESCE(sold_wastage_qty, 0) + ?) WHERE id = ?", [
+                    $weightDiff,
+                    (int)$sale['cutting_id']
+                ]);
+            }
+
+            AuditLog::log('UPDATE', 'cutting_wastage_sales', $id, $sale, $_POST);
+            DB::commit();
+            $this->flash('success', "Scrap Sale '{$sale['sale_no']}' updated successfully.");
+        } catch (Exception $e) {
+            DB::rollBack();
+            $this->flash('error', 'Failed to update scrap sale: ' . $e->getMessage());
+        }
+
+        $this->redirect('/production/cutting?tab=wastage');
+    }
+
+    /**
+     * API: Get Scrap Sale Details for Quick View Modal
+     */
+    public function apiWastageSaleDetails(): void {
+        header('Content-Type: application/json');
+        $this->ensureCuttingSchema();
+        $cid = Auth::concernId();
+        $id = (int)($_GET['id'] ?? 0);
+
+        if (!$id) {
+            echo json_encode(['success' => false, 'message' => 'Invalid scrap sale ID.']);
+            exit;
+        }
+
+        $sale = DB::fetch(
+            "SELECT cws.*, 
+                    cl.batch_no, cl.cutting_name, cl.wastage_qty, cl.sold_wastage_qty,
+                    pp.program_no, pp.program_name,
+                    con.name AS concern_name
+             FROM cutting_wastage_sales cws
+             JOIN cutting_logs cl ON cws.cutting_id = cl.id
+             LEFT JOIN production_programs pp ON cl.program_id = pp.id
+             LEFT JOIN concerns con ON cws.concern_id = con.id
+             WHERE cws.id = ?" . ($cid ? " AND cws.concern_id = ?" : ""),
+            $cid ? [$id, $cid] : [$id]
+        );
+
+        if (!$sale) {
+            echo json_encode(['success' => false, 'message' => 'Scrap sale record not found.']);
+            exit;
+        }
+
+        $availScrap = max(0.00, (float)$sale['wastage_qty'] - ((float)$sale['sold_wastage_qty'] - (float)$sale['wastage_weight']));
+
+        echo json_encode([
+            'success' => true,
+            'sale' => $sale,
+            'available_scrap' => $availScrap
+        ]);
+        exit;
     }
 
     /**
