@@ -209,6 +209,7 @@ $concernName = $concern['name'] ?? 'GRM Inventory';
                                                 );
                                             ?>
                                                 <option value="<?= $raw['id'] ?>"
+                                                        <?= (count($purchaseRollItems) === 1 || ($activeRollItemId ?? 0) == $raw['id']) ? 'selected' : '' ?>
                                                         data-name="<?= htmlspecialchars($raw['item_name']) ?>"
                                                         data-fabric="<?= htmlspecialchars($fabricName) ?>"
                                                         data-code="<?= htmlspecialchars($code) ?>"
@@ -221,7 +222,7 @@ $concernName = $concern['name'] ?? 'GRM Inventory';
                                                         data-spec="<?= htmlspecialchars($raw['specification'] ?? '') ?>"
                                                         data-qty="<?= htmlspecialchars($raw['qty']) ?>"
                                                         data-unit="<?= htmlspecialchars($raw['unit'] ?: 'Rolls') ?>"
-                                                        data-rq="<?= htmlspecialchars($raw['rq_qty'] ?: 1) ?>"
+                                                        data-rq="<?= htmlspecialchars(!empty($raw['rq_qty']) ? $raw['rq_qty'] : $raw['qty']) ?>"
                                                         data-net="<?= htmlspecialchars($raw['net_weight'] ?? '') ?>"
                                                         data-price="<?= (float)($raw['unit_price'] ?: ($raw['mrp'] ?: 0)) ?>"
                                                         data-bill="<?= htmlspecialchars($raw['bill_no']) ?>"
@@ -270,10 +271,10 @@ $concernName = $concern['name'] ?? 'GRM Inventory';
                                                 <div class="flex-grow-1 overflow-hidden" style="line-height: 1.35; font-size: 0.76rem;">
                                                     <div class="fw-bold text-dark text-uppercase mb-1 text-truncate" style="font-size: 0.86rem; display: none;" id="roll_preview_title"></div>
                                                     <div class="text-truncate"><span class="text-secondary">Fabric:</span> <strong class="text-dark" id="roll_preview_fabric">-</strong></div>
-                                                    <div class="text-truncate"><span class="text-secondary">Color:</span> <strong class="text-dark text-uppercase" id="roll_preview_color">RED</strong></div>
-                                                    <div class="text-truncate"><span class="text-secondary">Design:</span> <strong class="text-dark text-uppercase" id="roll_preview_design">FLORA</strong></div>
-                                                    <div class="text-truncate"><span class="text-secondary">Price:</span> <strong class="text-success fw-bold" id="roll_preview_price">₹5,000.00</strong></div>
-                                                    <div class="text-truncate"><span class="text-secondary">Code:</span> <strong class="font-monospace text-primary fw-bold" id="roll_preview_code_tag">FAB-R-FL</strong></div>
+                                                    <div class="text-truncate"><span class="text-secondary">Color:</span> <strong class="text-dark text-uppercase" id="roll_preview_color">-</strong></div>
+                                                    <div class="text-truncate"><span class="text-secondary">Design:</span> <strong class="text-dark text-uppercase" id="roll_preview_design">-</strong></div>
+                                                    <div class="text-truncate"><span class="text-secondary">Price:</span> <strong class="text-success fw-bold" id="roll_preview_price">₹0.00</strong></div>
+                                                    <div class="text-truncate"><span class="text-secondary">Code:</span> <strong class="font-monospace text-primary fw-bold" id="roll_preview_code_tag">-</strong></div>
                                                 </div>
                                             </div>
                                         </div>
@@ -1404,38 +1405,60 @@ function updateRollPreview() {
 
     const opt = sel.options[sel.selectedIndex];
     if (opt && opt.value) {
-        const fabric = opt.dataset.fabric || opt.dataset.code || opt.dataset.name || 'Fabric Material';
-        const tag = opt.dataset.tag || makeTagCode(fabric, opt.dataset.color, opt.dataset.pattern || opt.dataset.spec, opt.value);
+        const fabric = opt.dataset.fabric || opt.dataset.name || opt.dataset.code || 'Fabric Material';
+        const tag = opt.dataset.tag || opt.dataset.qr || makeTagCode(fabric, opt.dataset.color, opt.dataset.pattern || opt.dataset.spec, opt.value);
         const color = (opt.dataset.color || 'STANDARD').toUpperCase();
         const design = (opt.dataset.pattern || opt.dataset.spec || 'PLAIN').toUpperCase();
         const price = parseFloat(opt.dataset.price || 0);
         const ref = opt.dataset.bill ? ('PO-' + opt.dataset.bill) : 'PO-REF';
 
-        document.getElementById('roll_preview_ref').textContent = ref;
-        document.getElementById('roll_preview_fabric').textContent = fabric;
-        document.getElementById('roll_preview_color').textContent = color;
-        document.getElementById('roll_preview_design').textContent = design;
-        document.getElementById('roll_preview_price').textContent = '₹' + price.toFixed(2);
-        document.getElementById('roll_preview_code_tag').textContent = tag;
-        document.getElementById('roll_preview_badge').textContent = 'RAW MATERIAL';
+        const refEl = document.getElementById('roll_preview_ref');
+        if (refEl) refEl.textContent = ref;
+        const fabEl = document.getElementById('roll_preview_fabric');
+        if (fabEl) fabEl.textContent = fabric;
+        const colEl = document.getElementById('roll_preview_color');
+        if (colEl) colEl.textContent = color;
+        const desEl = document.getElementById('roll_preview_design');
+        if (desEl) desEl.textContent = design;
+        const priEl = document.getElementById('roll_preview_price');
+        if (priEl) priEl.textContent = '₹' + price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const codEl = document.getElementById('roll_preview_code_tag');
+        if (codEl) codEl.textContent = tag;
+        const badEl = document.getElementById('roll_preview_badge');
+        if (badEl) badEl.textContent = 'RAW MATERIAL';
 
-        renderQr('roll_qr_box', tag);
+        try {
+            renderQr('roll_qr_box', tag);
+        } catch (e) {
+            console.warn('QR render error:', e);
+        }
     } else {
-        document.getElementById('roll_preview_ref').textContent = 'PO-REF';
-        document.getElementById('roll_preview_fabric').textContent = 'Select a fabric roll';
-        document.getElementById('roll_preview_color').textContent = 'RED';
-        document.getElementById('roll_preview_design').textContent = 'FLORA';
-        document.getElementById('roll_preview_price').textContent = '₹5,000.00';
-        document.getElementById('roll_preview_code_tag').textContent = 'FAB-R-FL';
-        document.getElementById('roll_preview_badge').textContent = 'RAW MATERIAL';
-        renderQr('roll_qr_box', 'FAB-R-FL');
+        const refEl = document.getElementById('roll_preview_ref');
+        if (refEl) refEl.textContent = 'PO-REF';
+        const fabEl = document.getElementById('roll_preview_fabric');
+        if (fabEl) fabEl.textContent = 'Select a fabric roll';
+        const colEl = document.getElementById('roll_preview_color');
+        if (colEl) colEl.textContent = '-';
+        const desEl = document.getElementById('roll_preview_design');
+        if (desEl) desEl.textContent = '-';
+        const priEl = document.getElementById('roll_preview_price');
+        if (priEl) priEl.textContent = '₹0.00';
+        const codEl = document.getElementById('roll_preview_code_tag');
+        if (codEl) codEl.textContent = '-';
+        const badEl = document.getElementById('roll_preview_badge');
+        if (badEl) badEl.textContent = 'RAW MATERIAL';
+        try {
+            renderQr('roll_qr_box', 'ROLL-TAG');
+        } catch (e) {
+            console.warn('QR render error:', e);
+        }
     }
 }
 
 function selectRollItem(id) {
     const sel = document.getElementById('roll_item_select');
     if (!sel) return;
-    sel.value = id;
+    sel.value = String(id);
     updateRollPreview();
     matchRollQty();
     sel.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1446,8 +1469,12 @@ function matchRollQty() {
     if (!sel) return;
     const opt = sel.options[sel.selectedIndex];
     if (opt && opt.value) {
-        const qty = parseInt(opt.dataset.qty || opt.dataset.rq || '1', 10);
-        document.getElementById('roll_qty').value = qty > 0 ? Math.min(qty, 500) : 1;
+        const rawQty = parseFloat(opt.dataset.qty || opt.dataset.rq || '1');
+        const qty = Math.max(1, Math.min(500, Math.round(rawQty)));
+        const qtyInput = document.getElementById('roll_qty');
+        if (qtyInput) {
+            qtyInput.value = qty;
+        }
     }
 }
 
@@ -1854,26 +1881,6 @@ function adjustCopies(inputId, delta) {
     input.value = String(Math.min(max, Math.max(min, current + delta)));
 }
 
-function submitRawToStock() {
-    const select = document.getElementById('raw_item_select');
-    if (!select || !select.value) {
-        alert('Please select a fabric roll or trim item first.');
-        return;
-    }
-    const opt = select.options[select.selectedIndex];
-    const isRoll = opt ? (opt.dataset.isroll === '1') : true;
-    const form = document.createElement('form');
-    form.method = 'POST';
-    form.action = '<?= \App\Core\Controller::url('/m/label/add_to_stock') ?>';
-    form.innerHTML = `
-        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
-        <input type="hidden" name="item_id" value="${select.value}">
-        <input type="hidden" name="tab" value="${isRoll ? 'rolls' : 'garment_other'}">
-    `;
-    document.body.appendChild(form);
-    form.submit();
-}
-
 function submitFgToStock() {
     const select = document.getElementById('fg_item_select');
     if (!select || !select.value) {
@@ -1891,9 +1898,6 @@ function submitFgToStock() {
         <input type="hidden" name="item_id" value="${cleanId}">
         <input type="hidden" name="tab" value="${isProd ? 'production' : 'finished_goods'}">
     `;
-    document.body.appendChild(form);
-    form.submit();
-}
     document.body.appendChild(form);
     form.submit();
 }
@@ -1919,8 +1923,27 @@ document.addEventListener('DOMContentLoaded', function() {
     setupTableSearch('search_prod_table', 'prod-row');
     setupTableSearch('search_ret_table', 'ret-row');
 
+    // Auto-select and attach listeners for fabric roll select
+    const rollSel = document.getElementById('roll_item_select');
+    if (rollSel) {
+        rollSel.addEventListener('change', function() {
+            updateRollPreview();
+            matchRollQty();
+        });
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlItemId = urlParams.get('item_id');
+        if (urlItemId) {
+            rollSel.value = urlItemId;
+        } else if (!rollSel.value && rollSel.options.length === 2 && rollSel.options[1].value) {
+            rollSel.selectedIndex = 1;
+        }
+    }
+
     // Initialize previews
     updateRollPreview();
+    if (rollSel && rollSel.value) {
+        matchRollQty();
+    }
     updateOtherPreview();
     updateFgPreview();
     updateProdPreview();
