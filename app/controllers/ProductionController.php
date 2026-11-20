@@ -127,6 +127,8 @@ class ProductionController extends Controller {
                 `unit` VARCHAR(50) NOT NULL DEFAULT 'kg',
                 `total_roll_qty` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
                 `allocated_qty` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+                `roll_weight` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+                `roll_price` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
                 `target_pieces` INT NOT NULL DEFAULT 0,
                 `category_id` INT NULL,
                 `subcategory_id` INT NULL,
@@ -137,6 +139,14 @@ class ProductionController extends Controller {
                 INDEX `idx_prgroll_program` (`program_id`),
                 INDEX `idx_prgroll_rollitem` (`purchase_bill_item_id`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+            $prCols = array_column(DB::fetchAll('DESCRIBE `program_rolls`'), 'Field');
+            if (!in_array('roll_weight', $prCols)) {
+                DB::query('ALTER TABLE `program_rolls` ADD COLUMN roll_weight DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER allocated_qty');
+            }
+            if (!in_array('roll_price', $prCols)) {
+                DB::query('ALTER TABLE `program_rolls` ADD COLUMN roll_price DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER roll_weight');
+            }
 
             self::$schemaEnsured = true;
         } catch (\Throwable $e) {
@@ -4543,18 +4553,18 @@ class ProductionController extends Controller {
             // Inward cash transaction if cash account exists
             if ($amountReceived > 0) {
                 $cashAccount = DB::fetch(
-                    "SELECT id FROM financial_accounts WHERE concern_id = ? AND account_type = 'cash' LIMIT 1",
+                    "SELECT id FROM cash_accounts WHERE concern_id = ? LIMIT 1",
                     [$batchConcernId]
                 );
                 if ($cashAccount) {
                     DB::query(
                         "INSERT INTO cash_transactions (
-                            concern_id, account_id, transaction_type, transaction_date,
-                            amount, reference_type, reference_id, description,
+                            concern_id, account_id, txn_date, type,
+                            amount, ref_module, ref_id, description,
                             created_by, created_at
                         ) VALUES (
-                            ?, ?, 'inflow', ?,
-                            ?, 'Stitching Wastage Sale', ?, ?,
+                            ?, ?, ?, 'credit',
+                            ?, 'scrap_sales', ?, ?,
                             ?, NOW()
                         )",
                         [
