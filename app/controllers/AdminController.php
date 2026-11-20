@@ -6,6 +6,7 @@ namespace App\Controllers;
 use App\Core\Controller;
 use App\Core\DB;
 use App\Core\Auth;
+use App\Core\ModuleRegistry;
 use App\Models\Concern;
 use App\Models\Asset;
 use App\Services\AuditLog;
@@ -13,6 +14,36 @@ use Exception;
 
 class AdminController extends Controller {
     private static bool $schemaEnsured = false;
+
+    private function syncMasterModules(): array
+    {
+        foreach (ModuleRegistry::masterModules() as $module) {
+            DB::query(
+                "INSERT INTO modules (code, name, icon, sort_order, group_name, is_super_admin_only)
+                 VALUES (?, ?, ?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE
+                    name = VALUES(name),
+                    icon = VALUES(icon),
+                    sort_order = VALUES(sort_order),
+                    group_name = VALUES(group_name),
+                    is_super_admin_only = VALUES(is_super_admin_only)",
+                [
+                    $module['code'],
+                    $module['name'],
+                    $module['icon'],
+                    $module['sort_order'],
+                    $module['group_name'],
+                    $module['is_super_admin_only'],
+                ]
+            );
+        }
+
+        return DB::fetchAll(
+            "SELECT * FROM modules
+             WHERE is_super_admin_only = 0
+             ORDER BY sort_order ASC"
+        );
+    }
 
     protected function ensureSchema(): void {
         if (self::$schemaEnsured) {
@@ -138,7 +169,7 @@ class AdminController extends Controller {
              ORDER BY c.id DESC"
         );
 
-        $allModules = DB::fetchAll("SELECT * FROM modules WHERE is_super_admin_only = 0 ORDER BY sort_order ASC");
+        $allModules = $this->syncMasterModules();
 
         $this->render('admin/concerns', [
             'pageTitle'     => 'Concern Management',
@@ -151,6 +182,7 @@ class AdminController extends Controller {
     public function storeConcern(): void {
         $this->ensureSchema();
         $this->validateCsrf();
+        $this->syncMasterModules();
 
         $errors = [];
         $readField = static function (string $field, bool $trim = true) use (&$errors): string {
