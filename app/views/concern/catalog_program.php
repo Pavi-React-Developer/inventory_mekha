@@ -184,10 +184,10 @@ $isProgramsTab = (isset($activeTab) && $activeTab === 'programs') || (isset($_GE
                                         <td>
                                             <div class="d-flex align-items-center gap-1.5 flex-wrap">
                                                 <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle font-monospace">
-                                                    HSN <?= htmlspecialchars($s['hsn_code'] ?: '6109') ?>
+                                                    HSN <?= htmlspecialchars($s['hsn_code'] ?: 'Not set') ?>
                                                 </span>
                                                 <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace">
-                                                    <?= number_format((float)($s['gst_rate'] ?? 5.00), 2) ?>% GST
+                                                    <?= $s['gst_rate'] === null ? 'Verify rate' : number_format((float)$s['gst_rate'], 2) . '% GST' ?>
                                                 </span>
                                             </div>
                                         </td>
@@ -584,11 +584,11 @@ function showStyleDetails(id) {
                     </div>
                     <div class="col-md-6">
                         <div class="small text-muted">HSN Code</div>
-                        <div class="fw-semibold font-monospace">${s.hsn_code || '6109'}</div>
+                        <div class="fw-semibold font-monospace">${s.hsn_code || 'Not set'}</div>
                     </div>
                     <div class="col-md-6">
                         <div class="small text-muted">GST Tax Rate</div>
-                        <div class="fw-semibold text-primary">${parseFloat(s.gst_rate || 5).toFixed(2)}% GST</div>
+                        <div class="fw-semibold text-primary">${s.gst_rate === null ? 'Verify rate' : parseFloat(s.gst_rate).toFixed(2) + '% GST'}</div>
                     </div>
                     <div class="col-12">
                         <div class="small text-muted mb-2 fw-semibold">Active Size Variants (${vars.length}):</div>

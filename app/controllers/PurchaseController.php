@@ -16,6 +16,120 @@ use App\Services\PurchaseDamageService;
 use Exception;
 
 class PurchaseController extends Controller {
+    private static bool $hsnMasterSchemaEnsured = false;
+
+    private function ensureHsnMasterSchema(): void
+    {
+        if (self::$hsnMasterSchemaEnsured) {
+            return;
+        }
+
+        $columns = array_column(DB::fetchAll('DESCRIBE `hsn_masters`'), 'Field');
+        $requiredColumns = ['code_type', 'category', 'rate_note', 'is_active'];
+        if (array_diff($requiredColumns, $columns)) {
+            require_once dirname(__DIR__, 2) . '/database/hsn_gst_master.php';
+            \ensureHsnGstMaster();
+        }
+
+        self::$hsnMasterSchemaEnsured = true;
+    }
+
+    private function getBillAttachmentPaths(array $bill): array
+    {
+        $paths = json_decode((string)($bill['attachment_paths'] ?? ''), true);
+        if (!is_array($paths)) {
+            $paths = [];
+        }
+
+        $paths = array_values(array_filter($paths, static function ($path): bool {
+            return is_string($path) && trim($path) !== '';
+        }));
+
+        if (empty($paths) && !empty($bill['attachment_path'])) {
+            $paths[] = (string)$bill['attachment_path'];
+        }
+
+        return array_values(array_unique($paths));
+    }
+
+    private function uploadBillAttachments(array $existingPaths = []): array
+    {
+        $files = $_FILES['attachments'] ?? null;
+        if (!is_array($files) || !isset($files['name'])) {
+            $legacyFile = $_FILES['attachment'] ?? null;
+            if (!is_array($legacyFile) || empty($legacyFile['name'])) {
+                return $existingPaths;
+            }
+
+            foreach (['name', 'type', 'tmp_name', 'error', 'size'] as $key) {
+                $files[$key] = [$legacyFile[$key] ?? null];
+            }
+        } elseif (!is_array($files['name'])) {
+            foreach (['name', 'type', 'tmp_name', 'error', 'size'] as $key) {
+                $files[$key] = [$files[$key] ?? null];
+            }
+        }
+
+        $extensionsToMimeTypes = [
+            'jpg'  => ['image/jpeg'],
+            'jpeg' => ['image/jpeg'],
+            'png'  => ['image/png'],
+            'webp' => ['image/webp'],
+            'pdf'  => ['application/pdf', 'application/x-pdf'],
+        ];
+        $filesToUpload = [];
+
+        foreach ($files['name'] as $index => $originalName) {
+            $error = (int)($files['error'][$index] ?? UPLOAD_ERR_NO_FILE);
+            if ($error === UPLOAD_ERR_NO_FILE) {
+                continue;
+            }
+            if ($error !== UPLOAD_ERR_OK) {
+                throw new \RuntimeException('An attachment could not be uploaded. Please check the file size and try again.');
+            }
+
+            $tmpPath = (string)($files['tmp_name'][$index] ?? '');
+            $size = (int)($files['size'][$index] ?? 0);
+            if ($tmpPath === '' || !is_file($tmpPath) || !is_readable($tmpPath)) {
+                throw new \RuntimeException('An attachment could not be read. Please choose the file again.');
+            }
+            if ($size <= 0 || $size > 5 * 1024 * 1024) {
+                throw new \RuntimeException('Each attachment must be no larger than 5 MB.');
+            }
+
+            $extension = strtolower(pathinfo((string)$originalName, PATHINFO_EXTENSION));
+            $mimeType = mime_content_type($tmpPath);
+            if (
+                !isset($extensionsToMimeTypes[$extension]) ||
+                !in_array($mimeType, $extensionsToMimeTypes[$extension], true)
+            ) {
+                throw new \RuntimeException('Attachments must be JPG, PNG, WEBP, or PDF files.');
+            }
+
+            $filesToUpload[] = [
+                'tmp_name' => $tmpPath,
+                'name' => (string)$originalName,
+            ];
+        }
+
+        if (empty($filesToUpload)) {
+            return $existingPaths;
+        }
+        if (!CloudinaryService::isConfigured()) {
+            throw new \RuntimeException('Cloudinary is not configured. Configure Cloudinary before uploading bill attachments.');
+        }
+
+        foreach ($filesToUpload as $file) {
+            $uploaded = CloudinaryService::uploadFile($file['tmp_name'], $file['name'], 'invento/bills');
+            if (empty($uploaded['secure_url'])) {
+                throw new \RuntimeException('An attachment could not be stored in Cloudinary. The purchase bill was not saved.');
+            }
+            $existingPaths[] = $uploaded['secure_url'];
+        }
+
+        return array_values(array_unique($existingPaths));
+    }
+
     // 1. SUPPLIERS
     public function suppliers(): void {
         $cid = Auth::concernId();
@@ -276,16 +390,17 @@ class PurchaseController extends Controller {
     }
 
     public function createBill(): void {
+        $this->ensureHsnMasterSchema();
         $cid = Auth::concernId();
 
         if ($cid) {
             $suppliers = DB::fetchAll("SELECT id, code, name, company_name, district, state FROM suppliers WHERE concern_id = ? AND status = 'active' ORDER BY name ASC", [$cid]);
             $variants  = DB::fetchAll("SELECT id, sku_code, name, price, size FROM variants WHERE concern_id = ? AND status = 'active' ORDER BY name ASC", [$cid]);
-            $hsnList   = DB::fetchAll("SELECT hsn_code, description, gst_rate FROM hsn_masters WHERE concern_id = ? OR concern_id IS NULL ORDER BY hsn_code ASC", [$cid]);
+            $hsnList   = DB::fetchAll("SELECT code_type, hsn_code, description, category, gst_rate, rate_note FROM hsn_masters WHERE is_active = 1 AND code_type = 'HSN' AND (concern_id = ? OR concern_id IS NULL) ORDER BY hsn_code ASC", [$cid]);
         } else {
             $suppliers = DB::fetchAll("SELECT id, concern_id, code, name, company_name, district, state FROM suppliers WHERE status = 'active' ORDER BY name ASC");
             $variants  = DB::fetchAll("SELECT id, concern_id, sku_code, name, price, size FROM variants WHERE status = 'active' ORDER BY name ASC");
-            $hsnList   = DB::fetchAll("SELECT hsn_code, description, gst_rate FROM hsn_masters ORDER BY hsn_code ASC");
+            $hsnList   = DB::fetchAll("SELECT code_type, hsn_code, description, category, gst_rate, rate_note FROM hsn_masters WHERE is_active = 1 AND code_type = 'HSN' ORDER BY hsn_code ASC");
         }
 
         $allConcerns = [];
@@ -313,6 +428,7 @@ class PurchaseController extends Controller {
     }
 
     public function editBill(): void {
+        $this->ensureHsnMasterSchema();
         $cid = Auth::concernId();
         $id = (int)($_GET['id'] ?? 0);
 
@@ -338,11 +454,11 @@ class PurchaseController extends Controller {
         if ($cid) {
             $suppliers = DB::fetchAll("SELECT id, code, name, company_name, district, state FROM suppliers WHERE concern_id = ? AND status = 'active' ORDER BY name ASC", [$cid]);
             $variants  = DB::fetchAll("SELECT id, sku_code, name, price, size FROM variants WHERE concern_id = ? AND status = 'active' ORDER BY name ASC", [$cid]);
-            $hsnList   = DB::fetchAll("SELECT hsn_code, description, gst_rate FROM hsn_masters WHERE concern_id = ? OR concern_id IS NULL ORDER BY hsn_code ASC", [$cid]);
+            $hsnList   = DB::fetchAll("SELECT code_type, hsn_code, description, category, gst_rate, rate_note FROM hsn_masters WHERE is_active = 1 AND code_type = 'HSN' AND (concern_id = ? OR concern_id IS NULL) ORDER BY hsn_code ASC", [$cid]);
         } else {
             $suppliers = DB::fetchAll("SELECT id, concern_id, code, name, company_name, district, state FROM suppliers WHERE status = 'active' ORDER BY name ASC");
             $variants  = DB::fetchAll("SELECT id, concern_id, sku_code, name, price, size FROM variants WHERE status = 'active' ORDER BY name ASC");
-            $hsnList   = DB::fetchAll("SELECT hsn_code, description, gst_rate FROM hsn_masters ORDER BY hsn_code ASC");
+            $hsnList   = DB::fetchAll("SELECT code_type, hsn_code, description, category, gst_rate, rate_note FROM hsn_masters WHERE is_active = 1 AND code_type = 'HSN' ORDER BY hsn_code ASC");
         }
 
         $allConcerns = [];
@@ -372,41 +488,70 @@ class PurchaseController extends Controller {
     }
 
     public function saveHsnAjax(): void {
+        $this->ensureHsnMasterSchema();
         header('Content-Type: application/json; charset=utf-8');
         $cid = Auth::concernId();
         $code = strtoupper(trim($_POST['hsn_code'] ?? ''));
+        $codeType = strtoupper(trim($_POST['code_type'] ?? 'HSN'));
         $desc = trim($_POST['description'] ?? '');
-        $rate = isset($_POST['gst_rate']) && $_POST['gst_rate'] !== '' ? (float)$_POST['gst_rate'] : 0.0;
+        $category = trim($_POST['category'] ?? '');
+        $rateNote = trim($_POST['rate_note'] ?? '');
+        $rateInput = trim((string)($_POST['gst_rate'] ?? ''));
+        $rate = $rateInput === '' ? null : (is_numeric($rateInput) ? (float)$rateInput : -1.0);
 
-        if (empty($code)) {
-            echo json_encode(['success' => false, 'message' => 'HSN Code is required.']);
+        if (!in_array($codeType, ['HSN', 'SAC'], true) || !preg_match('/^\d{4}(?:\d{2}){0,2}$/', $code) || strlen($desc) > 255 || strlen($category) > 100 || strlen($rateNote) > 500 || ($rate !== null && ($rate < 0 || $rate > 100))) {
+            echo json_encode(['success' => false, 'message' => 'Use a valid 4-, 6-, or 8-digit HSN/SAC code and GST rate details.']);
             exit;
         }
 
         try {
             $existing = DB::fetch(
-                "SELECT id FROM hsn_masters WHERE hsn_code = ? AND (concern_id = ? OR concern_id IS NULL)",
-                [$code, $cid]
+                "SELECT id, concern_id, code_type, hsn_code, description, category, gst_rate, rate_note
+                 FROM hsn_masters
+                 WHERE is_active = 1 AND code_type = ? AND hsn_code = ? AND (concern_id = ? OR concern_id IS NULL)
+                 ORDER BY concern_id DESC LIMIT 1",
+                [$codeType, $code, $cid]
             );
 
             if (!$existing) {
                 DB::query(
-                    "INSERT INTO hsn_masters (concern_id, hsn_code, description, gst_rate, created_at) VALUES (?, ?, ?, ?, NOW())",
-                    [$cid, $code, $desc, $rate]
+                    "INSERT INTO hsn_masters (concern_id, code_type, hsn_code, description, category, gst_rate, rate_note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())",
+                    [$cid, $codeType, $code, $desc, $category, $rate, $rateNote]
                 );
+                $saved = [
+                    'code_type' => $codeType,
+                    'hsn_code' => $code,
+                    'description' => $desc,
+                    'category' => $category,
+                    'gst_rate' => $rate,
+                    'rate_note' => $rateNote,
+                ];
+            } elseif ($existing['concern_id'] === null) {
+                $saved = $existing;
             } else {
                 DB::query(
-                    "UPDATE hsn_masters SET description = ?, gst_rate = ? WHERE id = ?",
-                    [$desc, $rate, $existing['id']]
+                    "UPDATE hsn_masters SET description = ?, category = ?, gst_rate = ?, rate_note = ?, is_active = 1 WHERE id = ?",
+                    [$desc, $category, $rate, $rateNote, $existing['id']]
                 );
+                $saved = [
+                    'code_type' => $codeType,
+                    'hsn_code' => $code,
+                    'description' => $desc,
+                    'category' => $category,
+                    'gst_rate' => $rate,
+                    'rate_note' => $rateNote,
+                ];
             }
 
             echo json_encode([
                 'success' => true,
-                'hsn_code' => $code,
-                'description' => $desc,
-                'gst_rate' => $rate,
-                'label' => $code . ($desc ? ' - ' . $desc : '')
+                'code_type' => $saved['code_type'],
+                'hsn_code' => $saved['hsn_code'],
+                'description' => $saved['description'],
+                'category' => $saved['category'],
+                'gst_rate' => $saved['gst_rate'],
+                'rate_note' => $saved['rate_note'],
+                'label' => $saved['hsn_code'] . ($saved['description'] ? ' - ' . $saved['description'] : '')
             ]);
         } catch (\Exception $e) {
             echo json_encode(['success' => false, 'message' => $e->getMessage()]);
@@ -749,15 +894,6 @@ class PurchaseController extends Controller {
             $paymentStatus = 'unpaid';
         }
 
-        // Attachment handling (Cloudinary first, local disk fallback)
-        $attachmentPath = null;
-        if (!empty($_FILES['attachment']['name']) && $_FILES['attachment']['error'] === UPLOAD_ERR_OK) {
-            $saved = CloudinaryService::saveUploadedFile($_FILES['attachment'], 'bills', ['jpg', 'jpeg', 'png', 'webp', 'pdf']);
-            if ($saved) {
-                $attachmentPath = $saved;
-            }
-        }
-
         // Process the 3 Inline Sections
         $rollsRaw        = $_POST['rolls'] ?? [];
         $garmentOtherRaw = $_POST['garment_other'] ?? [];
@@ -990,6 +1126,18 @@ class PurchaseController extends Controller {
             return;
         }
 
+        try {
+            $attachmentPaths = $this->uploadBillAttachments();
+        } catch (\RuntimeException $e) {
+            $this->flash('error', $e->getMessage());
+            $this->redirect('/m/purchase_billing/create');
+            return;
+        }
+        $attachmentPath = $attachmentPaths[0] ?? null;
+        $attachmentPathsJson = empty($attachmentPaths)
+            ? null
+            : json_encode($attachmentPaths, JSON_UNESCAPED_SLASHES);
+
         $netAmount = round($totalAmount + $totalTax, 2);
         if ($paymentStatus === 'paid' && $paidAmount <= 0) {
             $paidAmount = $netAmount;
@@ -1003,12 +1151,12 @@ class PurchaseController extends Controller {
                 "INSERT INTO purchase_bills (
                     concern_id, bill_no, supplier_invoice_no, supplier_id, bill_date,
                     total_amount, tax_amount, net_amount, payment_status, payment_method, payment_reference, paid_amount,
-                    inward_status, notes, attachment_path, fabric_description, created_by, created_at
-                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())",
+                    inward_status, notes, attachment_path, attachment_paths, fabric_description, created_by, created_at
+                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())",
                 [
                     $cid, $billNo, $supplierInvoiceNo, $supplierId, $billDate,
                     $totalAmount, $totalTax, $netAmount, $paymentStatus, $paymentMethod, $paymentReference, $paidAmount,
-                    $inwardStatus, $notes, $attachmentPath, $fabricDescription, Auth::id()
+                    $inwardStatus, $notes, $attachmentPath, $attachmentPathsJson, $fabricDescription, Auth::id()
                 ]
             );
             $billId = (int)DB::lastInsertId();
@@ -1079,7 +1227,7 @@ class PurchaseController extends Controller {
                             $cid,
                             $item['hsn_code'],
                             $item['item_name'] ?? 'Recorded HSN',
-                            $item['gst_rate'] ?? 5.0
+                            isset($item['gst_rate']) && $item['gst_rate'] !== '' ? $item['gst_rate'] : null
                         ]);
                     }
                 }
@@ -1183,15 +1331,6 @@ class PurchaseController extends Controller {
         if (!in_array($paymentStatus, ['unpaid', 'partial', 'paid'], true)) {
             $paymentStatus = 'unpaid';
         }
-        // Attachment handling (Cloudinary first, local disk fallback): keep existing if no new file uploaded
-        $attachmentPath = $bill['attachment_path'];
-        if (!empty($_FILES['attachment']['name']) && $_FILES['attachment']['error'] === UPLOAD_ERR_OK) {
-            $saved = CloudinaryService::saveUploadedFile($_FILES['attachment'], 'bills', ['jpg', 'jpeg', 'png', 'webp', 'pdf']);
-            if ($saved) {
-                $attachmentPath = $saved;
-            }
-        }
-
         // Process sections
         $rollsRaw        = $_POST['rolls'] ?? [];
         $garmentOtherRaw = $_POST['garment_other'] ?? [];
@@ -1387,6 +1526,18 @@ class PurchaseController extends Controller {
             return;
         }
 
+        try {
+            $attachmentPaths = $this->uploadBillAttachments($this->getBillAttachmentPaths($bill));
+        } catch (\RuntimeException $e) {
+            $this->flash('error', $e->getMessage());
+            $this->redirect('/m/purchase_billing/edit?id=' . $billId);
+            return;
+        }
+        $attachmentPath = $attachmentPaths[0] ?? null;
+        $attachmentPathsJson = empty($attachmentPaths)
+            ? null
+            : json_encode($attachmentPaths, JSON_UNESCAPED_SLASHES);
+
         $netAmount = round($totalAmount + $totalTax, 2);
         if ($paymentStatus === 'paid' && $paidAmount <= 0) {
             $paidAmount = $netAmount;
@@ -1398,13 +1549,13 @@ class PurchaseController extends Controller {
                 "UPDATE purchase_bills
                  SET supplier_id = ?, bill_date = ?, supplier_invoice_no = ?, notes = ?,
                      payment_status = ?, payment_method = ?, payment_reference = ?, paid_amount = ?,
-                     inward_status = ?, attachment_path = ?, fabric_description = ?,
+                     inward_status = ?, attachment_path = ?, attachment_paths = ?, fabric_description = ?,
                      total_amount = ?, tax_amount = ?, net_amount = ?
                  WHERE id = ?",
                 [
                     $supplierId, $billDate, $supplierInvoiceNo, $notes,
                     $paymentStatus, $paymentMethod, $paymentReference, $paidAmount,
-                    $inwardStatus, $attachmentPath, $fabricDescription,
+                    $inwardStatus, $attachmentPath, $attachmentPathsJson, $fabricDescription,
                     $totalAmount, $totalTax, $netAmount,
                     $billId
                 ]
@@ -1460,7 +1611,7 @@ class PurchaseController extends Controller {
                             $cid,
                             $item['hsn_code'],
                             $item['item_name'] ?? 'Recorded HSN',
-                            $item['gst_rate'] ?? 5.0
+                            isset($item['gst_rate']) && $item['gst_rate'] !== '' ? $item['gst_rate'] : null
                         ]);
                     }
                 }

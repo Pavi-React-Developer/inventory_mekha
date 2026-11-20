@@ -1,5 +1,24 @@
 <?php
 $isEdit = !empty($bill);
+$currentPaymentMethod = strtolower(str_replace([' ', '-'], '_', trim((string)($bill['payment_method'] ?? 'credit'))));
+$paymentMethods = [
+    'credit' => 'Credit',
+    'cash' => 'Cash',
+    'bank_transfer' => 'Bank Transfer',
+    'upi' => 'UPI',
+];
+$existingAttachments = [];
+if ($isEdit) {
+    $decodedAttachments = json_decode((string)($bill['attachment_paths'] ?? ''), true);
+    if (is_array($decodedAttachments)) {
+        $existingAttachments = array_values(array_filter($decodedAttachments, static function ($path): bool {
+            return is_string($path) && trim($path) !== '';
+        }));
+    }
+    if (empty($existingAttachments) && !empty($bill['attachment_path'])) {
+        $existingAttachments[] = (string)$bill['attachment_path'];
+    }
+}
 $existingRolls = [];
 $existingOther = [];
 $existingFinished = [];
@@ -98,7 +117,18 @@ if ($isEdit && !empty($existingItems)) {
                     </div>
                     <div class="col-md-3">
                         <label class="form-label small fw-bold text-dark">Payment Method</label>
-                        <input type="text" name="payment_method" id="billPaymentMethod" class="form-control form-control-sm" placeholder="e.g. Credit / Cash / Bank Transfer / UPI" value="<?= htmlspecialchars($bill['payment_method'] ?? '') ?>">
+                        <select name="payment_method" id="billPaymentMethod" class="form-select form-select-sm">
+                            <?php if (!isset($paymentMethods[$currentPaymentMethod]) && !empty($bill['payment_method'])): ?>
+                                <option value="<?= htmlspecialchars($bill['payment_method']) ?>" selected>
+                                    <?= htmlspecialchars(ucwords(str_replace('_', ' ', $bill['payment_method']))) ?> (Existing)
+                                </option>
+                            <?php endif; ?>
+                            <?php foreach ($paymentMethods as $value => $label): ?>
+                                <option value="<?= htmlspecialchars($value) ?>" <?= $currentPaymentMethod === $value ? 'selected' : '' ?>>
+                                    <?= htmlspecialchars($label) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
                     </div>
                     <div class="col-md-3">
                         <label class="form-label small fw-bold text-dark">Payment Ref. / Cheque / UTR</label>
@@ -113,14 +143,20 @@ if ($isEdit && !empty($existingItems)) {
                 <div class="row g-3">
                     <div class="col-md-6">
                         <label class="form-label small fw-semibold">Tax Invoice / Bill Attachment (Optional)</label>
-                        <input type="file" name="attachment" class="form-control" accept=".jpg,.jpeg,.png,.webp,.pdf">
-                        <div class="form-text text-muted small">JPG, PNG, WEBP or PDF up to 5 MB.</div>
-                        <?php if ($isEdit && !empty($bill['attachment_path'])): ?>
+                        <input type="file" name="attachments[]" class="form-control" accept=".jpg,.jpeg,.png,.webp,.pdf" multiple>
+                        <div class="form-text text-muted small">Select multiple JPG, PNG, WEBP or PDF files. Each file can be up to 5 MB.</div>
+                        <?php if (!empty($existingAttachments)): ?>
                             <div class="mt-1 small">
-                                <span class="text-muted">Current file:</span>
-                                <a href="<?= htmlspecialchars(\App\Services\CloudinaryService::url($bill['attachment_path'])) ?>" target="_blank" class="fw-semibold text-primary">
-                                    <i class="bi bi-paperclip"></i> View Attached Invoice
-                                </a>
+                                <span class="text-muted">Current attachments:</span>
+                                <ul class="mb-0">
+                                    <?php foreach ($existingAttachments as $index => $attachmentPath): ?>
+                                        <li>
+                                            <a href="<?= htmlspecialchars(\App\Services\CloudinaryService::url($attachmentPath)) ?>" target="_blank" rel="noopener" class="fw-semibold text-primary">
+                                                <i class="bi bi-paperclip"></i> Attachment <?= $index + 1 ?>
+                                            </a>
+                                        </li>
+                                    <?php endforeach; ?>
+                                </ul>
                             </div>
                         <?php endif; ?>
                     </div>
@@ -167,6 +203,9 @@ if ($isEdit && !empty($existingItems)) {
 
             <!-- Tab Panes: One-by-One Sections -->
             <div class="card-body p-3 p-md-4">
+                <div id="itemsValidationError" class="alert alert-danger py-2 small d-none mb-3" role="alert">
+                    Add at least one item with all required details before saving this purchase.
+                </div>
                 <div class="tab-content" id="purchaseSectionContent">
 
                     <!-- ========================================== -->
@@ -463,7 +502,7 @@ if ($isEdit && !empty($existingItems)) {
             <div class="modal-header text-white px-4 py-3" style="background: #2563eb;">
                 <div class="d-flex align-items-center gap-2">
                     <i class="bi bi-plus-circle fs-5"></i>
-                    <h5 class="modal-title fw-bold mb-0">Add New HSN Code & GST Rate</h5>
+                    <h5 class="modal-title fw-bold mb-0">Add HSN Code & GST Details</h5>
                 </div>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
@@ -483,12 +522,17 @@ if ($isEdit && !empty($existingItems)) {
 
                 <!-- Default GST Rate (%) -->
                 <div class="mb-2">
-                    <label class="form-label small fw-bold text-dark">Default GST Rate (%) (Optional)</label>
+                    <label class="form-label small fw-bold text-dark">GST Rate (%) (Optional)</label>
                     <div class="input-group">
                         <input type="number" step="0.01" min="0" max="100" id="newHsnGstRate" class="form-control fw-semibold" placeholder="0.00">
                         <span class="input-group-text bg-light text-muted fw-bold">%</span>
                     </div>
-                    <div class="form-text text-muted small mt-1">Standard garment slab: 5.00%, 12.00%, 18.00%</div>
+                    <div class="form-text text-muted small mt-1">Leave blank when the rate depends on item details or price.</div>
+                </div>
+
+                <div class="mb-2">
+                    <label class="form-label small fw-bold text-dark">GST Rate Conditions / Notes (Optional)</label>
+                    <input type="text" id="newHsnRateNote" class="form-control" maxlength="500" placeholder="e.g. Verify rate based on product composition and value">
                 </div>
             </div>
             <!-- Modal Footer (Cancel button + Purple Save & Select HSN) -->
@@ -702,7 +746,7 @@ let rollCounter = 0;
 let otherCounter = 0;
 let finishedCounter = 0;
 let currentHsnTarget = { type: 'rolls', id: 1 };
-let createdHsnList = <?= json_encode($hsnList ?? []) ?>;
+let createdHsnList = <?= json_encode($hsnList ?? [], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
 
 function escapeHtml(text) {
     if (!text) return '';
@@ -732,17 +776,33 @@ function updateRollHeaderCode(id) {
     }
 }
 
-function getHsnOptionsHtml(selectedVal = '') {
-    let html = '<option value="">-- Select HSN --</option>';
-    if (Array.isArray(createdHsnList)) {
-        createdHsnList.forEach(function(h) {
-            const desc = h.description ? ' - ' + h.description : '';
-            const label = h.hsn_code + desc;
-            const isSel = (h.hsn_code === selectedVal) ? 'selected' : '';
-            html += `<option value="${h.hsn_code}" data-gst="${parseFloat(h.gst_rate) || 5.0}" ${isSel}>${label}</option>`;
-        });
+function getHsnInputAttributes(selectedVal = '') {
+    const row = findHsnMasterRow(selectedVal);
+    return `data-hsn-gst-rate="${escapeHtml(row?.gst_rate ?? '')}" data-hsn-rate-note="${escapeHtml(row?.rate_note || '')}"`;
+}
+
+function findHsnMasterRow(code) {
+    return Array.isArray(createdHsnList)
+        ? createdHsnList.find(item => item.hsn_code === code && item.code_type === 'HSN')
+        : null;
+}
+
+function setHsnInputMetadata(input, code) {
+    const row = findHsnMasterRow(code);
+    input.dataset.hsnGstRate = row?.gst_rate ?? '';
+    input.dataset.hsnRateNote = row?.rate_note || '';
+}
+
+function resolveHsnInputMetadata(input) {
+    if (input && !input.dataset.hsnGstRate && !input.dataset.hsnRateNote) {
+        setHsnInputMetadata(input, input.value);
     }
-    return html;
+}
+
+function setHsnInputValue(input, row) {
+    input.value = row.hsn_code || '';
+    input.dataset.hsnGstRate = row.gst_rate ?? '';
+    input.dataset.hsnRateNote = row.rate_note || '';
 }
 
 let unitOptions = [
@@ -827,78 +887,67 @@ function saveAndSelectHsn() {
     const code = document.getElementById('newHsnCode').value.trim().toUpperCase();
     const desc = document.getElementById('newHsnDesc').value.trim();
     const rateInput = document.getElementById('newHsnGstRate').value.trim();
-    const rate = rateInput !== '' ? (parseFloat(rateInput) || 0.0) : 0.0;
+    const rate = rateInput !== '' ? parseFloat(rateInput) : null;
+    const rateNote = document.getElementById('newHsnRateNote').value.trim();
 
     if (!code) {
         alert('Please enter an HSN code.');
         return;
     }
+    if (rateInput !== '' && (!Number.isFinite(rate) || rate < 0 || rate > 100)) {
+        alert('Enter a valid GST rate between 0 and 100, or leave it blank.');
+        return;
+    }
 
     const formData = new FormData();
     formData.append('hsn_code', code);
+    formData.append('code_type', 'HSN');
     formData.append('description', desc);
-    formData.append('gst_rate', rate);
+    formData.append('category', 'Garment and textile goods');
+    formData.append('gst_rate', rate === null ? '' : rate);
+    formData.append('rate_note', rateNote);
 
     fetch('<?= \App\Core\Controller::url('/m/purchase_billing/save_hsn') ?>', {
         method: 'POST',
         body: formData
     })
-    .then(r => r.json())
+    .then(r => {
+        if (!r.ok) throw new Error('Unable to save HSN code.');
+        return r.json();
+    })
     .then(data => {
-        applyCreatedHsn(code, desc, rate);
+        if (!data.success) throw new Error(data.message || 'Unable to save HSN code.');
+        applyCreatedHsn(data);
     })
     .catch(err => {
-        console.warn('Network save fallback:', err);
-        applyCreatedHsn(code, desc, rate);
+        alert(err.message || 'Unable to save HSN code. Please try again.');
     });
 }
 
-function applyCreatedHsn(code, desc, rate) {
-    const exists = createdHsnList.some(item => item.hsn_code === code);
+function applyCreatedHsn(hsn) {
+    const { hsn_code: code, gst_rate: rate, rate_note: rateNote = '' } = hsn;
+    const exists = createdHsnList.some(item => item.hsn_code === code && item.code_type === type);
     if (!exists) {
-        createdHsnList.push({ hsn_code: code, description: desc, gst_rate: rate });
+        createdHsnList.push(hsn);
+    } else {
+        createdHsnList = createdHsnList.map(item => item.hsn_code === code && item.code_type === type ? hsn : item);
     }
 
-    const label = code + (desc ? ' - ' + desc : '');
-
-    document.querySelectorAll('.roll-input-hsn, .other-input-hsn, .fg-input-hsn').forEach(function(select) {
-        let optExists = false;
-        for (let i = 0; i < select.options.length; i++) {
-            if (select.options[i].value === code) {
-                optExists = true;
-                select.options[i].dataset.gst = rate;
-                select.options[i].text = label;
-                break;
-            }
-        }
-        if (!optExists) {
-            const opt = document.createElement('option');
-            opt.value = code;
-            opt.textContent = label;
-            opt.dataset.gst = rate;
-            select.appendChild(opt);
-        }
-    });
+    const selectedHsn = { hsn_code: code, gst_rate: rate, rate_note: rateNote };
 
     if (currentHsnTarget.type === 'rolls') {
-        const activeSelect = document.querySelector(`#rollCard_${currentHsnTarget.id} .roll-input-hsn`);
-        if (activeSelect) {
-            activeSelect.value = code;
-        }
+        const activeInput = document.querySelector(`#rollCard_${currentHsnTarget.id} .roll-input-hsn`);
+        if (activeInput) setHsnInputValue(activeInput, selectedHsn);
         onRollHsnChange(currentHsnTarget.id);
         syncRollsTable();
     } else if (currentHsnTarget.type === 'other') {
-        const activeSelect = document.querySelector(`#otherCard_${currentHsnTarget.id} .other-input-hsn`);
-        if (activeSelect) {
-            activeSelect.value = code;
-        }
+        const activeInput = document.querySelector(`#otherCard_${currentHsnTarget.id} .other-input-hsn`);
+        if (activeInput) setHsnInputValue(activeInput, selectedHsn);
         onOtherHsnChange(currentHsnTarget.id);
         syncOtherTable();
     } else if (currentHsnTarget.type === 'finished') {
-        const activeSelect = document.querySelector(`#finishedCard_${currentHsnTarget.id} .fg-input-hsn`);
-        if (activeSelect) {
-            activeSelect.value = code;
-        }
+        const activeInput = document.querySelector(`#finishedCard_${currentHsnTarget.id} .fg-input-hsn`);
+        if (activeInput) setHsnInputValue(activeInput, selectedHsn);
         onFinishedHsnChange(currentHsnTarget.id);
         syncFinishedTable();
     }
@@ -973,8 +1022,8 @@ function onRollGstTypeChange(rollId) {
     const cgstCol = document.getElementById('cgstCol_' + rollId);
     const igstCol = document.getElementById('igstCol_' + rollId);
 
-    const hsnSelect = card.querySelector('.roll-input-hsn');
-    const hsnGst = parseFloat(hsnSelect?.selectedOptions[0]?.dataset?.gst) || 0;
+    const hsnInput = card.querySelector('.roll-input-hsn');
+    const hsnGst = parseFloat(hsnInput?.dataset?.hsnGstRate) || 0;
 
     if (gstType === 'Exempted') {
         // When Exempted: dynamic fields do NOT come
@@ -1048,7 +1097,52 @@ function onRollTaxInputTypeChange(rollId) {
 }
 
 function onRollHsnChange(rollId) {
+    const card = document.getElementById('rollCard_' + rollId);
+    if (!card) return;
+    const hsnInput = card.querySelector('.roll-input-hsn');
+    resolveHsnInputMetadata(hsnInput);
+    updateHsnRateNote(hsnInput);
+    applyHsnRateToGstInputs(card, 'roll');
     onRollGstTypeChange(rollId);
+}
+
+function updateHsnRateNote(input) {
+    if (!input) return;
+    const note = input.parentElement.querySelector('.hsn-rate-note');
+    if (note) {
+        note.textContent = input.dataset.hsnRateNote || (input.value ? 'Verify the applicable GST rate for this classification.' : '');
+    }
+}
+
+function applyHsnRateToGstInputs(card, prefix) {
+    const taxType = card.querySelector(`.${prefix}-input-tax-type`)?.value || 'Percentage';
+    if (taxType !== 'Percentage') return;
+
+    const hsnInput = card.querySelector(`.${prefix}-input-hsn`);
+    const rateText = hsnInput?.dataset?.hsnGstRate ?? '';
+    const gstRate = rateText === '' ? null : Number(rateText);
+    const sgstInput = card.querySelector(`.${prefix}-input-sgst`);
+    const cgstInput = card.querySelector(`.${prefix}-input-cgst`);
+    const igstInput = card.querySelector(`.${prefix}-input-igst`);
+
+    [sgstInput, cgstInput, igstInput].forEach(input => {
+        if (input) input.value = '';
+    });
+
+    if (gstRate === null || !Number.isFinite(gstRate) || gstRate < 0 || gstRate > 100) return;
+
+    const gstType = card.querySelector(`.${prefix}-input-gst`)?.value || 'Exempted';
+    const halfRate = (gstRate / 2).toFixed(2);
+    if (gstType === 'Both (CGST and SGST)') {
+        if (sgstInput) sgstInput.value = halfRate;
+        if (cgstInput) cgstInput.value = halfRate;
+    } else if (gstType === 'CGST') {
+        if (cgstInput) cgstInput.value = halfRate;
+    } else if (gstType === 'SGST') {
+        if (sgstInput) sgstInput.value = halfRate;
+    } else if (gstType === 'IGST' && igstInput) {
+        igstInput.value = gstRate.toFixed(2);
+    }
 }
 
 function onOtherGstTypeChange(otherId) {
@@ -1062,8 +1156,8 @@ function onOtherGstTypeChange(otherId) {
     const cgstCol = document.getElementById('otherCgstCol_' + otherId);
     const igstCol = document.getElementById('otherIgstCol_' + otherId);
 
-    const hsnSelect = card.querySelector('.other-input-hsn');
-    const hsnGst = parseFloat(hsnSelect?.selectedOptions[0]?.dataset?.gst) || 0;
+    const hsnInput = card.querySelector('.other-input-hsn');
+    const hsnGst = parseFloat(hsnInput?.dataset?.hsnGstRate) || 0;
 
     if (gstType === 'Exempted') {
         if (dynamicContainer) dynamicContainer.classList.add('d-none');
@@ -1134,6 +1228,12 @@ function onOtherTaxInputTypeChange(otherId) {
 }
 
 function onOtherHsnChange(otherId) {
+    const card = document.getElementById('otherCard_' + otherId);
+    if (!card) return;
+    const hsnInput = card.querySelector('.other-input-hsn');
+    resolveHsnInputMetadata(hsnInput);
+    updateHsnRateNote(hsnInput);
+    applyHsnRateToGstInputs(card, 'other');
     onOtherGstTypeChange(otherId);
 }
 
@@ -1148,8 +1248,8 @@ function onFinishedGstTypeChange(fgId) {
     const cgstCol = document.getElementById('fgCgstCol_' + fgId);
     const igstCol = document.getElementById('fgIgstCol_' + fgId);
 
-    const hsnSelect = card.querySelector('.fg-input-hsn');
-    const hsnGst = parseFloat(hsnSelect?.selectedOptions[0]?.dataset?.gst) || 0;
+    const hsnInput = card.querySelector('.fg-input-hsn');
+    const hsnGst = parseFloat(hsnInput?.dataset?.hsnGstRate) || 0;
 
     if (gstType === 'Exempted') {
         if (dynamicContainer) dynamicContainer.classList.add('d-none');
@@ -1220,6 +1320,12 @@ function onFinishedTaxInputTypeChange(fgId) {
 }
 
 function onFinishedHsnChange(fgId) {
+    const card = document.getElementById('finishedCard_' + fgId);
+    if (!card) return;
+    const hsnInput = card.querySelector('.fg-input-hsn');
+    resolveHsnInputMetadata(hsnInput);
+    updateHsnRateNote(hsnInput);
+    applyHsnRateToGstInputs(card, 'fg');
     onFinishedGstTypeChange(fgId);
 }
 
@@ -1327,6 +1433,7 @@ function applySavedRollSpec(selectEl, idx) {
     }
     if (hsnSel && hsn) {
         hsnSel.value = hsn;
+        setHsnInputMetadata(hsnSel, hsn);
         onRollHsnChange(idx);
     }
 
@@ -1470,17 +1577,8 @@ function saveAndApplyRollDesign() {
                 if (priceInp && price > 0) priceInp.value = price.toFixed(2);
                 if (wtInp && weight > 0 && (!wtInp.value || parseFloat(wtInp.value) === 0)) wtInp.value = weight.toFixed(2);
                 if (hsnSel && hsn) {
-                    let hasHsn = false;
-                    for (let i = 0; i < hsnSel.options.length; i++) {
-                        if (hsnSel.options[i].value === hsn) { hasHsn = true; break; }
-                    }
-                    if (!hasHsn) {
-                        const opt = document.createElement('option');
-                        opt.value = hsn;
-                        opt.textContent = hsn;
-                        hsnSel.appendChild(opt);
-                    }
                     hsnSel.value = hsn;
+                    setHsnInputMetadata(hsnSel, hsn);
                     onRollHsnChange(rowIdx);
                 }
 
@@ -1653,6 +1751,7 @@ function selectSpecFromRegistry(pattern, color) {
                 if (priceInp && parseFloat(spec.last_unit_price) > 0) priceInp.value = parseFloat(spec.last_unit_price).toFixed(2);
                 if (hsnSel && spec.hsn_code) {
                     hsnSel.value = spec.hsn_code;
+                    setHsnInputMetadata(hsnSel, spec.hsn_code);
                     onRollHsnChange(targetRollRowIndex);
                 }
                 onRollColorOrPatternChange(targetRollRowIndex);
@@ -1695,6 +1794,7 @@ function showToastNotice(msg) {
 
 function addRollRow() {
     rollCounter++;
+    document.getElementById('itemsValidationError')?.classList.add('d-none');
     const rollCode = generateRollCode(rollCounter);
     const container = document.getElementById('rollsContainer');
     document.getElementById('noRollsPlaceholder')?.classList.add('d-none');
@@ -1781,9 +1881,8 @@ function addRollRow() {
                         <label class="form-label small fw-semibold mb-0">HSN Code</label>
                         <a href="javascript:void(0)" class="text-decoration-none small text-primary fw-semibold" onclick="promptAddHsn(${rollCounter})">+ Add HSN</a>
                     </div>
-                    <select name="rolls[${rollCounter}][hsn]" class="form-select form-select-sm roll-input-hsn" onchange="onRollHsnChange(${rollCounter})">
-                        ${getHsnOptionsHtml()}
-                    </select>
+                    <input type="text" name="rolls[${rollCounter}][hsn]" class="form-control form-control-sm font-monospace roll-input-hsn" data-hsn-autocomplete data-hsn-type="HSN" ${getHsnInputAttributes()} autocomplete="off" onchange="onRollHsnChange(${rollCounter})">
+                    <small class="hsn-rate-note text-muted d-block mt-1"></small>
                 </div>
                 <div class="col-md-2">
                     <label class="form-label small fw-semibold mb-1">Tax Mode</label>
@@ -2101,6 +2200,7 @@ function syncRollsTable() {
 // ==========================================
 function addOtherRow() {
     otherCounter++;
+    document.getElementById('itemsValidationError')?.classList.add('d-none');
     const container = document.getElementById('garmentOtherContainer');
     document.getElementById('noSuppliesPlaceholder').classList.add('d-none');
 
@@ -2157,9 +2257,8 @@ function addOtherRow() {
                         <label class="form-label small fw-semibold mb-0">HSN Code</label>
                         <a href="javascript:void(0)" class="text-decoration-none small text-primary fw-semibold" onclick="promptAddHsn(${otherCounter}, 'other')">+ Add HSN</a>
                     </div>
-                    <select name="garment_other[${otherCounter}][hsn]" class="form-select form-select-sm other-input-hsn" onchange="onOtherHsnChange(${otherCounter})">
-                        ${getHsnOptionsHtml('')}
-                    </select>
+                    <input type="text" name="garment_other[${otherCounter}][hsn]" class="form-control form-control-sm font-monospace other-input-hsn" data-hsn-autocomplete data-hsn-type="HSN" ${getHsnInputAttributes()} autocomplete="off" onchange="onOtherHsnChange(${otherCounter})">
+                    <small class="hsn-rate-note text-muted d-block mt-1"></small>
                 </div>
                 <div class="col-md-2">
                     <label class="form-label small fw-semibold mb-1">Tax Mode</label>
@@ -2189,15 +2288,15 @@ function addOtherRow() {
                         </div>
                         <div class="col-md-4 other-sgst-col" id="otherSgstCol_${otherCounter}">
                             <label class="form-label small fw-semibold mb-1 other-sgst-label">SGST (%)</label>
-                            <input type="number" step="0.01" min="0" name="garment_other[${otherCounter}][sgst]" class="form-control form-control-sm other-input-sgst" value="2.50" placeholder="0" oninput="syncOtherTable()">
+                            <input type="number" step="0.01" min="0" name="garment_other[${otherCounter}][sgst]" class="form-control form-control-sm other-input-sgst" value="" placeholder="0" oninput="syncOtherTable()">
                         </div>
                         <div class="col-md-4 other-cgst-col" id="otherCgstCol_${otherCounter}">
                             <label class="form-label small fw-semibold mb-1 other-cgst-label">CGST (%)</label>
-                            <input type="number" step="0.01" min="0" name="garment_other[${otherCounter}][cgst]" class="form-control form-control-sm other-input-cgst" value="2.50" placeholder="0" oninput="syncOtherTable()">
+                            <input type="number" step="0.01" min="0" name="garment_other[${otherCounter}][cgst]" class="form-control form-control-sm other-input-cgst" value="" placeholder="0" oninput="syncOtherTable()">
                         </div>
                         <div class="col-md-4 d-none other-igst-col" id="otherIgstCol_${otherCounter}">
                             <label class="form-label small fw-semibold mb-1 other-igst-label">IGST (%)</label>
-                            <input type="number" step="0.01" min="0" name="garment_other[${otherCounter}][igst]" class="form-control form-control-sm other-input-igst" value="5.00" placeholder="0" oninput="syncOtherTable()">
+                            <input type="number" step="0.01" min="0" name="garment_other[${otherCounter}][igst]" class="form-control form-control-sm other-input-igst" value="" placeholder="0" oninput="syncOtherTable()">
                         </div>
                     </div>
                 </div>
@@ -2275,6 +2374,7 @@ function syncOtherTable() {
 // ==========================================
 function addFinishedRow() {
     finishedCounter++;
+    document.getElementById('itemsValidationError')?.classList.add('d-none');
     const container = document.getElementById('finishedGoodsContainer');
     document.getElementById('noFinishedPlaceholder').classList.add('d-none');
 
@@ -2319,9 +2419,8 @@ function addFinishedRow() {
                         <label class="form-label small fw-semibold mb-0">HSN Code</label>
                         <a href="javascript:void(0)" class="text-decoration-none small text-primary fw-semibold" onclick="promptAddHsn(${finishedCounter}, 'finished')">+ Add HSN</a>
                     </div>
-                    <select name="finished_goods[${finishedCounter}][hsn]" class="form-select form-select-sm fg-input-hsn" onchange="onFinishedHsnChange(${finishedCounter})">
-                        ${getHsnOptionsHtml('')}
-                    </select>
+                    <input type="text" name="finished_goods[${finishedCounter}][hsn]" class="form-control form-control-sm font-monospace fg-input-hsn" data-hsn-autocomplete data-hsn-type="HSN" ${getHsnInputAttributes()} autocomplete="off" onchange="onFinishedHsnChange(${finishedCounter})">
+                    <small class="hsn-rate-note text-muted d-block mt-1"></small>
                 </div>
                 <div class="col-md-2">
                     <label class="form-label small fw-semibold mb-1">Tax Mode</label>
@@ -2351,15 +2450,15 @@ function addFinishedRow() {
                         </div>
                         <div class="col-md-4 fg-sgst-col" id="fgSgstCol_${finishedCounter}">
                             <label class="form-label small fw-semibold mb-1 fg-sgst-label">SGST (%)</label>
-                            <input type="number" step="0.01" min="0" name="finished_goods[${finishedCounter}][sgst]" class="form-control form-control-sm fg-input-sgst" value="2.50" placeholder="0" oninput="syncFinishedTable()">
+                            <input type="number" step="0.01" min="0" name="finished_goods[${finishedCounter}][sgst]" class="form-control form-control-sm fg-input-sgst" value="" placeholder="0" oninput="syncFinishedTable()">
                         </div>
                         <div class="col-md-4 fg-cgst-col" id="fgCgstCol_${finishedCounter}">
                             <label class="form-label small fw-semibold mb-1 fg-cgst-label">CGST (%)</label>
-                            <input type="number" step="0.01" min="0" name="finished_goods[${finishedCounter}][cgst]" class="form-control form-control-sm fg-input-cgst" value="2.50" placeholder="0" oninput="syncFinishedTable()">
+                            <input type="number" step="0.01" min="0" name="finished_goods[${finishedCounter}][cgst]" class="form-control form-control-sm fg-input-cgst" value="" placeholder="0" oninput="syncFinishedTable()">
                         </div>
                         <div class="col-md-4 d-none fg-igst-col" id="fgIgstCol_${finishedCounter}">
                             <label class="form-label small fw-semibold mb-1 fg-igst-label">IGST (%)</label>
-                            <input type="number" step="0.01" min="0" name="finished_goods[${finishedCounter}][igst]" class="form-control form-control-sm fg-input-igst" value="5.00" placeholder="0" oninput="syncFinishedTable()">
+                            <input type="number" step="0.01" min="0" name="finished_goods[${finishedCounter}][igst]" class="form-control form-control-sm fg-input-igst" value="" placeholder="0" oninput="syncFinishedTable()">
                         </div>
                     </div>
                 </div>
@@ -2592,9 +2691,8 @@ function loadInitialData() {
                                 <label class="form-label small fw-semibold mb-0">HSN Code</label>
                                 <a href="javascript:void(0)" class="text-decoration-none small text-primary fw-semibold" onclick="promptAddHsn(${rollCounter})">+ Add HSN</a>
                             </div>
-                            <select name="rolls[${rollCounter}][hsn]" class="form-select form-select-sm roll-input-hsn" onchange="onRollHsnChange(${rollCounter})">
-                                ${getHsnOptionsHtml(r.hsn_code || '')}
-                            </select>
+                            <input type="text" name="rolls[${rollCounter}][hsn]" class="form-control form-control-sm font-monospace roll-input-hsn" value="${escapeHtml(r.hsn_code || '')}" data-hsn-autocomplete data-hsn-type="HSN" ${getHsnInputAttributes(r.hsn_code || '')} autocomplete="off" onchange="onRollHsnChange(${rollCounter})">
+                            <small class="hsn-rate-note text-muted d-block mt-1"></small>
                         </div>
                         <div class="col-md-2">
                             <label class="form-label small fw-semibold mb-1">Tax Mode</label>
@@ -2648,6 +2746,7 @@ function loadInitialData() {
                 </div>
             `;
             container.appendChild(div);
+            onRollHsnChange(rollCounter);
         });
     }
 
@@ -2658,7 +2757,11 @@ function loadInitialData() {
             if (card) {
                 if (card.querySelector('.other-input-code')) card.querySelector('.other-input-code').value = g.item_code || '';
                 if (card.querySelector('.other-input-name')) card.querySelector('.other-input-name').value = g.item_name || '';
-                if (card.querySelector('.other-input-hsn')) card.querySelector('.other-input-hsn').value = g.hsn_code || '';
+                const hsnInput = card.querySelector('.other-input-hsn');
+                if (hsnInput) {
+                    hsnInput.value = g.hsn_code || '';
+                    setHsnInputMetadata(hsnInput, hsnInput.value);
+                }
                 if (card.querySelector('.other-input-qty')) card.querySelector('.other-input-qty').value = parseFloat(g.qty) || 1;
                 if (card.querySelector('.other-input-unit')) card.querySelector('.other-input-unit').value = g.unit || 'Pieces';
                 if (card.querySelector('.other-input-price')) card.querySelector('.other-input-price').value = parseFloat(g.unit_price) || 0;
@@ -2668,7 +2771,7 @@ function loadInitialData() {
                 if (card.querySelector('.other-input-sgst')) card.querySelector('.other-input-sgst').value = parseFloat(g.sgst) || 0;
                 if (card.querySelector('.other-input-cgst')) card.querySelector('.other-input-cgst').value = parseFloat(g.cgst) || 0;
                 if (card.querySelector('.other-input-igst')) card.querySelector('.other-input-igst').value = parseFloat(g.igst) || 0;
-                onOtherGstTypeChange(otherCounter);
+                onOtherHsnChange(otherCounter);
             }
         });
     }
@@ -2683,7 +2786,11 @@ function loadInitialData() {
                 if (card.querySelector('.fg-input-type')) card.querySelector('.fg-input-type').value = f.product_type || 'Individual Piece';
                 if (card.querySelector('.fg-input-variant')) card.querySelector('.fg-input-variant').value = f.specification || 'M';
                 if (card.querySelector('.fg-input-sku')) card.querySelector('.fg-input-sku').value = f.item_code || '';
-                if (card.querySelector('.fg-input-hsn')) card.querySelector('.fg-input-hsn').value = f.hsn_code || '';
+                const hsnInput = card.querySelector('.fg-input-hsn');
+                if (hsnInput) {
+                    hsnInput.value = f.hsn_code || '';
+                    setHsnInputMetadata(hsnInput, hsnInput.value);
+                }
                 if (card.querySelector('.fg-input-qty')) card.querySelector('.fg-input-qty').value = parseInt(f.qty) || 1;
                 if (card.querySelector('.fg-input-cost')) card.querySelector('.fg-input-cost').value = parseFloat(f.unit_price) || 0;
                 if (card.querySelector('.fg-input-mrp')) card.querySelector('.fg-input-mrp').value = parseFloat(f.mrp) || '';
@@ -2694,7 +2801,7 @@ function loadInitialData() {
                 if (card.querySelector('.fg-input-sgst')) card.querySelector('.fg-input-sgst').value = parseFloat(f.sgst) || 0;
                 if (card.querySelector('.fg-input-cgst')) card.querySelector('.fg-input-cgst').value = parseFloat(f.cgst) || 0;
                 if (card.querySelector('.fg-input-igst')) card.querySelector('.fg-input-igst').value = parseFloat(f.igst) || 0;
-                onFinishedGstTypeChange(finishedCounter);
+                onFinishedHsnChange(finishedCounter);
             }
         });
     }
@@ -2708,13 +2815,91 @@ document.addEventListener('DOMContentLoaded', function() {
     syncOtherTable();
     syncFinishedTable();
 
-    // Form validation check on submit
+    // Keep validation messages beside the fields that need attention.
     const form = document.getElementById('formPurchaseBill');
+    const getFieldLabel = function (input) {
+        const fieldColumn = input.closest('.col, [class*="col-"]');
+        const label = fieldColumn ? fieldColumn.querySelector('label') : null;
+        return (label ? label.textContent : input.name)
+            .replace(/\*/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+    };
+    const showFieldError = function (input) {
+        const anchor = input.closest('.input-group') || input;
+        let feedback = anchor.nextElementSibling;
+        if (!feedback || !feedback.classList.contains('invalid-feedback')) {
+            feedback = document.createElement('div');
+            feedback.className = 'invalid-feedback purchase-field-feedback';
+            anchor.insertAdjacentElement('afterend', feedback);
+        }
+
+        const label = getFieldLabel(input);
+        if (input.validity.valueMissing) {
+            feedback.textContent = `${label} is required.`;
+        } else if (input.validity.rangeUnderflow) {
+            feedback.textContent = `${label} must be at least ${input.min}.`;
+        } else if (input.validity.stepMismatch || input.validity.badInput) {
+            feedback.textContent = `Enter a valid ${label.toLowerCase()}.`;
+        } else if (input.validity.customError) {
+            feedback.textContent = input.validationMessage;
+        } else {
+            feedback.textContent = `Enter a valid ${label.toLowerCase()}.`;
+        }
+
+        input.classList.add('is-invalid');
+        feedback.classList.remove('d-none');
+        feedback.classList.add('d-block');
+    };
+    const clearFieldError = function (input) {
+        input.classList.remove('is-invalid');
+        const anchor = input.closest('.input-group') || input;
+        const feedback = anchor.nextElementSibling;
+        if (feedback && feedback.classList.contains('invalid-feedback')) {
+            feedback.classList.remove('d-block');
+            feedback.classList.add('d-none');
+        }
+    };
+    const attachmentsInput = form.querySelector('input[name="attachments[]"]');
+    const validateAttachments = function () {
+        if (!attachmentsInput) return;
+
+        const allowedExtensions = ['jpg', 'jpeg', 'png', 'webp', 'pdf'];
+        const selectedFiles = Array.from(attachmentsInput.files || []);
+        const invalidType = selectedFiles.some(function (file) {
+            return !allowedExtensions.includes(file.name.split('.').pop().toLowerCase());
+        });
+        const oversizedFile = selectedFiles.some(function (file) {
+            return file.size > 5 * 1024 * 1024;
+        });
+
+        attachmentsInput.setCustomValidity(
+            invalidType
+                ? 'Attachments must be JPG, PNG, WEBP, or PDF files.'
+                : (oversizedFile ? 'Each attachment must be no larger than 5 MB.' : '')
+        );
+    };
+
     form.addEventListener('submit', function (event) {
-        if (!form.checkValidity()) {
+        validateAttachments();
+        const invalidFields = Array.from(form.elements).filter(function (control) {
+            return control.willValidate && !control.checkValidity();
+        });
+        const hasItem = form.querySelector('.roll-card, .other-card, .finished-card');
+        const itemsError = document.getElementById('itemsValidationError');
+
+        invalidFields.forEach(showFieldError);
+
+        if (!hasItem && itemsError) {
+            itemsError.classList.remove('d-none');
+        } else if (itemsError) {
+            itemsError.classList.add('d-none');
+        }
+
+        if (invalidFields.length > 0 || !hasItem) {
             event.preventDefault();
             event.stopPropagation();
-            const firstInvalid = form.querySelector(':invalid');
+            const firstInvalid = invalidFields[0];
             if (firstInvalid) {
                 const pane = firstInvalid.closest('.tab-pane');
                 if (pane && pane.id === 'paneRolls') document.getElementById('tabRollsBtn').click();
@@ -2725,5 +2910,19 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         form.classList.add('was-validated');
     }, false);
+
+    form.addEventListener('input', function (event) {
+        const input = event.target;
+        if (input && typeof input.checkValidity === 'function' && input.checkValidity()) {
+            clearFieldError(input);
+        }
+    });
+    form.addEventListener('change', function (event) {
+        const input = event.target;
+        if (input === attachmentsInput) validateAttachments();
+        if (input && typeof input.checkValidity === 'function' && input.checkValidity()) {
+            clearFieldError(input);
+        }
+    });
 });
 </script>

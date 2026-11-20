@@ -73,8 +73,8 @@ if (!$isEdit) {
                                 <option value="<?= $cat['id'] ?>" 
                                         data-name="<?= htmlspecialchars($cat['name']) ?>"
                                         data-code="<?= htmlspecialchars($cat['code'] ?? '') ?>"
-                                        data-hsn="<?= htmlspecialchars($cat['default_hsn'] ?? '6109') ?>"
-                                        data-gst="<?= htmlspecialchars($cat['default_gst_rate'] ?? '5.00') ?>"
+                                        data-hsn="<?= htmlspecialchars($cat['default_hsn'] ?? '') ?>"
+                                        data-gst="<?= htmlspecialchars((string)($cat['default_gst_rate'] ?? '')) ?>"
                                         <?= $isSel ? 'selected' : '' ?>>
                                     <?= htmlspecialchars($cat['name']) ?>
                                 </option>
@@ -179,7 +179,7 @@ if (!$isEdit) {
                     <div class="alert alert-info py-2 px-3 rounded-3 d-flex align-items-center justify-content-between mb-3 border-0 bg-primary-subtle text-primary flex-wrap gap-2">
                         <div class="d-flex align-items-center gap-2 flex-wrap">
                             <i class="bi bi-info-circle-fill fs-5"></i>
-                            <span>Category Default: <strong id="catHsnDisplay">6109 (5.00% GST)</strong></span>
+                            <span>Category Default: <strong id="catHsnDisplay">No default HSN/SAC</strong></span>
                             <button type="button" class="btn btn-sm btn-primary py-0.5 px-2 ms-2 fw-semibold shadow-xs" id="btnApplyCategoryHsn">
                                 <i class="bi bi-check-lg me-1"></i> Apply Category HSN
                             </button>
@@ -190,55 +190,31 @@ if (!$isEdit) {
                     </div>
 
                     <div class="row g-3">
-                        <!-- Search HSN Code or Commodity -->
-                        <div class="col-md-5 position-relative">
+                        <div class="col-md-8">
                             <div class="d-flex justify-content-between align-items-center mb-1">
-                                <label class="form-label small fw-semibold text-secondary mb-0">Search HSN Code or Commodity</label>
+                                <label class="form-label small fw-semibold text-dark mb-0">HSN Code <span class="text-danger">*</span></label>
                                 <a href="#" class="text-primary text-decoration-none small fw-semibold" data-bs-toggle="modal" data-bs-target="#modalAddHsn">
                                     <i class="bi bi-plus-circle me-1"></i>Add New HSN
                                 </a>
                             </div>
                             <div class="input-group">
-                                <span class="input-group-text bg-white text-muted"><i class="bi bi-search"></i></span>
-                                <input type="text" class="form-control" id="searchHsnInput" placeholder="Type HSN code or description (e.g. 6109, Shirt, Cotton)..." autocomplete="off">
-                                <button class="btn btn-outline-secondary dropdown-toggle" type="button" id="btnToggleHsnDropdown" data-bs-toggle="dropdown" aria-expanded="false"></button>
-                                <ul class="dropdown-menu dropdown-menu-end shadow w-100" id="hsnSearchResults" style="max-height: 220px; overflow-y: auto;">
-                                    <?php foreach ($hsnList as $h): ?>
-                                        <li>
-                                            <a class="dropdown-item d-flex justify-content-between align-items-center hsn-item py-2" href="#" data-hsn="<?= htmlspecialchars($h['hsn_code']) ?>" data-desc="<?= htmlspecialchars($h['description'] ?? '') ?>" data-gst="<?= htmlspecialchars($h['gst_rate']) ?>">
-                                                <div>
-                                                    <strong class="font-monospace text-dark"><?= htmlspecialchars($h['hsn_code']) ?></strong>
-                                                    <div class="small text-muted text-truncate" style="max-width: 260px;"><?= htmlspecialchars($h['description'] ?? '') ?></div>
-                                                </div>
-                                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle"><?= number_format($h['gst_rate'], 2) ?>%</span>
-                                            </a>
-                                        </li>
-                                    <?php endforeach; ?>
-                                </ul>
-                            </div>
-                            <small class="text-muted d-block mt-1" style="font-size: 0.72rem;">Type to live filter HSN codes or click to open dropdown</small>
-                        </div>
-
-                        <!-- HSN Code -->
-                        <div class="col-md-4">
-                            <label class="form-label small fw-semibold text-dark mb-1">HSN Code <span class="text-danger">*</span></label>
-                            <div class="input-group">
-                                <input type="text" name="hsn_code" id="inputHsnCode" class="form-control font-monospace fw-semibold" placeholder="E.G. 6109" value="<?= htmlspecialchars($style['hsn_code'] ?? '6109') ?>" required>
+                                <input type="text" name="hsn_code" id="inputHsnCode" class="form-control font-monospace fw-semibold" placeholder="Type an HSN code or description" value="<?= htmlspecialchars($style['hsn_code'] ?? '') ?>" data-hsn-autocomplete data-hsn-type="HSN" data-hsn-gst-target="#inputGstRate" data-hsn-note-target="#hsnRateNote" autocomplete="off" required>
                                 <button class="btn btn-outline-secondary" type="button" id="btnClearHsn" title="Clear HSN"><i class="bi bi-x-lg"></i></button>
                             </div>
-                            <small class="text-muted d-block mt-1" style="font-size: 0.72rem;">Harmonized System of Nomenclature code for tax invoices</small>
+                            <small class="text-muted d-block mt-1" style="font-size: 0.72rem;">Search and select a textile classification from the shared HSN master.</small>
                             <div class="invalid-feedback">HSN code is required.</div>
                         </div>
 
                         <!-- GST Rate -->
-                        <div class="col-md-3">
+                        <div class="col-md-4">
                             <label class="form-label small fw-semibold text-dark mb-1">Default GST Rate (%) <span class="text-danger">*</span></label>
                             <div class="input-group">
-                                <input type="number" step="0.01" min="0" max="100" name="gst_rate" id="inputGstRate" class="form-control fw-semibold" placeholder="5.00" value="<?= htmlspecialchars($style['gst_rate'] ?? '5.00') ?>" required>
+                                <input type="number" step="0.01" min="0" max="100" name="gst_rate" id="inputGstRate" class="form-control fw-semibold" placeholder="Enter applicable rate" value="<?= htmlspecialchars($style['gst_rate'] ?? '') ?>" required>
                                 <span class="input-group-text bg-white text-muted">%</span>
                             </div>
-                            <small class="text-muted d-block mt-1" style="font-size: 0.72rem;">Standard 5% / 12% GST</small>
+                            <small class="text-muted d-block mt-1" style="font-size: 0.72rem;">Confirm any rate conditions shown for the selected HSN.</small>
                             <div class="invalid-feedback">Valid GST rate is required.</div>
+                            <small class="text-muted d-block mt-1" id="hsnRateNote"></small>
                         </div>
                     </div>
                 </div>
@@ -340,11 +316,11 @@ if (!$isEdit) {
                 <div class="row g-2">
                     <div class="col-md-6">
                         <label class="form-label small fw-semibold">Default HSN</label>
-                        <input type="text" name="default_hsn" class="form-control font-monospace" value="6109">
+                        <input type="text" name="default_hsn" class="form-control font-monospace" placeholder="Search HSN" data-hsn-autocomplete data-hsn-type="HSN" autocomplete="off">
                     </div>
                     <div class="col-md-6">
                         <label class="form-label small fw-semibold">Default GST (%)</label>
-                        <input type="number" step="0.01" name="default_gst_rate" class="form-control" value="5.00">
+                        <input type="number" step="0.01" min="0" max="100" name="default_gst_rate" class="form-control" placeholder="Optional">
                     </div>
                 </div>
             </div>
@@ -429,15 +405,19 @@ if (!$isEdit) {
             <div class="modal-body p-3">
                 <div class="mb-3">
                     <label class="form-label small fw-semibold">HSN Code *</label>
-                    <input type="text" name="hsn_code" class="form-control font-monospace" placeholder="e.g. 6109" required>
+                    <input type="text" name="hsn_code" class="form-control font-monospace" placeholder="e.g. 6109" data-hsn-autocomplete data-hsn-type="HSN" autocomplete="off" required>
                 </div>
                 <div class="mb-3">
                     <label class="form-label small fw-semibold">Commodity Description</label>
                     <input type="text" name="description" class="form-control" placeholder="e.g. Cotton T-shirts, knitted garments">
                 </div>
                 <div class="mb-3">
-                    <label class="form-label small fw-semibold">Default GST Rate (%) *</label>
-                    <input type="number" step="0.01" name="gst_rate" class="form-control" value="5.00" required>
+                    <label class="form-label small fw-semibold">GST Rate (%) (Optional)</label>
+                    <input type="number" step="0.01" min="0" max="100" name="gst_rate" class="form-control" placeholder="Leave blank if conditional">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">GST Rate Conditions / Notes</label>
+                    <input type="text" name="rate_note" class="form-control" maxlength="500" placeholder="e.g. Verify based on product composition and value">
                 </div>
             </div>
             <div class="modal-footer bg-light py-2">
@@ -543,11 +523,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const inputGstRate = document.getElementById('inputGstRate');
     const btnClearHsn = document.getElementById('btnClearHsn');
 
-    const searchHsnInput = document.getElementById('searchHsnInput');
-    const hsnSearchResults = document.getElementById('hsnSearchResults');
+    const hsnRateNote = document.getElementById('hsnRateNote');
 
-    let currentCatDefaultHsn = '6109';
-    let currentCatDefaultGst = '5.00';
+    let currentCatDefaultHsn = '';
+    let currentCatDefaultGst = '';
 
     // Helper: update Hierarchy Path & Whole Code
     function updateHierarchyAndCodes() {
@@ -595,9 +574,11 @@ document.addEventListener('DOMContentLoaded', function() {
         const code = opt.getAttribute('data-code') || opt.text.trim().substring(0, 1);
         mainCodeInput.value = code.toUpperCase();
 
-        currentCatDefaultHsn = opt.getAttribute('data-hsn') || '6109';
-        currentCatDefaultGst = opt.getAttribute('data-gst') || '5.00';
-        catHsnDisplay.textContent = `${currentCatDefaultHsn} (${parseFloat(currentCatDefaultGst).toFixed(2)}% GST)`;
+        currentCatDefaultHsn = opt.getAttribute('data-hsn') || '';
+        currentCatDefaultGst = opt.getAttribute('data-gst') || '';
+        catHsnDisplay.textContent = currentCatDefaultHsn
+            ? `${currentCatDefaultHsn} (${currentCatDefaultGst ? `${parseFloat(currentCatDefaultGst).toFixed(2)}% GST` : 'verify GST rate'})`
+            : 'No default HSN/SAC';
 
         // Load Subcategories via AJAX
         subCatSelect.innerHTML = '<option value="">Loading subcategories...</option>';
@@ -688,7 +669,8 @@ document.addEventListener('DOMContentLoaded', function() {
     // Apply Category HSN button
     btnApplyCategoryHsn.addEventListener('click', function() {
         inputHsnCode.value = currentCatDefaultHsn;
-        inputGstRate.value = parseFloat(currentCatDefaultGst).toFixed(2);
+        inputGstRate.value = currentCatDefaultGst === '' ? '' : parseFloat(currentCatDefaultGst).toFixed(2);
+        hsnRateNote.textContent = currentCatDefaultGst === '' ? 'Verify the applicable GST rate for this classification.' : '';
         btnApplyCategoryHsn.innerHTML = '<i class="bi bi-check2-all me-1"></i> Applied!';
         setTimeout(() => {
             btnApplyCategoryHsn.innerHTML = '<i class="bi bi-check-lg me-1"></i> Apply Category HSN';
@@ -698,53 +680,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // Clear HSN
     btnClearHsn.addEventListener('click', function() {
         inputHsnCode.value = '';
+        inputGstRate.value = '';
+        hsnRateNote.textContent = '';
         inputHsnCode.focus();
     });
-
-    // Search HSN Autocomplete
-    searchHsnInput.addEventListener('input', function() {
-        const q = this.value.trim();
-        fetch('<?= \App\Core\Controller::url('/api/hsn/search?q=') ?>' + encodeURIComponent(q))
-            .then(r => r.json())
-            .then(res => {
-                if (res.success && res.data.length > 0) {
-                    let html = '';
-                    res.data.forEach(h => {
-                        html += `
-                            <li>
-                                <a class="dropdown-item d-flex justify-content-between align-items-center hsn-item py-2" href="#" data-hsn="${h.hsn_code}" data-desc="${h.description || ''}" data-gst="${h.gst_rate}">
-                                    <div>
-                                        <strong class="font-monospace text-dark">${h.hsn_code}</strong>
-                                        <div class="small text-muted text-truncate" style="max-width: 260px;">${h.description || ''}</div>
-                                    </div>
-                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle">${parseFloat(h.gst_rate).toFixed(2)}%</span>
-                                </a>
-                            </li>
-                        `;
-                    });
-                    hsnSearchResults.innerHTML = html;
-                    bindHsnItems();
-                    const dropdown = bootstrap.Dropdown.getOrCreateInstance(document.getElementById('btnToggleHsnDropdown'));
-                    dropdown.show();
-                }
-            });
-    });
-
-    function bindHsnItems() {
-        document.querySelectorAll('.hsn-item').forEach(item => {
-            item.addEventListener('click', function(e) {
-                e.preventDefault();
-                const hsn = this.getAttribute('data-hsn');
-                const gst = this.getAttribute('data-gst');
-                inputHsnCode.value = hsn;
-                inputGstRate.value = parseFloat(gst).toFixed(2);
-                searchHsnInput.value = `${hsn} - ${this.getAttribute('data-desc') || ''}`;
-                const dropdown = bootstrap.Dropdown.getInstance(document.getElementById('btnToggleHsnDropdown'));
-                if (dropdown) dropdown.hide();
-            });
-        });
-    }
-    bindHsnItems();
 
     // ========================================================
     // SIZE CHIPS LOGIC
@@ -1004,18 +943,24 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('formQuickAddHsn').addEventListener('submit', function(e) {
         e.preventDefault();
         const fd = new FormData(this);
+        fd.set('code_type', 'HSN');
         fetch('<?= \App\Core\Controller::url('/api/hsn/quick-add') ?>', { method: 'POST', body: fd })
-            .then(r => r.json())
+            .then(r => {
+                if (!r.ok) throw new Error('Unable to save HSN code.');
+                return r.json();
+            })
             .then(res => {
                 if (res.success) {
                     inputHsnCode.value = res.hsn_code;
-                    inputGstRate.value = parseFloat(res.gst_rate).toFixed(2);
+                    inputGstRate.value = res.gst_rate === null ? '' : parseFloat(res.gst_rate).toFixed(2);
+                    hsnRateNote.textContent = res.rate_note || (res.gst_rate === null ? 'This classification needs a manually verified GST rate.' : '');
                     bootstrap.Modal.getInstance(document.getElementById('modalAddHsn')).hide();
                     this.reset();
                 } else {
-                    alert(res.message || 'Failed to add HSN');
+                    throw new Error(res.message || 'Failed to add HSN');
                 }
-            });
+            })
+            .catch(error => alert(error.message || 'Failed to add HSN'));
     });
 
     // ========================================================

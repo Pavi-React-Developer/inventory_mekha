@@ -222,7 +222,7 @@
                                         </td>
                                         <td>
                                             <div class="fw-semibold text-dark font-monospace">₹<?= number_format((float)$it['total_price'] + (float)$it['tax_amount'], 2) ?></div>
-                                            <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle" style="font-size: 0.7rem;">HSN <?= htmlspecialchars($it['hsn_code'] ?: '6109') ?></span>
+                                            <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle" style="font-size: 0.7rem;">HSN <?= htmlspecialchars($it['hsn_code'] ?: 'Not set') ?></span>
                                         </td>
                                         <td>
                                             <?php if ($it['is_mapped']): ?>
@@ -307,11 +307,11 @@
                                         <li class="list-group-item d-flex justify-content-between align-items-center py-2.5">
                                             <div>
                                                 <strong class="text-dark"><?= htmlspecialchars($c['name']) ?></strong>
-                                                <div class="small text-muted font-monospace">Code: [<?= htmlspecialchars($c['code'] ?: 'CAT') ?>] &bull; HSN <?= htmlspecialchars($c['default_hsn'] ?: '6109') ?></div>
+                                                <div class="small text-muted font-monospace">Code: [<?= htmlspecialchars($c['code'] ?: 'CAT') ?>] &bull; HSN <?= htmlspecialchars($c['default_hsn'] ?: 'Not set') ?></div>
                                             </div>
                                             <div class="d-flex align-items-center gap-2">
                                                 <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace">
-                                                    <?= number_format((float)($c['default_gst_rate'] ?? 5.00), 2) ?>% GST
+                                                    <?= $c['default_gst_rate'] === null ? 'Rate not set' : number_format((float)$c['default_gst_rate'], 2) . '% GST' ?>
                                                 </span>
                                                 <button type="button" class="btn btn-outline-danger btn-sm py-0.5 px-1.5 border-0 shadow-none" title="Delete Main Category" onclick="confirmDeleteHierarchy('category', <?= $c['id'] ?>, '<?= htmlspecialchars(addslashes($c['name'])) ?>')">
                                                     <i class="bi bi-trash fs-6"></i>
@@ -454,6 +454,80 @@
                     </div>
                 </div>
 
+                <!-- 5. HSN MASTER -->
+                <div class="col-12">
+                    <div class="card border-0 shadow-sm rounded-3">
+                        <div class="card-header bg-white py-3 border-bottom d-flex flex-wrap justify-content-between align-items-center gap-2">
+                            <div>
+                                <h6 class="mb-0 fw-bold text-dark"><i class="bi bi-upc-scan text-primary me-1.5"></i> HSN Master</h6>
+                                <small class="text-muted" style="font-size: 0.75rem;">Active goods HSN codes available for catalog mapping, with configured GST rates and conditions</small>
+                            </div>
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace" id="catalogHsnCount">
+                                    <?= count($hsnCodes) ?> HSN Codes
+                                </span>
+                                <div class="input-group input-group-sm" style="width: min(100%, 300px);">
+                                    <span class="input-group-text bg-light"><i class="bi bi-search text-muted"></i></span>
+                                    <input type="search" class="form-control" id="catalogHsnSearch" placeholder="Search HSN, description, or category" aria-label="Search HSN master">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card-body p-0">
+                            <?php if (empty($hsnCodes)): ?>
+                                <div class="text-center text-muted py-4">
+                                    <i class="bi bi-upc fs-2 text-secondary d-block mb-2"></i>
+                                    <p class="small mb-0">No active HSN codes are available for this concern.</p>
+                                </div>
+                            <?php else: ?>
+                                <div class="table-responsive" style="max-height: 480px;">
+                                    <table class="table table-sm table-hover align-middle mb-0">
+                                        <thead class="table-light position-sticky top-0" style="z-index: 1;">
+                                            <tr>
+                                                <th class="ps-3 text-nowrap">HSN Code</th>
+                                                <th>Description</th>
+                                                <th>Category</th>
+                                                <th class="text-nowrap">GST Rate</th>
+                                                <th>Rate Conditions</th>
+                                                <th class="pe-3 text-nowrap">Scope</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="catalogHsnTableBody">
+                                            <?php foreach ($hsnCodes as $hsn): ?>
+                                                <tr class="catalog-hsn-row" data-search="<?= htmlspecialchars(strtolower(implode(' ', [
+                                                    $hsn['hsn_code'] ?? '',
+                                                    $hsn['description'] ?? '',
+                                                    $hsn['category'] ?? '',
+                                                    $hsn['rate_note'] ?? '',
+                                                    $hsn['concern_name'] ?? '',
+                                                ])), ENT_QUOTES, 'UTF-8') ?>">
+                                                    <td class="ps-3">
+                                                        <span class="font-monospace fw-semibold text-primary"><?= htmlspecialchars($hsn['hsn_code']) ?></span>
+                                                    </td>
+                                                    <td><?= htmlspecialchars($hsn['description'] ?: '—') ?></td>
+                                                    <td><span class="badge bg-light text-dark border"><?= htmlspecialchars($hsn['category'] ?: 'Uncategorized') ?></span></td>
+                                                    <td class="text-nowrap">
+                                                        <?php if ($hsn['gst_rate'] !== null && $hsn['gst_rate'] !== ''): ?>
+                                                            <span class="fw-semibold"><?= number_format((float) $hsn['gst_rate'], 2) ?>%</span>
+                                                        <?php else: ?>
+                                                            <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle">Verify rate</span>
+                                                        <?php endif; ?>
+                                                    </td>
+                                                    <td><small class="text-muted"><?= htmlspecialchars($hsn['rate_note'] ?: '—') ?></small></td>
+                                                    <td class="pe-3"><small class="text-muted"><?= htmlspecialchars($hsn['concern_name']) ?></small></td>
+                                                </tr>
+                                            <?php endforeach; ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="d-none text-center text-muted small py-4" id="catalogHsnNoResults">No HSN codes match your search.</div>
+                                <div class="border-top px-3 py-2 text-muted small" id="catalogHsnVisibleCount" aria-live="polite">
+                                    Showing <?= count($hsnCodes) ?> of <?= count($hsnCodes) ?> active HSN codes
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                </div>
+
             </div>
 
         </div>
@@ -484,11 +558,11 @@
                     </div>
                     <div class="col-md-4">
                         <label class="form-label small fw-semibold">Default HSN</label>
-                        <input type="text" name="default_hsn" class="form-control font-monospace" placeholder="e.g. 6109">
+                        <input type="text" name="default_hsn" class="form-control font-monospace" placeholder="Search HSN" data-hsn-autocomplete data-hsn-type="HSN" autocomplete="off">
                     </div>
                     <div class="col-md-4">
                         <label class="form-label small fw-semibold">GST Rate (%)</label>
-                        <input type="number" step="0.01" name="default_gst_rate" class="form-control font-monospace" placeholder="e.g. 5.00">
+                        <input type="number" step="0.01" min="0" max="100" name="default_gst_rate" class="form-control font-monospace" placeholder="Optional">
                     </div>
                 </div>
             </div>
@@ -743,6 +817,26 @@ function loadSubcatsForModal(catId) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+    const hsnSearch = document.getElementById('catalogHsnSearch');
+    const hsnRows = Array.from(document.querySelectorAll('.catalog-hsn-row'));
+    const hsnNoResults = document.getElementById('catalogHsnNoResults');
+    const hsnVisibleCount = document.getElementById('catalogHsnVisibleCount');
+    if (hsnSearch) {
+        hsnSearch.addEventListener('input', function() {
+            const query = hsnSearch.value.trim().toLowerCase();
+            let visibleCount = 0;
+            hsnRows.forEach(function(row) {
+                const matches = (row.dataset.search || '').includes(query);
+                row.classList.toggle('d-none', !matches);
+                if (matches) visibleCount++;
+            });
+            if (hsnNoResults) hsnNoResults.classList.toggle('d-none', visibleCount > 0);
+            if (hsnVisibleCount) {
+                hsnVisibleCount.textContent = `Showing ${visibleCount} of ${hsnRows.length} active HSN codes`;
+            }
+        });
+    }
+
     const modalSubSub = document.getElementById('modalAddSubSubcategory');
     if (modalSubSub) {
         modalSubSub.addEventListener('show.bs.modal', function() {

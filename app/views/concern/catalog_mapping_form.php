@@ -188,8 +188,8 @@
                                 <td><span class="badge bg-light text-dark border"><?= htmlspecialchars($item['unit'] ?: 'Pieces') ?></span></td>
                                 <td class="fw-bold font-monospace text-dark">₹<?= number_format((float)$item['unit_price'], 2) ?></td>
                                 <td><span class="badge bg-light text-secondary border"><?= htmlspecialchars($item['tax_mode'] ?: 'Exclude GST') ?></span></td>
-                                <td class="font-monospace fw-semibold"><?= htmlspecialchars($item['hsn_code'] ?: '6109') ?></td>
-                                <td class="font-monospace text-secondary"><?= number_format((float)($item['gst_rate'] ?? 5.00), 2) ?>% GST</td>
+                                <td class="font-monospace fw-semibold"><?= htmlspecialchars($item['hsn_code'] ?: 'Not set') ?></td>
+                                <td class="font-monospace text-secondary"><?= $item['gst_rate'] === null ? 'Verify rate' : number_format((float)$item['gst_rate'], 2) . '% GST' ?></td>
                                 <td class="font-monospace text-muted">₹<?= number_format((float)($item['tax_amount'] ?? 0), 2) ?></td>
                                 <td class="table-success fw-bold text-success font-monospace fs-6">₹<?= number_format((float)($item['total_price'] ?? 0) + (float)($item['tax_amount'] ?? 0), 2) ?></td>
                             </tr>
@@ -277,7 +277,7 @@
                                             <select name="category_id" id="selectMainCategory" class="form-select form-select-sm" required onchange="handleMainCategoryChange(this.value)">
                                                 <option value="">-- Select Category --</option>
                                                 <?php foreach ($categories as $cat): ?>
-                                                    <option value="<?= $cat['id'] ?>" data-code="<?= htmlspecialchars($cat['code'] ?? '') ?>" data-hsn="<?= htmlspecialchars($cat['default_hsn'] ?? '6109') ?>" data-gst="<?= (float)($cat['default_gst_rate'] ?? 5.00) ?>" <?= (!empty($item['mapped_cat_id']) && $item['mapped_cat_id'] == $cat['id']) ? 'selected' : '' ?>>
+                                                    <option value="<?= $cat['id'] ?>" data-code="<?= htmlspecialchars($cat['code'] ?? '') ?>" data-hsn="<?= htmlspecialchars($cat['default_hsn'] ?? '') ?>" data-gst="<?= htmlspecialchars((string)($cat['default_gst_rate'] ?? '')) ?>" <?= (!empty($item['mapped_cat_id']) && $item['mapped_cat_id'] == $cat['id']) ? 'selected' : '' ?>>
                                                         <?= htmlspecialchars($cat['name']) ?>
                                                     </option>
                                                 <?php endforeach; ?>
@@ -355,8 +355,7 @@
                     </div>
 
                     <!-- Hidden HSN and GST Inputs -->
-                    <input type="hidden" name="hsn_code" id="inputHsnCode" value="<?= htmlspecialchars($item['hsn_code'] ?: '6109') ?>">
-                    <input type="hidden" name="gst_rate" id="inputGstRate" value="<?= number_format((float)($item['gst_rate'] ?? 5.00), 2, '.', '') ?>">
+                    <input type="hidden" name="hsn_code" id="inputHsnCode" value="<?= htmlspecialchars($item['hsn_code'] ?? '') ?>">
                     <input type="hidden" name="tax_mode" value="<?= htmlspecialchars($item['tax_mode'] ?: 'Exclude GST') ?>">
                     <input type="hidden" name="gst_type" value="<?= htmlspecialchars($item['gst_type'] ?: 'Both (CGST & SGST)') ?>">
 
@@ -599,7 +598,12 @@
                     </div>
                     <div class="col-6 col-md-2">
                         <label class="form-label small text-muted mb-1 font-monospace" style="font-size: 0.72rem;"><i class="bi bi-file-earmark-spreadsheet text-primary me-1"></i>HSN CODE</label>
-                        <input type="text" id="quickHsnInput" class="form-control form-control-sm font-monospace" placeholder="HSN..." value="<?= htmlspecialchars($item['hsn_code'] ?? '') ?>">
+                        <input type="text" id="quickHsnInput" class="form-control form-control-sm font-monospace" placeholder="HSN..." value="<?= htmlspecialchars($item['hsn_code'] ?? '') ?>" data-hsn-autocomplete data-hsn-type="HSN" data-hsn-value-target="#inputHsnCode" data-hsn-gst-target="#inputGstRate" data-hsn-note-target="#hsnRateNote" autocomplete="off">
+                        <small class="text-muted d-block mt-1" id="hsnRateNote"></small>
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <label class="form-label small text-muted mb-1 font-monospace" style="font-size: 0.72rem;"><i class="bi bi-percent text-primary me-1"></i>GST RATE (%)</label>
+                        <input type="number" step="0.01" min="0" max="100" name="gst_rate" id="inputGstRate" class="form-control form-control-sm font-monospace" placeholder="Verify rate" value="<?= htmlspecialchars((string)($item['gst_rate'] ?? '')) ?>" required>
                     </div>
                     <div class="col-6 col-md-2">
                         <label class="form-label small text-muted mb-1 font-monospace" style="font-size: 0.72rem;"><i class="bi bi-tag-fill text-primary me-1"></i>MRP (₹)</label>
@@ -700,11 +704,11 @@
                     </div>
                     <div class="col-md-4">
                         <label class="form-label small fw-semibold">Default HSN</label>
-                        <input type="text" name="default_hsn" class="form-control font-monospace" placeholder="e.g. 6109">
+                        <input type="text" name="default_hsn" class="form-control font-monospace" placeholder="Search HSN" data-hsn-autocomplete data-hsn-type="HSN" autocomplete="off">
                     </div>
                     <div class="col-md-4">
                         <label class="form-label small fw-semibold">GST Rate (%)</label>
-                        <input type="number" step="0.01" name="default_gst_rate" class="form-control font-monospace" placeholder="e.g. 5.00">
+                        <input type="number" step="0.01" min="0" max="100" name="default_gst_rate" class="form-control font-monospace" placeholder="Optional">
                     </div>
                 </div>
             </div>
@@ -801,8 +805,8 @@
 </div>
 
 <script>
-let currentCategoryDefaultHsn = '6109';
-let currentCategoryDefaultGst = 5.00;
+let currentCategoryDefaultHsn = '';
+let currentCategoryDefaultGst = null;
 const supplierUnitCost = <?= (float)($item['unit_price'] ?? 0) ?>;
 const purchasedBatchQty = <?= (float)($item['qty'] ?? 0) ?>;
 
@@ -853,15 +857,15 @@ function handleMainCategoryChange(catId, preselectSubId = null, preselectSubSubI
     const code = selectedOption ? (selectedOption.dataset.code || '') : '';
     document.getElementById('inputMainCatCode').value = code;
 
-    currentCategoryDefaultHsn = (selectedOption && selectedOption.dataset.hsn) || '6109';
-    currentCategoryDefaultGst = parseFloat((selectedOption && selectedOption.dataset.gst) || 5.00);
+    currentCategoryDefaultHsn = (selectedOption && selectedOption.dataset.hsn) || '';
+    currentCategoryDefaultGst = selectedOption && selectedOption.dataset.gst !== '' ? parseFloat(selectedOption.dataset.gst) : null;
     const catHsnText = document.getElementById('categoryDefaultHsnText');
     if (catHsnText) {
         catHsnText.textContent = currentCategoryDefaultHsn;
     }
     const catGstText = document.getElementById('categoryDefaultGstText');
     if (catGstText) {
-        catGstText.textContent = currentCategoryDefaultGst.toFixed(2) + '%';
+        catGstText.textContent = currentCategoryDefaultGst === null ? 'Verify rate' : currentCategoryDefaultGst.toFixed(2) + '%';
     }
 
     updateHierarchyPath();
@@ -997,7 +1001,9 @@ function updateWholeCode() {
 
 function applyCategoryHsn() {
     document.getElementById('inputHsnCode').value = currentCategoryDefaultHsn;
-    document.getElementById('inputGstRate').value = currentCategoryDefaultGst.toFixed(2);
+    document.getElementById('quickHsnInput').value = currentCategoryDefaultHsn;
+    document.getElementById('inputGstRate').value = currentCategoryDefaultGst === null ? '' : currentCategoryDefaultGst.toFixed(2);
+    document.getElementById('hsnRateNote').textContent = currentCategoryDefaultGst === null ? 'Verify the applicable GST rate for this classification.' : '';
     renderVariantsTable();
 }
 
@@ -1307,7 +1313,7 @@ function renderVariantsTable() {
 
     const styleCode = (document.getElementById('inputStyleCode')?.value || 'GRM-STY-0001').trim();
     const styleName = (document.getElementById('inputStyleName')?.value || 'Product Style').trim();
-    const defaultHsn = (document.getElementById('quickHsnInput')?.value || document.getElementById('inputHsnCode')?.value || '6109').trim();
+    const defaultHsn = (document.getElementById('quickHsnInput')?.value || document.getElementById('inputHsnCode')?.value || '').trim();
 
     // Category hierarchy QR Key & Path
     const catSelect = document.getElementById('selectMainCategory');
@@ -1440,7 +1446,7 @@ function renderVariantsTable() {
                     <input type="number" step="0.001" min="0" name="variant_weights[${escapeHtml(combo.key)}]" class="form-control form-control-sm font-monospace text-center variant-weight-input" value="${escapeHtml(String(varWeight))}" placeholder="0.000">
                 </td>
                 <td>
-                    <input type="text" name="variant_hsns[${escapeHtml(combo.key)}]" class="form-control form-control-sm font-monospace text-center variant-hsn-input" value="${escapeHtml(varHsn)}" required>
+                    <input type="text" name="variant_hsns[${escapeHtml(combo.key)}]" class="form-control form-control-sm font-monospace text-center variant-hsn-input" value="${escapeHtml(varHsn)}" data-hsn-autocomplete data-hsn-type="HSN" autocomplete="off" required>
                 </td>
                 <td class="text-end font-monospace text-dark">
                     ₹${supplierUnitCost.toFixed(2)}
@@ -1763,8 +1769,8 @@ function handleQuickCategorySubmit(e, formId, modalId, tier) {
                 opt.value = item.id;
                 opt.textContent = item.name;
                 opt.dataset.code = item.code || '';
-                opt.dataset.hsn = item.default_hsn || '6109';
-                opt.dataset.gst = item.default_gst_rate || 5.00;
+                opt.dataset.hsn = item.default_hsn || '';
+                opt.dataset.gst = item.default_gst_rate ?? '';
                 select.appendChild(opt);
                 select.value = item.id;
 

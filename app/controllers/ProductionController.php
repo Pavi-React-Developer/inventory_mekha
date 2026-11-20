@@ -67,8 +67,9 @@ class ProductionController extends Controller {
                 DB::query('ALTER TABLE `catalogs` ADD COLUMN hsn_code VARCHAR(50) NULL AFTER hierarchy_path');
             }
             if (!in_array('gst_rate', $catlgCols)) {
-                DB::query('ALTER TABLE `catalogs` ADD COLUMN gst_rate DECIMAL(5,2) NOT NULL DEFAULT 5.00 AFTER hsn_code');
+                DB::query('ALTER TABLE `catalogs` ADD COLUMN gst_rate DECIMAL(5,2) NULL DEFAULT NULL AFTER hsn_code');
             }
+            DB::query('ALTER TABLE `catalogs` MODIFY COLUMN gst_rate DECIMAL(5,2) NULL DEFAULT NULL');
             if (!in_array('sizes', $catlgCols)) {
                 DB::query('ALTER TABLE `catalogs` ADD COLUMN sizes TEXT NULL AFTER gst_rate');
             }
@@ -85,8 +86,9 @@ class ProductionController extends Controller {
                 DB::query('ALTER TABLE `categories` ADD COLUMN default_hsn VARCHAR(50) NULL AFTER code');
             }
             if (!in_array('default_gst_rate', $catCols)) {
-                DB::query('ALTER TABLE `categories` ADD COLUMN default_gst_rate DECIMAL(5,2) NOT NULL DEFAULT 5.00 AFTER default_hsn');
+                DB::query('ALTER TABLE `categories` ADD COLUMN default_gst_rate DECIMAL(5,2) NULL DEFAULT NULL AFTER default_hsn');
             }
+            DB::query('ALTER TABLE `categories` MODIFY COLUMN default_gst_rate DECIMAL(5,2) NULL DEFAULT NULL');
 
             // 4. Ensure subcategories columns
             $subCols = array_column(DB::fetchAll('DESCRIBE `subcategories`'), 'Field');
@@ -265,10 +267,10 @@ class ProductionController extends Controller {
 
         if ($cid) {
             $categories = DB::fetchAll("SELECT * FROM categories WHERE (concern_id = ? OR concern_id = 1 OR concern_id IS NULL) AND status = 'active' ORDER BY name ASC", [$cid]);
-            $hsnList = DB::fetchAll("SELECT * FROM hsn_masters WHERE (concern_id = ? OR concern_id IS NULL) ORDER BY hsn_code ASC", [$cid]);
+            $hsnList = DB::fetchAll("SELECT * FROM hsn_masters WHERE is_active = 1 AND code_type = 'HSN' AND (concern_id = ? OR concern_id IS NULL) ORDER BY hsn_code ASC", [$cid]);
         } else {
             $categories = DB::fetchAll("SELECT * FROM categories WHERE status = 'active' ORDER BY name ASC");
-            $hsnList = DB::fetchAll("SELECT * FROM hsn_masters ORDER BY hsn_code ASC");
+            $hsnList = DB::fetchAll("SELECT * FROM hsn_masters WHERE is_active = 1 AND code_type = 'HSN' ORDER BY hsn_code ASC");
         }
         $attributeSizes = DB::fetchAll("SELECT DISTINCT attribute_value FROM product_attributes WHERE attribute_type = 'size' AND (concern_id = ? OR concern_id = 1 OR concern_id IS NULL) ORDER BY sort_order ASC, id ASC", [$cid ?: 1]);
 
@@ -312,12 +314,12 @@ class ProductionController extends Controller {
 
         if ($cid) {
             $categories = DB::fetchAll("SELECT * FROM categories WHERE (concern_id = ? OR concern_id = 1 OR concern_id IS NULL) AND status = 'active' ORDER BY name ASC", [$cid]);
-            $hsnList = DB::fetchAll("SELECT * FROM hsn_masters WHERE (concern_id = ? OR concern_id IS NULL) ORDER BY hsn_code ASC", [$cid]);
+            $hsnList = DB::fetchAll("SELECT * FROM hsn_masters WHERE is_active = 1 AND code_type = 'HSN' AND (concern_id = ? OR concern_id IS NULL) ORDER BY hsn_code ASC", [$cid]);
             $subcategories = $style['category_id'] ? DB::fetchAll("SELECT * FROM subcategories WHERE category_id = ? AND (concern_id = ? OR concern_id = 1 OR concern_id IS NULL) ORDER BY name ASC", [$style['category_id'], $cid]) : [];
             $subSubcategories = $style['subcategory_id'] ? DB::fetchAll("SELECT * FROM sub_subcategories WHERE subcategory_id = ? AND (concern_id = ? OR concern_id = 1 OR concern_id IS NULL) ORDER BY name ASC", [$style['subcategory_id'], $cid]) : [];
         } else {
             $categories = DB::fetchAll("SELECT * FROM categories WHERE status = 'active' ORDER BY name ASC");
-            $hsnList = DB::fetchAll("SELECT * FROM hsn_masters ORDER BY hsn_code ASC");
+            $hsnList = DB::fetchAll("SELECT * FROM hsn_masters WHERE is_active = 1 AND code_type = 'HSN' ORDER BY hsn_code ASC");
             $subcategories = $style['category_id'] ? DB::fetchAll("SELECT * FROM subcategories WHERE category_id = ? ORDER BY name ASC", [$style['category_id']]) : [];
             $subSubcategories = $style['subcategory_id'] ? DB::fetchAll("SELECT * FROM sub_subcategories WHERE subcategory_id = ? ORDER BY name ASC", [$style['subcategory_id']]) : [];
         }
@@ -384,17 +386,18 @@ class ProductionController extends Controller {
 
         // 2. Validate HSN & GST Tax Classification
         $hsnCode = trim($_POST['hsn_code'] ?? '');
-        $gstRate = isset($_POST['gst_rate']) ? (float)$_POST['gst_rate'] : 5.00;
+        $gstRateInput = trim((string)($_POST['gst_rate'] ?? ''));
 
-        if (empty($hsnCode)) {
-            $this->flash('error', 'HSN Code is required.');
+        if (!preg_match('/^\d{4}(?:\d{2}){0,2}$/', $hsnCode)) {
+            $this->flash('error', 'Enter a valid 4-, 6-, or 8-digit HSN code.');
             $this->redirect('/production/catalog/create');
         }
 
-        if ($gstRate < 0 || $gstRate > 100) {
+        if ($gstRateInput === '' || !is_numeric($gstRateInput) || (float)$gstRateInput < 0 || (float)$gstRateInput > 100) {
             $this->flash('error', 'GST Rate must be between 0.00% and 100.00%.');
             $this->redirect('/production/catalog/create');
         }
+        $gstRate = (float)$gstRateInput;
 
         // 3. Validate Product Attributes (Sizes)
         $sizes = $_POST['sizes'] ?? [];
@@ -568,12 +571,17 @@ class ProductionController extends Controller {
         }
 
         $hsnCode = trim($_POST['hsn_code'] ?? '');
-        $gstRate = isset($_POST['gst_rate']) ? (float)$_POST['gst_rate'] : 5.00;
+        $gstRateInput = trim((string)($_POST['gst_rate'] ?? ''));
 
-        if (empty($hsnCode)) {
-            $this->flash('error', 'HSN Code is required.');
+        if (!preg_match('/^\d{4}(?:\d{2}){0,2}$/', $hsnCode)) {
+            $this->flash('error', 'Enter a valid 4-, 6-, or 8-digit HSN code.');
             $this->redirect('/production/catalog/edit?id=' . $id);
         }
+        if ($gstRateInput === '' || !is_numeric($gstRateInput) || (float)$gstRateInput < 0 || (float)$gstRateInput > 100) {
+            $this->flash('error', 'Enter the verified GST rate for this HSN code.');
+            $this->redirect('/production/catalog/edit?id=' . $id);
+        }
+        $gstRate = (float)$gstRateInput;
 
         $sizes = $_POST['sizes'] ?? [];
         $cleanSizes = [];
@@ -780,11 +788,16 @@ class ProductionController extends Controller {
         $cid = Auth::concernId() ?: 1;
         $name = trim($_POST['name'] ?? '');
         $code = strtoupper(trim($_POST['code'] ?? ''));
-        $hsn  = trim($_POST['default_hsn'] ?? '6109');
-        $gst  = (float)($_POST['default_gst_rate'] ?? 5.00);
+        $hsn  = trim($_POST['default_hsn'] ?? '');
+        $gstInput = trim((string)($_POST['default_gst_rate'] ?? ''));
+        $gst = $gstInput === '' ? null : (is_numeric($gstInput) ? (float)$gstInput : -1.0);
 
         if (empty($name)) {
             echo json_encode(['success' => false, 'message' => 'Category name is required.']);
+            exit;
+        }
+        if (($hsn !== '' && !preg_match('/^\d{4}(?:\d{2}){0,2}$/', $hsn)) || ($gst !== null && ($gst < 0 || $gst > 100))) {
+            echo json_encode(['success' => false, 'message' => 'Enter a valid HSN code and GST rate, or leave these optional defaults blank.']);
             exit;
         }
 
@@ -839,7 +852,7 @@ class ProductionController extends Controller {
                 'id' => $id, 
                 'name' => $name, 
                 'code' => $code, 
-                'default_hsn' => $hsn, 
+                'default_hsn' => $hsn,
                 'default_gst_rate' => $gst
             ]);
         } catch (Exception $e) {
@@ -1047,9 +1060,13 @@ class ProductionController extends Controller {
         header('Content-Type: application/json');
         $cid = Auth::concernId();
         $q = trim($_GET['q'] ?? '');
+        $codeType = strtoupper(trim($_GET['type'] ?? 'HSN'));
+        if (!in_array($codeType, ['HSN', 'SAC'], true)) {
+            $codeType = 'HSN';
+        }
 
-        $sql = "SELECT hsn_code, description, gst_rate FROM hsn_masters WHERE 1=1";
-        $params = [];
+        $sql = "SELECT code_type, hsn_code, description, category, gst_rate, rate_note FROM hsn_masters WHERE is_active = 1 AND code_type = ?";
+        $params = [$codeType];
         if ($cid) {
             $sql .= " AND (concern_id = ? OR concern_id IS NULL)";
             $params[] = $cid;
@@ -1069,21 +1086,50 @@ class ProductionController extends Controller {
     public function quickAddHsnAjax(): void {
         header('Content-Type: application/json');
         $cid = Auth::concernId();
+        $codeType = strtoupper(trim($_POST['code_type'] ?? 'HSN'));
         $hsn = trim($_POST['hsn_code'] ?? '');
         $desc = trim($_POST['description'] ?? '');
-        $gst = (float)($_POST['gst_rate'] ?? 5.00);
+        $category = trim($_POST['category'] ?? '');
+        $rateNote = trim($_POST['rate_note'] ?? '');
+        $gstInput = trim((string)($_POST['gst_rate'] ?? ''));
+        $gst = $gstInput === '' ? null : (is_numeric($gstInput) ? (float)$gstInput : -1.0);
 
-        if (empty($hsn)) {
-            echo json_encode(['success' => false, 'message' => 'HSN Code is required.']);
+        if (!in_array($codeType, ['HSN', 'SAC'], true) || !preg_match('/^\d{4}(?:\d{2}){0,2}$/', $hsn) || strlen($desc) > 255 || strlen($category) > 100 || strlen($rateNote) > 500 || ($gst !== null && ($gst < 0 || $gst > 100))) {
+            echo json_encode(['success' => false, 'message' => 'Use a valid 4-, 6-, or 8-digit HSN/SAC code and GST rate details.']);
             exit;
         }
 
         try {
-            DB::query(
-                "INSERT INTO hsn_masters (concern_id, hsn_code, description, gst_rate) VALUES (?, ?, ?, ?)",
-                [$cid, $hsn, $desc, $gst]
+            $existing = DB::fetch(
+                "SELECT id, concern_id, code_type, hsn_code, description, category, gst_rate, rate_note
+                 FROM hsn_masters
+                 WHERE is_active = 1 AND (concern_id = ? OR concern_id IS NULL) AND code_type = ? AND hsn_code = ?
+                 ORDER BY concern_id DESC LIMIT 1",
+                [$cid, $codeType, $hsn]
             );
-            echo json_encode(['success' => true, 'hsn_code' => $hsn, 'description' => $desc, 'gst_rate' => $gst]);
+            if ($existing && $existing['concern_id'] === null) {
+                echo json_encode([
+                    'success' => true,
+                    'code_type' => $existing['code_type'],
+                    'hsn_code' => $existing['hsn_code'],
+                    'description' => $existing['description'],
+                    'category' => $existing['category'],
+                    'gst_rate' => $existing['gst_rate'],
+                    'rate_note' => $existing['rate_note'],
+                ]);
+                exit;
+            } elseif ($existing) {
+                DB::query(
+                    "UPDATE hsn_masters SET description = ?, category = ?, gst_rate = ?, rate_note = ?, is_active = 1 WHERE id = ?",
+                    [$desc, $category, $gst, $rateNote, $existing['id']]
+                );
+            } else {
+                DB::query(
+                    "INSERT INTO hsn_masters (concern_id, code_type, hsn_code, description, category, gst_rate, rate_note) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    [$cid, $codeType, $hsn, $desc, $category, $gst, $rateNote]
+                );
+            }
+            echo json_encode(['success' => true, 'code_type' => $codeType, 'hsn_code' => $hsn, 'description' => $desc, 'category' => $category, 'gst_rate' => $gst, 'rate_note' => $rateNote]);
         } catch (Exception $e) {
             echo json_encode(['success' => false, 'message' => $e->getMessage()]);
         }

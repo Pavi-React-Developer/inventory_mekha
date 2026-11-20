@@ -589,6 +589,19 @@
 <script>
 // Filter Suppliers Table
 document.addEventListener('DOMContentLoaded', function () {
+    ['formAddSupplier', 'formEditSupplier'].forEach(function (formId) {
+        const form = document.getElementById(formId);
+        if (!form) return;
+
+        form.addEventListener('submit', function (event) {
+            if (!form.checkValidity()) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            form.classList.add('was-validated');
+        });
+    });
+
     const searchInput = document.getElementById('supplierSearchInput');
     const districtFilter = document.getElementById('supplierDistrictFilter');
     const rows = document.querySelectorAll('.supplier-row');

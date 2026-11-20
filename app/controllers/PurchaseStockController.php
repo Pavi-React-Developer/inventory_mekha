@@ -361,7 +361,7 @@ class PurchaseStockController extends Controller {
             $sourceDesignName === '' || strlen($sourceDesignName) > 150 ||
             $color === '' || strlen($color) > 100 ||
             $designName === '' || strlen($designName) > 150 ||
-            strlen($hsnCode) > 50 ||
+            ($hsnCode !== '' && !preg_match('/^\d{4}(?:\d{2}){0,2}$/', $hsnCode)) ||
             $unit === '' || strlen($unit) > 50
         ) {
             $this->flash('error', 'Enter valid fabric name, design, color, HSN, and unit values.');

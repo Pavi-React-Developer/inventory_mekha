@@ -719,9 +719,10 @@ class SalesController extends Controller {
             $variantId = (int)$matches[1];
         }
 
-        $sql = "SELECT v.id, v.sku_code, v.name, v.price, v.mrp, v.size, v.attributes, COALESCE(s.qty, 0) AS available_qty
+        $sql = "SELECT v.id, v.sku_code, v.name, v.price, v.mrp, v.size, v.attributes, c.hsn_code AS catalog_hsn, c.gst_rate AS catalog_gst_rate, COALESCE(s.qty, 0) AS available_qty
                 FROM variants v
                 LEFT JOIN stocks s ON v.id = s.variant_id AND s.concern_id = ?
+                LEFT JOIN catalogs c ON c.id = v.catalog_id AND c.concern_id = v.concern_id
                 WHERE v.concern_id = ? AND v.status = 'active'";
         $params = [$cid, $cid];
 
@@ -744,7 +745,18 @@ class SalesController extends Controller {
         }
 
         $attrs = json_decode($variant['attributes'] ?? '{}', true) ?: [];
-        $hsnCode = $attrs['hsn'] ?? '6109'; // Standard garment HSN code
+        $hsnCode = !empty($attrs['hsn']) ? $attrs['hsn'] : ($variant['catalog_hsn'] ?? '');
+        $gstRate = $variant['catalog_gst_rate'] !== null ? (float)$variant['catalog_gst_rate'] : null;
+        if ($gstRate === null && $hsnCode !== '') {
+            $masterRate = DB::fetchValue(
+                "SELECT gst_rate FROM hsn_masters
+                 WHERE is_active = 1 AND code_type = 'HSN' AND hsn_code = ?
+                   AND (concern_id = ? OR concern_id IS NULL)
+                 ORDER BY concern_id DESC LIMIT 1",
+                [$hsnCode, $cid]
+            );
+            $gstRate = $masterRate === null ? null : (float)$masterRate;
+        }
 
         $this->renderJson([
             'success' => true,
@@ -757,7 +769,7 @@ class SalesController extends Controller {
                 'mrp'           => (float)($variant['mrp'] > 0 ? $variant['mrp'] : $variant['price']),
                 'available_qty' => (float)$variant['available_qty'],
                 'hsn_code'      => $hsnCode,
-                'gst_pct'       => 5.0,
+                'gst_pct'       => $gstRate,
             ]
         ]);
     }
@@ -843,7 +855,11 @@ class SalesController extends Controller {
                 $qty = max(1, (float)($item['qty'] ?? 1));
                 $unitPrice = (float)($item['price'] ?? 0);
                 $itemDiscount = (float)($item['discount'] ?? 0);
-                $gstPct = $gstType === 'exempt' ? 0.00 : (float)($item['gst_pct'] ?? 5.0);
+                $gstRateInput = $item['gst_pct'] ?? null;
+                if ($gstType !== 'exempt' && (!is_numeric($gstRateInput) || (float)$gstRateInput < 0 || (float)$gstRateInput > 100)) {
+                    throw new \RuntimeException('A valid GST rate is required for every taxable item.');
+                }
+                $gstPct = $gstType === 'exempt' ? 0.00 : (float)$gstRateInput;
 
                 $itemSubtotal = ($unitPrice * $qty) - $itemDiscount;
                 if ($itemSubtotal < 0) $itemSubtotal = 0;

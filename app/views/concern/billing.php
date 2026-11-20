@@ -1275,6 +1275,10 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(data => {
                 if (data.success && data.variant) {
                     const v = data.variant;
+                    if (v.gst_pct === null || !Number.isFinite(Number(v.gst_pct))) {
+                        alert('Set and verify this product\'s GST rate in the catalog before billing it.');
+                        return;
+                    }
                     let qtyToAdd = 1;
                     if (scannerSettings.qtyRule === 'prompt') {
                         const ans = prompt("Enter quantity for '" + v.name + "' (" + v.sku_code + "):", "1");
@@ -1293,10 +1297,10 @@ document.addEventListener('DOMContentLoaded', function() {
                             name: v.name,
                             sku_code: v.sku_code,
                             size: v.size,
-                            hsn_code: v.hsn_code || '6109',
+                            hsn_code: v.hsn_code || '',
                             price: v.price,
                             mrp: v.mrp,
-                            gst_pct: v.gst_pct || 5.0,
+                            gst_pct: Number(v.gst_pct),
                             discount: 0.00,
                             qty: qtyToAdd
                         });

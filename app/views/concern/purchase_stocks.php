@@ -511,7 +511,7 @@
                                         </div>
                                         <div class="col-md-4">
                                             <label for="edit_roll_hsn" class="form-label small fw-semibold">HSN</label>
-                                            <input type="text" class="form-control form-control-sm" id="edit_roll_hsn" name="hsn_code" maxlength="50">
+                                            <input type="text" class="form-control form-control-sm font-monospace" id="edit_roll_hsn" name="hsn_code" maxlength="50" data-hsn-autocomplete data-hsn-type="HSN" autocomplete="off">
                                         </div>
                                         <div class="col-md-4">
                                             <label for="edit_roll_qty" class="form-label small fw-semibold">Accumulated Stock</label>

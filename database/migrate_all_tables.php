@@ -81,11 +81,35 @@ if (!in_array('variance_reason', $cols)) {
     echo "  . `variance_reason` already exists\n";
 }
 
-// 5. PURCHASE_BILL_ITEMS
-echo "\n5. Checking `purchase_bill_items`...\n";
+// 5. PURCHASE_BILLS
+echo "\n5. Checking `purchase_bills`...\n";
+$cols = array_column(DB::fetchAll("SHOW COLUMNS FROM `purchase_bills`"), 'Field');
+if (!in_array('inward_status', $cols)) {
+    DB::query("ALTER TABLE `purchase_bills` ADD COLUMN `inward_status` ENUM('pending', 'completed') NOT NULL DEFAULT 'pending'");
+    echo "  + Added `inward_status` to `purchase_bills`\n";
+} else {
+    echo "  . `inward_status` already exists\n";
+}
+
+if (!in_array('inward_at', $cols)) {
+    DB::query("ALTER TABLE `purchase_bills` ADD COLUMN `inward_at` DATETIME NULL");
+    echo "  + Added `inward_at` to `purchase_bills`\n";
+} else {
+    echo "  . `inward_at` already exists\n";
+}
+
+if (!in_array('attachment_paths', $cols)) {
+    DB::query("ALTER TABLE `purchase_bills` ADD COLUMN `attachment_paths` JSON NULL AFTER `attachment_path`");
+    echo "  + Added `attachment_paths` to `purchase_bills`\n";
+} else {
+    echo "  . `attachment_paths` already exists\n";
+}
+
+// 6. PURCHASE_BILL_ITEMS
+echo "\n6. Checking `purchase_bill_items`...\n";
 $cols = array_column(DB::fetchAll("SHOW COLUMNS FROM `purchase_bill_items`"), 'Field');
 if (!in_array('inward_status', $cols)) {
-    DB::query("ALTER TABLE `purchase_bill_items` ADD COLUMN `inward_status` VARCHAR(30) NOT NULL DEFAULT 'pending'");
+    DB::query("ALTER TABLE `purchase_bill_items` ADD COLUMN `inward_status` ENUM('pending', 'completed') NOT NULL DEFAULT 'pending'");
     echo "  + Added `inward_status` to `purchase_bill_items`\n";
 } else {
     echo "  . `inward_status` already exists\n";
@@ -98,8 +122,8 @@ if (!in_array('inward_at', $cols)) {
     echo "  . `inward_at` already exists\n";
 }
 
-// 6. STITCHING_ITEMS
-echo "\n6. Checking `stitching_items`...\n";
+// 7. STITCHING_ITEMS
+echo "\n7. Checking `stitching_items`...\n";
 $cols = array_column(DB::fetchAll("SHOW COLUMNS FROM `stitching_items`"), 'Field');
 if (!in_array('inward_status', $cols)) {
     DB::query("ALTER TABLE `stitching_items` ADD COLUMN `inward_status` VARCHAR(30) DEFAULT 'pending'");
@@ -115,8 +139,8 @@ if (!in_array('inward_at', $cols)) {
     echo "  . `inward_at` already exists\n";
 }
 
-// 7. STITCHING_LOGS
-echo "\n7. Checking `stitching_logs`...\n";
+// 8. STITCHING_LOGS
+echo "\n8. Checking `stitching_logs`...\n";
 $cols = array_column(DB::fetchAll("SHOW COLUMNS FROM `stitching_logs`"), 'Field');
 if (!in_array('inward_status', $cols)) {
     DB::query("ALTER TABLE `stitching_logs` ADD COLUMN `inward_status` VARCHAR(30) DEFAULT 'pending'");
@@ -124,6 +148,21 @@ if (!in_array('inward_status', $cols)) {
 } else {
     echo "  . `inward_status` already exists\n";
 }
+
+echo "\n9. Checking HSN/SAC and GST master...\n";
+$categoryCols = array_column(DB::fetchAll("SHOW COLUMNS FROM `categories`"), 'Field');
+if (!in_array('default_gst_rate', $categoryCols)) {
+    DB::query("ALTER TABLE `categories` ADD COLUMN `default_gst_rate` DECIMAL(5,2) NULL DEFAULT NULL");
+}
+DB::query("ALTER TABLE `categories` MODIFY COLUMN `default_gst_rate` DECIMAL(5,2) NULL DEFAULT NULL");
+$catalogCols = array_column(DB::fetchAll("SHOW COLUMNS FROM `catalogs`"), 'Field');
+if (!in_array('gst_rate', $catalogCols)) {
+    DB::query("ALTER TABLE `catalogs` ADD COLUMN `gst_rate` DECIMAL(5,2) NULL DEFAULT NULL");
+}
+DB::query("ALTER TABLE `catalogs` MODIFY COLUMN `gst_rate` DECIMAL(5,2) NULL DEFAULT NULL");
+require_once __DIR__ . '/hsn_gst_master.php';
+ensureHsnGstMaster();
+echo "  + HSN/SAC master schema and textile classifications are up to date\n";
 
 echo "\n========================================================\n";
 echo "SUCCESS: All tables in local DB migrated successfully!\n";

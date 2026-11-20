@@ -55,7 +55,7 @@ class CatalogMappingController extends Controller
                 'sub_sub_category_code' => 'ADD COLUMN sub_sub_category_code VARCHAR(20) NULL AFTER sub_category_code',
                 'hierarchy_path' => 'ADD COLUMN hierarchy_path VARCHAR(255) NULL AFTER sub_sub_category_code',
                 'hsn_code' => 'ADD COLUMN hsn_code VARCHAR(50) NULL AFTER hierarchy_path',
-                'gst_rate' => 'ADD COLUMN gst_rate DECIMAL(5,2) NOT NULL DEFAULT 5.00 AFTER hsn_code',
+                'gst_rate' => 'ADD COLUMN gst_rate DECIMAL(5,2) NULL DEFAULT NULL AFTER hsn_code',
                 'sizes' => 'ADD COLUMN sizes TEXT NULL AFTER gst_rate',
                 'status' => "ADD COLUMN status ENUM('active', 'inactive', 'in_house') NOT NULL DEFAULT 'in_house' AFTER sizes",
                 'updated_at' => 'ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at',
@@ -66,6 +66,7 @@ class CatalogMappingController extends Controller
                     $catalogColumns[] = $column;
                 }
             }
+            DB::query('ALTER TABLE `catalogs` MODIFY COLUMN gst_rate DECIMAL(5,2) NULL DEFAULT NULL');
 
             // 4. Ensure category fields used by hierarchy management
             $categoryColumns = array_column(DB::fetchAll('DESCRIBE `categories`'), 'Field');
@@ -76,8 +77,9 @@ class CatalogMappingController extends Controller
                 DB::query('ALTER TABLE `categories` ADD COLUMN default_hsn VARCHAR(50) NULL AFTER code');
             }
             if (!in_array('default_gst_rate', $categoryColumns, true)) {
-                DB::query('ALTER TABLE `categories` ADD COLUMN default_gst_rate DECIMAL(5,2) NOT NULL DEFAULT 5.00 AFTER default_hsn');
+                DB::query('ALTER TABLE `categories` ADD COLUMN default_gst_rate DECIMAL(5,2) NULL DEFAULT NULL AFTER default_hsn');
             }
+            DB::query('ALTER TABLE `categories` MODIFY COLUMN default_gst_rate DECIMAL(5,2) NULL DEFAULT NULL');
 
             $subcategoryColumns = array_column(DB::fetchAll('DESCRIBE `subcategories`'), 'Field');
             if (!in_array('code', $subcategoryColumns, true)) {
@@ -245,6 +247,19 @@ class CatalogMappingController extends Controller
             $catalogs = DB::fetchAll('SELECT id, style_code, short_code, name FROM catalogs ORDER BY id DESC');
         }
 
+        $hsnSql = "SELECT hm.hsn_code, hm.description, hm.category, hm.gst_rate, hm.rate_note,
+                          COALESCE(con.name, 'Global') AS concern_name
+                   FROM hsn_masters hm
+                   LEFT JOIN concerns con ON con.id = hm.concern_id
+                   WHERE hm.is_active = 1 AND hm.code_type = 'HSN'";
+        $hsnParams = [];
+        if ($cid) {
+            $hsnSql .= ' AND (hm.concern_id = ? OR hm.concern_id IS NULL)';
+            $hsnParams[] = $cid;
+        }
+        $hsnSql .= ' ORDER BY hm.hsn_code ASC, hm.concern_id IS NULL DESC, hm.concern_id ASC';
+        $hsnCodes = DB::fetchAll($hsnSql, $hsnParams);
+
         $activeTab = $_GET['tab'] ?? 'mappings';
         $attributeTypes = array_values(array_unique(array_filter(array_column($attributes, 'attribute_type'))));
         sort($attributeTypes);
@@ -257,6 +272,7 @@ class CatalogMappingController extends Controller
             'subcategories' => $subcategories,
             'subSubcategories' => $subSubcategories,
             'attributes' => $attributes,
+            'hsnCodes' => $hsnCodes,
             'attributeTypes' => $attributeTypes,
             'catalogs' => $catalogs,
             'metrics' => [
@@ -281,7 +297,7 @@ class CatalogMappingController extends Controller
     public function mapItemForm(): void
     {
         $this->ensureSchema();
-        $cid = Auth::concernId() ?: 1;
+        $cid = Auth::concernId();
         $itemId = (int) ($_GET['id'] ?? 0);
 
         if (!$itemId) {
@@ -308,6 +324,7 @@ class CatalogMappingController extends Controller
             $this->flash('error', 'Finished good item not found or access denied.');
             $this->redirect('/production/catalog-mapping');
         }
+        $cid = $cid ?: (int) ($item['concern_id'] ?? 1);
 
         // Extract or resolve color from item, specification, or product name
         $knownColors = ['RED', 'BLUE', 'GREEN', 'BLACK', 'WHITE', 'YELLOW', 'NAVY', 'NAVY BLUE', 'ORANGE', 'PINK', 'GREY', 'GRAY', 'PURPLE', 'MAROON', 'BEIGE', 'BROWN', 'CORAL', 'TEAL', 'OLIVE'];
@@ -474,8 +491,15 @@ class CatalogMappingController extends Controller
                     $wholeCode = $mainCatCode . $subCatCode . $subSubCatCode;
                 }
 
-                $hsnCode = trim($_POST['hsn_code'] ?? ($item['hsn_code'] ?? '6109'));
-                $gstRate = isset($_POST['gst_rate']) ? (float) $_POST['gst_rate'] : (float) ($item['gst_rate'] ?? 5.0);
+                $hsnCode = trim($_POST['hsn_code'] ?? ($item['hsn_code'] ?? ''));
+                $gstRateInput = trim((string)($_POST['gst_rate'] ?? ($item['gst_rate'] ?? '')));
+                if (!preg_match('/^\d{4}(?:\d{2}){0,2}$/', $hsnCode)) {
+                    throw new Exception('Select a valid 4-, 6-, or 8-digit HSN code before saving this catalog mapping.');
+                }
+                if ($gstRateInput === '' || !is_numeric($gstRateInput) || (float)$gstRateInput < 0 || (float)$gstRateInput > 100) {
+                    throw new Exception('Enter the verified GST rate for the selected HSN code.');
+                }
+                $gstRate = (float)$gstRateInput;
                 $mrp = (float) ($_POST['mrp'] ?? 0.0);
                 $sellingPrice = (float) ($_POST['selling_price'] ?? 0.0);
 
@@ -794,8 +818,12 @@ class CatalogMappingController extends Controller
             $subcatId = null;
 
             if ($tier === 'category') {
-                $hsn = trim($_POST['default_hsn'] ?? '6109');
-                $gst = (float) ($_POST['default_gst_rate'] ?? 5.0);
+                $hsn = trim($_POST['default_hsn'] ?? '');
+                $gstInput = trim((string)($_POST['default_gst_rate'] ?? ''));
+                $gst = $gstInput === '' ? null : (is_numeric($gstInput) ? (float)$gstInput : -1.0);
+                if (($hsn !== '' && !preg_match('/^\d{4}(?:\d{2}){0,2}$/', $hsn)) || ($gst !== null && ($gst < 0 || $gst > 100))) {
+                    throw new Exception('Enter a valid HSN code and GST rate, or leave these optional defaults blank.');
+                }
                 if (empty($code))
                     $code = strtoupper(substr($name, 0, 2));
 
@@ -884,8 +912,8 @@ class CatalogMappingController extends Controller
                         'tier' => $tier,
                         'category_id' => $catId,
                         'subcategory_id' => $subcatId,
-                        'default_hsn' => $hsn ?? '6109',
-                        'default_gst_rate' => $gst ?? 5.0
+                        'default_hsn' => $hsn,
+                        'default_gst_rate' => $gst
                     ]
                 ]);
                 exit;

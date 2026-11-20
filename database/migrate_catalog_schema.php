@@ -13,8 +13,9 @@ if (!in_array('default_hsn', $catCols)) {
     DB::query('ALTER TABLE categories ADD COLUMN default_hsn VARCHAR(50) NULL AFTER code');
 }
 if (!in_array('default_gst_rate', $catCols)) {
-    DB::query('ALTER TABLE categories ADD COLUMN default_gst_rate DECIMAL(5,2) NOT NULL DEFAULT 5.00 AFTER default_hsn');
+    DB::query('ALTER TABLE categories ADD COLUMN default_gst_rate DECIMAL(5,2) NULL DEFAULT NULL AFTER default_hsn');
 }
+DB::query('ALTER TABLE categories MODIFY COLUMN default_gst_rate DECIMAL(5,2) NULL DEFAULT NULL');
 
 // 2. Update subcategories table
 $subCols = array_column(DB::fetchAll('DESCRIBE subcategories'), 'Field');
@@ -68,8 +69,9 @@ if (!in_array('hsn_code', $catlgCols)) {
     DB::query('ALTER TABLE catalogs ADD COLUMN hsn_code VARCHAR(50) NULL AFTER hierarchy_path');
 }
 if (!in_array('gst_rate', $catlgCols)) {
-    DB::query('ALTER TABLE catalogs ADD COLUMN gst_rate DECIMAL(5,2) NOT NULL DEFAULT 5.00 AFTER hsn_code');
+    DB::query('ALTER TABLE catalogs ADD COLUMN gst_rate DECIMAL(5,2) NULL DEFAULT NULL AFTER hsn_code');
 }
+DB::query('ALTER TABLE catalogs MODIFY COLUMN gst_rate DECIMAL(5,2) NULL DEFAULT NULL');
 if (!in_array('sizes', $catlgCols)) {
     DB::query('ALTER TABLE catalogs ADD COLUMN sizes TEXT NULL AFTER gst_rate');
 }
@@ -88,35 +90,8 @@ if (!in_array('catalog_id', $varCols)) {
 }
 
 // 6. Create hsn_masters table if not exists and seed standard HSN codes
-DB::query("CREATE TABLE IF NOT EXISTS `hsn_masters` (
-    `id` INT AUTO_INCREMENT PRIMARY KEY,
-    `concern_id` INT NULL,
-    `hsn_code` VARCHAR(50) NOT NULL,
-    `description` VARCHAR(255) NULL,
-    `gst_rate` DECIMAL(5,2) NOT NULL DEFAULT 5.00,
-    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    INDEX `idx_hsn_concern` (`concern_id`),
-    INDEX `idx_hsn_code` (`hsn_code`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-$hsnCount = (int)DB::fetchValue("SELECT COUNT(*) FROM hsn_masters");
-if ($hsnCount === 0) {
-    $defaultHsns = [
-        ['hsn_code' => '6109', 'description' => 'T-shirts, singlets and other vests, knitted or crocheted', 'gst_rate' => 5.00],
-        ['hsn_code' => '107',  'description' => 'Kids & Baby Garments and Dresses', 'gst_rate' => 5.00],
-        ['hsn_code' => '6203', 'description' => 'Men trousers, bib and brace overalls, breeches and shorts', 'gst_rate' => 5.00],
-        ['hsn_code' => '6204', 'description' => 'Women suits, ensembles, jackets, dresses, skirts', 'gst_rate' => 5.00],
-        ['hsn_code' => '6111', 'description' => 'Babies garments and clothing accessories, knitted or crocheted', 'gst_rate' => 5.00],
-        ['hsn_code' => '5208', 'description' => 'Woven fabrics of cotton, containing 85% or more by weight', 'gst_rate' => 5.00],
-        ['hsn_code' => '6105', 'description' => 'Men or boys shirts, knitted or crocheted', 'gst_rate' => 5.00],
-        ['hsn_code' => '6106', 'description' => 'Women or girls blouses, shirts and shirt-blouses, knitted', 'gst_rate' => 5.00],
-    ];
-    foreach ($defaultHsns as $h) {
-        DB::query("INSERT INTO hsn_masters (concern_id, hsn_code, description, gst_rate) VALUES (NULL, ?, ?, ?)", [
-            $h['hsn_code'], $h['description'], $h['gst_rate']
-        ]);
-    }
-}
+require_once __DIR__ . '/hsn_gst_master.php';
+ensureHsnGstMaster();
 
 // 7. Seed sample categories removed - all categories are user-defined and dynamic
 echo "Catalog schema migration completed successfully!\n";

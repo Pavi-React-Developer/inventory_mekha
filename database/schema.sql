@@ -92,7 +92,7 @@ CREATE TABLE IF NOT EXISTS `categories` (
     `name` VARCHAR(100) NOT NULL,
     `code` VARCHAR(20) NULL,
     `default_hsn` VARCHAR(50) NULL,
-    `default_gst_rate` DECIMAL(5,2) NOT NULL DEFAULT 5.00,
+    `default_gst_rate` DECIMAL(5,2) NULL DEFAULT NULL,
     `status` ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX `idx_cat_concern` (`concern_id`),
@@ -281,12 +281,17 @@ CREATE TABLE IF NOT EXISTS `customers` (
 CREATE TABLE IF NOT EXISTS `hsn_masters` (
     `id` INT AUTO_INCREMENT PRIMARY KEY,
     `concern_id` INT NULL,
+    `code_type` ENUM('HSN', 'SAC') NOT NULL DEFAULT 'HSN',
     `hsn_code` VARCHAR(50) NOT NULL,
     `description` VARCHAR(255) NULL,
-    `gst_rate` DECIMAL(5,2) NOT NULL DEFAULT 5.00,
+    `category` VARCHAR(100) NULL,
+    `gst_rate` DECIMAL(5,2) NULL DEFAULT NULL,
+    `rate_note` VARCHAR(500) NULL,
+    `is_active` TINYINT(1) NOT NULL DEFAULT 1,
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX `idx_hsn_concern` (`concern_id`),
-    INDEX `idx_hsn_code` (`hsn_code`)
+    INDEX `idx_hsn_code` (`hsn_code`),
+    INDEX `idx_hsn_active_type` (`is_active`, `code_type`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS `purchase_bills` (
@@ -307,6 +312,7 @@ CREATE TABLE IF NOT EXISTS `purchase_bills` (
     `inward_at` DATETIME NULL,
     `notes` TEXT NULL,
     `attachment_path` VARCHAR(255) NULL,
+    `attachment_paths` JSON NULL,
     `fabric_description` TEXT NULL,
     `created_by` INT NULL,
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -544,7 +550,7 @@ CREATE TABLE IF NOT EXISTS `catalogs` (
     `sub_sub_category_code` VARCHAR(20) NULL,
     `hierarchy_path` VARCHAR(255) NULL,
     `hsn_code` VARCHAR(50) NULL,
-    `gst_rate` DECIMAL(5,2) NOT NULL DEFAULT 5.00,
+    `gst_rate` DECIMAL(5,2) NULL DEFAULT NULL,
     `sizes` TEXT NULL,
     `status` ENUM('active', 'inactive', 'in_house') NOT NULL DEFAULT 'in_house',
     `name` VARCHAR(150) NOT NULL,

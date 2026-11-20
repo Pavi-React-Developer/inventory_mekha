@@ -68,6 +68,17 @@ if (!function_exists('amountToWordsINR')) {
         return $out;
     }
 }
+
+$billAttachments = json_decode((string)($bill['attachment_paths'] ?? ''), true);
+if (!is_array($billAttachments)) {
+    $billAttachments = [];
+}
+$billAttachments = array_values(array_filter($billAttachments, static function ($path): bool {
+    return is_string($path) && trim($path) !== '';
+}));
+if (empty($billAttachments) && !empty($bill['attachment_path'])) {
+    $billAttachments[] = (string)$bill['attachment_path'];
+}
 ?>
 <div class="container-fluid px-0">
     <!-- Header -->
@@ -143,11 +154,16 @@ if (!function_exists('amountToWordsINR')) {
                     <strong>Paid Amount:</strong> ₹<?= number_format((float)($bill['paid_amount'] ?? 0), 2) ?><br>
                     <strong>Notes:</strong> <?= htmlspecialchars($bill['notes'] ?: 'None') ?>
                 </div>
-                <?php if (!empty($bill['attachment_path'])): ?>
+                <?php if (!empty($billAttachments)): ?>
                     <div class="mt-3">
-                        <a href="<?= htmlspecialchars(\App\Services\CloudinaryService::url($bill['attachment_path'])) ?>" target="_blank" class="btn btn-sm btn-outline-primary">
-                            <i class="bi bi-paperclip me-1"></i> View Attached Invoice
-                        </a>
+                        <div class="small fw-semibold text-dark mb-1">Invoice Attachments</div>
+                        <div class="d-flex flex-wrap gap-2">
+                            <?php foreach ($billAttachments as $index => $attachmentPath): ?>
+                                <a href="<?= htmlspecialchars(\App\Services\CloudinaryService::url($attachmentPath)) ?>" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-paperclip me-1"></i> Attachment <?= $index + 1 ?>
+                                </a>
+                            <?php endforeach; ?>
+                        </div>
                     </div>
                 <?php endif; ?>
             </div>
