@@ -207,6 +207,7 @@ $concernName = $concern['name'] ?? 'GRM Inventory';
                                                     $raw['pattern'] ?: ($raw['specification'] ?? ''),
                                                     (string)$raw['id']
                                                 );
+                                                $isRollInStock = (($raw['inward_status'] ?? '') === 'completed');
                                             ?>
                                                 <option value="<?= $raw['id'] ?>"
                                                         <?= (count($purchaseRollItems) === 1 || ($activeRollItemId ?? 0) == $raw['id']) ? 'selected' : '' ?>
@@ -216,6 +217,7 @@ $concernName = $concern['name'] ?? 'GRM Inventory';
                                                         data-tag="<?= htmlspecialchars($tagCode) ?>"
                                                         data-type="Fabric Roll"
                                                         data-isroll="1"
+                                                        data-inward="<?= $isRollInStock ? 'completed' : 'pending' ?>"
                                                         data-vendor="<?= htmlspecialchars($raw['supplier_company'] ?: ($raw['supplier_name'] ?: 'Vendor Mill')) ?>"
                                                         data-color="<?= htmlspecialchars($raw['color'] ?: 'STANDARD') ?>"
                                                         data-pattern="<?= htmlspecialchars($raw['pattern'] ?: '') ?>"
@@ -227,7 +229,7 @@ $concernName = $concern['name'] ?? 'GRM Inventory';
                                                         data-price="<?= (float)($raw['unit_price'] ?: ($raw['mrp'] ?: 0)) ?>"
                                                         data-bill="<?= htmlspecialchars($raw['bill_no']) ?>"
                                                         data-qr="<?= htmlspecialchars($tagCode) ?>">
-                                                    [ROLL] <?= htmlspecialchars($fabricName) ?> (<?= htmlspecialchars($tagCode) ?>) &bull; <?= number_format((float)$raw['qty'], 2) ?> <?= htmlspecialchars($raw['unit'] ?: 'Rolls') ?> &bull; Bill #<?= htmlspecialchars($raw['bill_no']) ?>
+                                                    [ROLL] <?= htmlspecialchars($fabricName) ?> (<?= htmlspecialchars($tagCode) ?>) &bull; <?= number_format((float)$raw['qty'], 2) ?> <?= htmlspecialchars($raw['unit'] ?: 'Rolls') ?> &bull; Bill #<?= htmlspecialchars($raw['bill_no']) ?><?= $isRollInStock ? ' &bull; [IN STOCK]' : '' ?>
                                                 </option>
                                             <?php endforeach; ?>
                                         </select>
@@ -280,13 +282,16 @@ $concernName = $concern['name'] ?? 'GRM Inventory';
                                         </div>
                                     </div>
 
-                                    <div class="d-flex gap-2 mt-auto">
+                                    <div class="d-flex gap-2 mt-auto align-items-center">
                                         <button type="submit" class="btn btn-primary flex-grow-1 py-2 fw-semibold shadow-sm">
                                             <i class="bi bi-printer-fill me-1"></i> Generate Printable Sheet
                                         </button>
-                                        <button type="button" class="btn btn-success py-2 fw-semibold shadow-sm px-3" onclick="submitRollToStock()" title="Inward selected roll directly into Purchase Stocks">
+                                        <button type="button" class="btn btn-success py-2 fw-semibold shadow-sm px-3 text-nowrap" id="roll_add_stock_btn" onclick="submitRollToStock()" title="Inward selected roll directly into Purchase Stocks">
                                             <i class="bi bi-box-arrow-in-down me-1"></i> Add to Stock
                                         </button>
+                                        <a href="<?= \App\Core\Controller::url('/m/purchase_stocks?tab=rolls') ?>" class="btn btn-outline-success py-2 fw-semibold shadow-sm px-3 d-none text-nowrap" id="roll_in_stock_badge" title="Already in Stock - View in Purchase Stocks">
+                                            <i class="bi bi-check-circle-fill text-success me-1"></i> In Stock
+                                        </a>
                                     </div>
                                 </form>
                             </div>
@@ -419,6 +424,7 @@ $concernName = $concern['name'] ?? 'GRM Inventory';
                                                     $other['pattern'] ?: ($other['specification'] ?? ''),
                                                     (string)$other['id']
                                                 );
+                                                $isOtherInStock = (($other['inward_status'] ?? '') === 'completed');
                                             ?>
                                                 <option value="<?= $other['id'] ?>"
                                                         data-name="<?= htmlspecialchars($other['item_name']) ?>"
@@ -426,6 +432,7 @@ $concernName = $concern['name'] ?? 'GRM Inventory';
                                                         data-tag="<?= htmlspecialchars($tagCode) ?>"
                                                         data-type="<?= htmlspecialchars($other['product_type'] ?: 'Garment Supply') ?>"
                                                         data-isroll="0"
+                                                        data-inward="<?= $isOtherInStock ? 'completed' : 'pending' ?>"
                                                         data-vendor="<?= htmlspecialchars($other['supplier_company'] ?: ($other['supplier_name'] ?: 'Vendor Mill')) ?>"
                                                         data-color="<?= htmlspecialchars($other['color'] ?: 'STANDARD') ?>"
                                                         data-pattern="<?= htmlspecialchars($other['pattern'] ?: '') ?>"
@@ -435,7 +442,7 @@ $concernName = $concern['name'] ?? 'GRM Inventory';
                                                         data-price="<?= (float)($other['unit_price'] ?: ($other['mrp'] ?: 0)) ?>"
                                                         data-bill="<?= htmlspecialchars($other['bill_no']) ?>"
                                                         data-qr="<?= htmlspecialchars($tagCode) ?>">
-                                                    [TRIM] <?= htmlspecialchars($other['item_name']) ?> (<?= htmlspecialchars($tagCode) ?>) &bull; <?= number_format((float)$other['qty'], 2) ?> <?= htmlspecialchars($other['unit']) ?> &bull; Bill #<?= htmlspecialchars($other['bill_no']) ?>
+                                                    [TRIM] <?= htmlspecialchars($other['item_name']) ?> (<?= htmlspecialchars($tagCode) ?>) &bull; <?= number_format((float)$other['qty'], 2) ?> <?= htmlspecialchars($other['unit']) ?> &bull; Bill #<?= htmlspecialchars($other['bill_no']) ?><?= $isOtherInStock ? ' &bull; [IN STOCK]' : '' ?>
                                                 </option>
                                             <?php endforeach; ?>
                                         </select>
@@ -488,13 +495,16 @@ $concernName = $concern['name'] ?? 'GRM Inventory';
                                         </div>
                                     </div>
 
-                                    <div class="d-flex gap-2 mt-auto">
+                                    <div class="d-flex gap-2 mt-auto align-items-center">
                                         <button type="submit" class="btn btn-info text-white flex-grow-1 py-2 fw-semibold shadow-sm">
                                             <i class="bi bi-printer-fill me-1"></i> Generate Printable Sheet
                                         </button>
-                                        <button type="button" class="btn btn-success py-2 fw-semibold shadow-sm px-3" onclick="submitOtherToStock()" title="Inward selected trim directly into Purchase Stocks">
+                                        <button type="button" class="btn btn-success py-2 fw-semibold shadow-sm px-3 text-nowrap" id="other_add_stock_btn" onclick="submitOtherToStock()" title="Inward selected trim directly into Purchase Stocks">
                                             <i class="bi bi-box-arrow-in-down me-1"></i> Add to Stock
                                         </button>
+                                        <a href="<?= \App\Core\Controller::url('/m/purchase_stocks?tab=garment_other') ?>" class="btn btn-outline-success py-2 fw-semibold shadow-sm px-3 d-none text-nowrap" id="other_in_stock_badge" title="Already in Stock - View in Purchase Stocks">
+                                            <i class="bi bi-check-circle-fill text-success me-1"></i> In Stock
+                                        </a>
                                     </div>
                                 </form>
                             </div>
@@ -628,6 +638,7 @@ $concernName = $concern['name'] ?? 'GRM Inventory';
                                         $mrp = $fg['variant_mrp'] ?: ($fg['mrp'] ?: $fg['unit_price']);
                                         $size = $fg['variant_size'] ?: ($fg['specification'] ?: 'Free');
                                         $cat = $fg['category_name'] ?: 'Apparel';
+                                        $isFgInStock = (($fg['inward_status'] ?? '') === 'completed');
                                     ?>
                                         <option value="<?= $fg['id'] ?>"
                                                 data-name="<?= htmlspecialchars($varName) ?>"
@@ -642,11 +653,12 @@ $concernName = $concern['name'] ?? 'GRM Inventory';
                                                 data-color="<?= htmlspecialchars($fg['color'] ?: 'STANDARD') ?>"
                                                 data-mapped="1"
                                                 data-varid="<?= htmlspecialchars($fg['variant_id'] ?? '') ?>"
+                                                data-inward="<?= $isFgInStock ? 'completed' : 'pending' ?>"
                                                 data-qty="<?= htmlspecialchars($fg['qty']) ?>"
                                                 data-unit="<?= htmlspecialchars($fg['unit'] ?: 'pcs') ?>"
                                                 data-bill="<?= htmlspecialchars($fg['bill_no']) ?>"
                                                 data-qr="<?= htmlspecialchars($tagCode) ?>">
-                                            <?= htmlspecialchars($varName) ?> (<?= htmlspecialchars($tagCode) ?>) &bull; <?= number_format((float)$fg['qty'], 0) ?> pcs &bull; Bill #<?= htmlspecialchars($fg['bill_no']) ?> [Mapped: <?= htmlspecialchars($sku) ?>]
+                                            <?= htmlspecialchars($varName) ?> (<?= htmlspecialchars($tagCode) ?>) &bull; <?= number_format((float)$fg['qty'], 0) ?> pcs &bull; Bill #<?= htmlspecialchars($fg['bill_no']) ?> [Mapped: <?= htmlspecialchars($sku) ?>]<?= $isFgInStock ? ' &bull; [IN STOCK]' : '' ?>
                                         </option>
                                     <?php endforeach; ?>
                                     <?php if (!empty($productionItems)): ?>
@@ -773,13 +785,16 @@ $concernName = $concern['name'] ?? 'GRM Inventory';
                                 </div>
                             </div>
 
-                            <div class="d-flex gap-2 mt-auto">
+                            <div class="d-flex gap-2 mt-auto align-items-center">
                                 <button type="submit" class="btn btn-success flex-grow-1 py-2 fw-semibold shadow-sm">
                                     <i class="bi bi-printer-fill me-1"></i> Generate Printable Sheet
                                 </button>
-                                <button type="button" class="btn btn-outline-success py-2 fw-semibold shadow-sm px-3" onclick="submitFgToStock()" title="Inward selected finished goods directly into Purchase Stocks">
+                                <button type="button" class="btn btn-outline-success py-2 fw-semibold shadow-sm px-3 text-nowrap" id="fg_add_stock_btn" onclick="submitFgToStock()" title="Inward selected finished goods directly into Purchase Stocks">
                                     <i class="bi bi-box-arrow-in-down me-1"></i> Add to Stock
                                 </button>
+                                <a href="<?= \App\Core\Controller::url('/m/purchase_stocks?tab=finished_goods') ?>" class="btn btn-outline-success py-2 fw-semibold shadow-sm px-3 d-none text-nowrap" id="fg_in_stock_badge" title="Already in Stock - View in Purchase Stocks">
+                                    <i class="bi bi-check-circle-fill text-success me-1"></i> In Stock
+                                </a>
                             </div>
                         </form>
                     </div>
@@ -981,13 +996,16 @@ $concernName = $concern['name'] ?? 'GRM Inventory';
                                 </div>
                             </div>
 
-                            <div class="d-flex gap-2 mt-auto">
+                            <div class="d-flex gap-2 mt-auto align-items-center">
                                 <button type="submit" class="btn btn-warning text-dark flex-grow-1 py-2 fw-semibold shadow-sm">
                                     <i class="bi bi-printer-fill me-1"></i> Generate Printable Sheet (N Labels)
                                 </button>
-                                <button type="button" class="btn btn-success py-2 px-3 fw-semibold shadow-sm" onclick="submitProdToStock()" title="Inward selected stitched item into Live Stock">
+                                <button type="button" class="btn btn-success py-2 px-3 fw-semibold shadow-sm text-nowrap" id="prod_add_stock_btn" onclick="submitProdToStock()" title="Inward selected stitched item into Live Stock">
                                     <i class="bi bi-box-arrow-in-down me-1"></i> Add to Stock
                                 </button>
+                                <a href="<?= \App\Core\Controller::url('/m/stocks?tab=live_stock') ?>" class="btn btn-outline-success py-2 fw-semibold shadow-sm px-3 d-none text-nowrap" id="prod_in_stock_badge" title="Already in Stock - View in Live Stock">
+                                    <i class="bi bi-check-circle-fill text-success me-1"></i> In Stock
+                                </a>
                             </div>
                         </form>
                     </div>
@@ -1403,8 +1421,27 @@ function updateRollPreview() {
         titleEl.textContent = '';
     }
 
+    const addStockBtn = document.getElementById('roll_add_stock_btn');
+    const inStockBadge = document.getElementById('roll_in_stock_badge');
+
     const opt = sel.options[sel.selectedIndex];
     if (opt && opt.value) {
+        const isInStock = (opt.dataset && opt.dataset.inward === 'completed');
+        if (addStockBtn) {
+            if (isInStock) {
+                addStockBtn.classList.add('d-none');
+            } else {
+                addStockBtn.classList.remove('d-none');
+            }
+        }
+        if (inStockBadge) {
+            if (isInStock) {
+                inStockBadge.classList.remove('d-none');
+            } else {
+                inStockBadge.classList.add('d-none');
+            }
+        }
+
         const fabric = opt.dataset.fabric || opt.dataset.name || opt.dataset.code || 'Fabric Material';
         const tag = opt.dataset.tag || opt.dataset.qr || makeTagCode(fabric, opt.dataset.color, opt.dataset.pattern || opt.dataset.spec, opt.value);
         const color = (opt.dataset.color || 'STANDARD').toUpperCase();
@@ -1425,7 +1462,10 @@ function updateRollPreview() {
         const codEl = document.getElementById('roll_preview_code_tag');
         if (codEl) codEl.textContent = tag;
         const badEl = document.getElementById('roll_preview_badge');
-        if (badEl) badEl.textContent = 'RAW MATERIAL';
+        if (badEl) {
+            badEl.textContent = isInStock ? 'IN STOCK' : 'RAW MATERIAL';
+            badEl.className = isInStock ? 'badge bg-success-subtle text-success border border-success font-monospace' : 'badge bg-primary-subtle text-primary border border-primary font-monospace';
+        }
 
         try {
             renderQr('roll_qr_box', tag);
@@ -1433,6 +1473,9 @@ function updateRollPreview() {
             console.warn('QR render error:', e);
         }
     } else {
+        if (addStockBtn) addStockBtn.classList.remove('d-none');
+        if (inStockBadge) inStockBadge.classList.add('d-none');
+
         const refEl = document.getElementById('roll_preview_ref');
         if (refEl) refEl.textContent = 'PO-REF';
         const fabEl = document.getElementById('roll_preview_fabric');
@@ -1446,7 +1489,10 @@ function updateRollPreview() {
         const codEl = document.getElementById('roll_preview_code_tag');
         if (codEl) codEl.textContent = '-';
         const badEl = document.getElementById('roll_preview_badge');
-        if (badEl) badEl.textContent = 'RAW MATERIAL';
+        if (badEl) {
+            badEl.textContent = 'RAW MATERIAL';
+            badEl.className = 'badge bg-primary-subtle text-primary border border-primary font-monospace';
+        }
         try {
             renderQr('roll_qr_box', 'ROLL-TAG');
         } catch (e) {
@@ -1484,6 +1530,11 @@ function submitRollToStock() {
         alert('Please select a fabric roll first.');
         return;
     }
+    const opt = select.options[select.selectedIndex];
+    if (opt && opt.dataset && opt.dataset.inward === 'completed') {
+        alert('This fabric roll has already been added to stock.');
+        return;
+    }
     const form = document.createElement('form');
     form.method = 'POST';
     form.action = '<?= \App\Core\Controller::url('/m/label/add_to_stock') ?>';
@@ -1500,8 +1551,27 @@ function submitRollToStock() {
 function updateOtherPreview() {
     const sel = document.getElementById('other_item_select');
     if (!sel) return;
+    const addStockBtn = document.getElementById('other_add_stock_btn');
+    const inStockBadge = document.getElementById('other_in_stock_badge');
+
     const opt = sel.options[sel.selectedIndex];
     if (opt && opt.value) {
+        const isInStock = (opt.dataset && opt.dataset.inward === 'completed');
+        if (addStockBtn) {
+            if (isInStock) {
+                addStockBtn.classList.add('d-none');
+            } else {
+                addStockBtn.classList.remove('d-none');
+            }
+        }
+        if (inStockBadge) {
+            if (isInStock) {
+                inStockBadge.classList.remove('d-none');
+            } else {
+                inStockBadge.classList.add('d-none');
+            }
+        }
+
         const tag = opt.dataset.tag || makeTagCode(opt.dataset.name, opt.dataset.color, opt.dataset.pattern || opt.dataset.spec, opt.value);
         const ref = opt.dataset.bill ? ('BILL #' + opt.dataset.bill) : 'TRIM-REF';
         const color = (opt.dataset.color || 'STANDARD').toUpperCase();
@@ -1515,10 +1585,18 @@ function updateOtherPreview() {
         document.getElementById('other_preview_design').textContent = design;
         document.getElementById('other_preview_price').textContent = '₹' + price.toFixed(2);
         document.getElementById('other_preview_code_tag').textContent = tag;
-        document.getElementById('other_preview_badge').textContent = 'PURCHASE TRIM';
+        
+        const badgeEl = document.getElementById('other_preview_badge');
+        if (badgeEl) {
+            badgeEl.textContent = isInStock ? 'IN STOCK' : 'PURCHASE TRIM';
+            badgeEl.className = isInStock ? 'badge bg-success-subtle text-success border border-success font-monospace' : 'badge bg-info-subtle text-info border border-info font-monospace';
+        }
 
         renderQr('other_qr_box', tag);
     } else {
+        if (addStockBtn) addStockBtn.classList.remove('d-none');
+        if (inStockBadge) inStockBadge.classList.add('d-none');
+
         document.getElementById('other_preview_ref').textContent = 'TRIM-REF';
         document.getElementById('other_preview_title').textContent = 'SEWING THREAD';
         document.getElementById('other_preview_item').textContent = 'Select a trim item';
@@ -1526,7 +1604,11 @@ function updateOtherPreview() {
         document.getElementById('other_preview_design').textContent = 'STANDARD';
         document.getElementById('other_preview_price').textContent = '₹45.00';
         document.getElementById('other_preview_code_tag').textContent = 'TR-TH-WHT';
-        document.getElementById('other_preview_badge').textContent = 'PURCHASE TRIM';
+        const badgeEl = document.getElementById('other_preview_badge');
+        if (badgeEl) {
+            badgeEl.textContent = 'PURCHASE TRIM';
+            badgeEl.className = 'badge bg-info-subtle text-info border border-info font-monospace';
+        }
         renderQr('other_qr_box', 'TR-TH-WHT');
     }
 }
@@ -1554,6 +1636,11 @@ function submitOtherToStock() {
     const select = document.getElementById('other_item_select');
     if (!select || !select.value) {
         alert('Please select an other garment product item first.');
+        return;
+    }
+    const opt = select.options[select.selectedIndex];
+    if (opt && opt.dataset && opt.dataset.inward === 'completed') {
+        alert('This item has already been added to stock.');
         return;
     }
     const form = document.createElement('form');
@@ -1587,12 +1674,32 @@ function submitRawToStock() {
 // Tab 2: Purchase FG Preview Handler
 function updateFgPreview() {
     const sel = document.getElementById('fg_item_select');
+    if (!sel) return;
+    const addStockBtn = document.getElementById('fg_add_stock_btn');
+    const inStockBadge = document.getElementById('fg_in_stock_badge');
+
     const opt = sel.options[sel.selectedIndex];
     const mappingCard = document.getElementById('fg_mapping_card');
     const mappedBox = document.getElementById('fg_mapped_box');
     const unmappedBox = document.getElementById('fg_unmapped_box');
 
     if (opt && opt.value) {
+        const isInStock = (opt.dataset && (opt.dataset.inward === 'completed' || opt.dataset.inStock === '1'));
+        if (addStockBtn) {
+            if (isInStock) {
+                addStockBtn.classList.add('d-none');
+            } else {
+                addStockBtn.classList.remove('d-none');
+            }
+        }
+        if (inStockBadge) {
+            if (isInStock) {
+                inStockBadge.classList.remove('d-none');
+            } else {
+                inStockBadge.classList.add('d-none');
+            }
+        }
+
         const tag = opt.dataset.tag || makeTagCode(opt.dataset.name, opt.dataset.color, opt.dataset.pattern, opt.value);
         const ref = opt.dataset.bill ? ('BILL #' + opt.dataset.bill) : (opt.dataset.sku || 'PO-FG');
         const color = (opt.dataset.color || 'STANDARD').toUpperCase();
@@ -1609,17 +1716,22 @@ function updateFgPreview() {
 
         renderQr('fg_qr_box', tag);
 
-        mappingCard.style.display = 'block';
+        if (mappingCard) mappingCard.style.display = 'block';
         if (opt.dataset.mapped === '1') {
-            mappedBox.style.display = 'block';
-            unmappedBox.style.display = 'none';
-            document.getElementById('fg_mapped_title').textContent = 'Mapped to ' + opt.dataset.name;
-            document.getElementById('fg_mapped_sku').textContent = 'Catalog SKU: ' + opt.dataset.sku;
+            if (mappedBox) mappedBox.style.display = 'block';
+            if (unmappedBox) unmappedBox.style.display = 'none';
+            const mTitle = document.getElementById('fg_mapped_title');
+            if (mTitle) mTitle.textContent = 'Mapped to ' + opt.dataset.name;
+            const mSku = document.getElementById('fg_mapped_sku');
+            if (mSku) mSku.textContent = 'Catalog SKU: ' + opt.dataset.sku;
         } else {
-            mappedBox.style.display = 'none';
-            unmappedBox.style.display = 'block';
+            if (mappedBox) mappedBox.style.display = 'none';
+            if (unmappedBox) unmappedBox.style.display = 'block';
         }
     } else {
+        if (addStockBtn) addStockBtn.classList.remove('d-none');
+        if (inStockBadge) inStockBadge.classList.add('d-none');
+
         document.getElementById('fg_preview_ref').textContent = 'PO-FG';
         document.getElementById('fg_preview_title').textContent = 'Select Finished Good';
         document.getElementById('fg_preview_cat').textContent = 'Apparel';
@@ -1628,7 +1740,7 @@ function updateFgPreview() {
         document.getElementById('fg_preview_price').textContent = '₹0.00';
         document.getElementById('fg_preview_code_tag').textContent = 'GAR-S-01';
         renderQr('fg_qr_box', 'GAR-S-01');
-        mappingCard.style.display = 'none';
+        if (mappingCard) mappingCard.style.display = 'none';
     }
 }
 
@@ -1705,14 +1817,33 @@ function doMapVariant() {
 // Tab 3: Production Preview Handler
 function updateProdPreview() {
     const sel = document.getElementById('prod_item_select');
+    if (!sel) return;
+    const addStockBtn = document.getElementById('prod_add_stock_btn');
+    const inStockBadge = document.getElementById('prod_in_stock_badge');
+
     const opt = sel.options[sel.selectedIndex];
     if (opt && opt.value) {
+        const isInStock = (opt.dataset && (opt.dataset.inStock === '1' || opt.dataset.inward === 'completed'));
+        if (addStockBtn) {
+            if (isInStock) {
+                addStockBtn.classList.add('d-none');
+            } else {
+                addStockBtn.classList.remove('d-none');
+            }
+        }
+        if (inStockBadge) {
+            if (isInStock) {
+                inStockBadge.classList.remove('d-none');
+            } else {
+                inStockBadge.classList.add('d-none');
+            }
+        }
+
         const tag = opt.dataset.tag || makeTagCode(opt.dataset.name, opt.dataset.color, opt.dataset.program, opt.value);
         const ref = opt.dataset.program || opt.dataset.log || 'PP-REF';
         const color = (opt.dataset.color || 'STANDARD').toUpperCase();
         const design = (opt.dataset.size ? ('SIZE: ' + opt.dataset.size) : (opt.dataset.program || 'STANDARD')).toUpperCase();
         const price = parseFloat(opt.dataset.price || opt.dataset.mrp || 0);
-        const isInStock = opt.dataset.inStock === '1';
 
         document.getElementById('prod_preview_ref').textContent = ref;
         document.getElementById('prod_preview_title').textContent = opt.dataset.name || 'Production Garment';
@@ -1730,6 +1861,9 @@ function updateProdPreview() {
 
         renderQr('prod_qr_box', tag);
     } else {
+        if (addStockBtn) addStockBtn.classList.remove('d-none');
+        if (inStockBadge) inStockBadge.classList.add('d-none');
+
         document.getElementById('prod_preview_ref').textContent = 'PP-REF';
         document.getElementById('prod_preview_title').textContent = 'Select Stitched Batch';
         document.getElementById('prod_preview_program').textContent = 'In-House';
@@ -1748,6 +1882,7 @@ function updateProdPreview() {
 
 function selectProdItem(id) {
     const sel = document.getElementById('prod_item_select');
+    if (!sel) return;
     sel.value = id;
     updateProdPreview();
     matchProdQty();
@@ -1756,6 +1891,7 @@ function selectProdItem(id) {
 
 function matchProdQty() {
     const sel = document.getElementById('prod_item_select');
+    if (!sel) return;
     const opt = sel.options[sel.selectedIndex];
     if (opt && opt.value) {
         const pcs = parseInt(opt.dataset.pcs || 24, 10);
@@ -1767,6 +1903,11 @@ function submitProdToStock() {
     const select = document.getElementById('prod_item_select');
     if (!select || !select.value) {
         alert('Please choose a stitched production batch / item first.');
+        return;
+    }
+    const opt = select.options[select.selectedIndex];
+    if (opt && opt.dataset && (opt.dataset.inStock === '1' || opt.dataset.inward === 'completed')) {
+        alert('This stitched production item has already been added to stock.');
         return;
     }
     const val = select.value;
@@ -1885,6 +2026,11 @@ function submitFgToStock() {
     const select = document.getElementById('fg_item_select');
     if (!select || !select.value) {
         alert('Please select a finished goods item first.');
+        return;
+    }
+    const opt = select.options[select.selectedIndex];
+    if (opt && opt.dataset && (opt.dataset.inward === 'completed' || opt.dataset.inStock === '1')) {
+        alert('This finished goods item has already been added to stock.');
         return;
     }
     const val = select.value;

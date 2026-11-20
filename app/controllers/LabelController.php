@@ -1285,8 +1285,8 @@ class LabelController extends Controller {
             return;
         }
 
-        // Auto-detect if itemId belongs to stitching_items
-        if ($itemId > 0 && empty($billId)) {
+        // Auto-detect if itemId belongs to stitching_items (only if not explicitly a purchase tab)
+        if ($itemId > 0 && empty($billId) && ($preferredTab === 'production' || empty($preferredTab))) {
             $this->ensureStitchingInwardSchema();
             $isStitching = DB::fetch("SELECT id FROM stitching_items WHERE id = ?", [$itemId]);
             if ($isStitching) {
@@ -1321,6 +1321,11 @@ class LabelController extends Controller {
                 $item = DB::fetch($itemSql, $itemParams);
                 if (!$item) {
                     throw new Exception("Purchase item #{$itemId} not found or access denied.");
+                }
+
+                if (($item['inward_status'] ?? '') === 'completed') {
+                    $itemLabel = ($item['section_type'] === 'rolls') ? 'Fabric roll' : 'Purchase item';
+                    throw new Exception("{$itemLabel} '{$item['item_name']}' has already been added to stock.");
                 }
 
                 $concernId = (int)$item['concern_id'];
@@ -1518,6 +1523,9 @@ class LabelController extends Controller {
                 $si = DB::fetch($sql, $params);
                 if (!$si) {
                     throw new Exception("Stitched item #{$itemId} not found or access denied.");
+                }
+                if (($si['inward_status'] ?? '') === 'completed') {
+                    throw new Exception("Stitched item #{$itemId} has already been added to stock.");
                 }
                 $itemsToInward[] = $si;
             } elseif ($stitchingId > 0) {
