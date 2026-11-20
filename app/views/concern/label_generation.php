@@ -1009,6 +1009,11 @@ $concernName = $concern['name'] ?? 'GRM Inventory';
                                             <i class="bi bi-box-arrow-in-down me-1"></i> Add Batch to Stock
                                         </button>
                                     </form>
+                                    <a href="<?= \App\Core\Controller::url('/m/stocks?tab=live_stock') ?>"
+                                       class="btn btn-outline-success py-2 px-3 fw-semibold shadow-sm text-nowrap d-none"
+                                       id="prod_batch_in_stock_btn" title="All variants already in stock - Click to view in Live Stocks">
+                                        <i class="bi bi-check-circle-fill me-1"></i> In Stock &bull; View Stocks
+                                    </a>
                                 </div>
                                 <small class="text-muted mt-2 d-block" id="prod_batch_stock_note"></small>
 
@@ -2104,6 +2109,7 @@ function onBatchSelect() {
 
     const printBtn    = document.getElementById('prod_batch_print_btn');
     const stockBtn    = document.getElementById('prod_batch_stock_btn');
+    const inStockBtn  = document.getElementById('prod_batch_in_stock_btn');
     const hiddenBatch = document.getElementById('hidden_batch_id');
     const hiddenStock = document.getElementById('hidden_batch_stock_id');
     const summary     = document.getElementById('prod_batch_summary');
@@ -2113,10 +2119,11 @@ function onBatchSelect() {
     const noteEl      = document.getElementById('prod_batch_stock_note');
 
     if (!opt || !opt.value) {
-        if (printBtn)  printBtn.disabled = true;
-        if (stockBtn)  stockBtn.disabled = true;
-        if (summary)   summary.classList.add('d-none');
-        if (tableWrap) tableWrap.classList.add('d-none');
+        if (printBtn)   printBtn.disabled = true;
+        if (stockBtn)   { stockBtn.disabled = true; stockBtn.classList.remove('d-none'); }
+        if (inStockBtn) inStockBtn.classList.add('d-none');
+        if (summary)    summary.classList.add('d-none');
+        if (tableWrap)  tableWrap.classList.add('d-none');
         return;
     }
 
@@ -2133,11 +2140,20 @@ function onBatchSelect() {
     if (hiddenBatch) hiddenBatch.value = batchId;
     if (hiddenStock) hiddenStock.value = 'batch_' + batchId;
 
-    // Enable print always; stock only if pending items
+    // Enable print always
     if (printBtn) printBtn.disabled = false;
-    if (stockBtn) {
-        stockBtn.disabled = isAllInStock;
-        stockBtn.title    = isAllInStock ? 'All variants already in stock' : 'Inward ' + pendingCount + ' pending variants into stock';
+
+    // Toggle Add to Stock vs In Stock View button
+    if (isAllInStock) {
+        if (stockBtn)   stockBtn.classList.add('d-none');
+        if (inStockBtn) inStockBtn.classList.remove('d-none');
+    } else {
+        if (stockBtn) {
+            stockBtn.classList.remove('d-none');
+            stockBtn.disabled = false;
+            stockBtn.title = 'Inward ' + pendingCount + ' pending variants into stock';
+        }
+        if (inStockBtn) inStockBtn.classList.add('d-none');
     }
     if (noteEl) {
         noteEl.textContent = isAllInStock
