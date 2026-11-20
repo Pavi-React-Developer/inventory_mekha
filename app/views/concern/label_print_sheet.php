@@ -48,7 +48,7 @@
             page-break-inside: avoid;
             break-inside: avoid;
             box-sizing: border-box;
-            min-height: 140px;
+            min-height: 115px;
             position: relative;
             box-shadow: 0 1px 3px rgba(0,0,0,0.05);
         }
@@ -128,14 +128,15 @@
             font-size: 0.76rem;
         }
         .label-item-title {
-            font-size: 0.86rem;
-            font-weight: 800;
-            color: #0f172a;
+            font-size: 0.70rem;
+            font-weight: 700;
+            color: #1e293b;
             text-transform: uppercase;
-            margin-bottom: 2px;
+            margin-bottom: 6px;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            letter-spacing: 0.02em;
         }
         .label-detail-row {
             color: #334155;
@@ -215,114 +216,142 @@ $badge       = $labelData['section_badge'] ?? 'STANDARD';
         <small class="text-muted">
             <span class="badge bg-light text-dark border me-1"><?= htmlspecialchars($labelData['section_title'] ?? 'PRODUCT LABEL') ?></span>
             <span class="badge bg-primary-subtle text-primary border me-1"><?= htmlspecialchars($badge) ?></span>
-            Printing <strong><?= (int)$qty ?> copies</strong> of <strong><?= htmlspecialchars(!empty($headerTitle) ? $headerTitle : $label1Val) ?></strong> (<?= htmlspecialchars($tagCode) ?>) &bull; Concern: <strong><?= htmlspecialchars($concernName) ?></strong>
+            <?php if (!empty($multiLabels)): ?>
+                Printing <strong><?= (int)$qty ?> labels</strong> across <strong><?= (int)($variantCount ?? count($multiLabels)) ?> variants</strong> for Batch <strong>#<?= htmlspecialchars($batchNo ?? 'BATCH') ?></strong> &bull; Concern: <strong><?= htmlspecialchars($concernName) ?></strong>
+                <?php
+                // Build per-variant summary from multiLabels
+                $variantSummary = [];
+                foreach ($multiLabels as $_lbl) {
+                    $sz = $_lbl['variant_size'] ?? '—';
+                    if (!isset($variantSummary[$sz])) {
+                        $variantSummary[$sz] = ['sku' => $_lbl['sku_code'] ?? '', 'count' => 0];
+                    }
+                    $variantSummary[$sz]['count']++;
+                }
+                ?>
+                <span class="ms-2">|</span>
+                <?php foreach ($variantSummary as $sz => $info): ?>
+                    <span style="background:#fbbf24;color:#0f172a;font-weight:700;font-size:0.65rem;padding:1px 7px;border-radius:8px;margin-left:3px;font-family:monospace;">
+                        <?= strtoupper(htmlspecialchars($sz)) ?> &times;<?= $info['count'] ?>
+                    </span>
+                <?php endforeach; ?>
+            <?php else: ?>
+                Printing <strong><?= (int)$qty ?> copies</strong> of <strong><?= htmlspecialchars(!empty($headerTitle) ? $headerTitle : $label1Val) ?></strong> (<?= htmlspecialchars($tagCode) ?>) &bull; Concern: <strong><?= htmlspecialchars($concernName) ?></strong>
+            <?php endif; ?>
         </small>
     </div>
     <div class="d-flex align-items-center gap-2 flex-wrap">
-        <div class="btn-group btn-group-sm me-2" role="group">
-            <button type="button" class="btn btn-outline-secondary active" id="btnLayoutA4" onclick="setLayout('a4')">
-                <i class="bi bi-grid-3x3"></i> A4 Grid (3 Col)
-            </button>
-            <button type="button" class="btn btn-outline-secondary" id="btnLayoutThermal" onclick="setLayout('thermal')">
-                <i class="bi bi-card-text"></i> Thermal Roll (1 Col)
-            </button>
-        </div>
-        <button class="btn btn-outline-secondary btn-sm" onclick="window.close()">Close</button>
-        <?php if (!empty($labelData['item_id'])): ?>
-            <?php $isProdStock = ($labelData['stock_tab'] ?? '') === 'production'; ?>
-            <form action="<?= \App\Core\Controller::url('/m/label/add_to_stock') ?>" method="POST" class="d-inline" target="_self">
-                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'] ?? '') ?>">
-                <input type="hidden" name="item_id" value="<?= (int)$labelData['item_id'] ?>">
-                <input type="hidden" name="tab" value="<?= htmlspecialchars($labelData['stock_tab'] ?? 'rolls') ?>">
-                <button type="submit" class="btn btn-success btn-sm fw-bold px-3 shadow-sm d-flex align-items-center gap-1.5" title="Add this item to <?= $isProdStock ? 'Live Inventory Stocks' : 'Purchase Stocks' ?>">
-                    <i class="bi bi-box-arrow-in-down"></i> Add to Stock &rarr; <?= $isProdStock ? 'Live Stocks' : 'Purchase Stocks' ?>
-                </button>
-            </form>
-        <?php elseif (!empty($labelData['bill_id'])): ?>
-            <form action="<?= \App\Core\Controller::url('/m/label/add_to_stock') ?>" method="POST" class="d-inline" target="_self">
-                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'] ?? '') ?>">
-                <input type="hidden" name="bill_id" value="<?= (int)$labelData['bill_id'] ?>">
-                <input type="hidden" name="tab" value="<?= htmlspecialchars($labelData['stock_tab'] ?? 'rolls') ?>">
-                <button type="submit" class="btn btn-success btn-sm fw-bold px-3 shadow-sm d-flex align-items-center gap-1.5" title="Add items of this section to Purchase Stocks">
-                    <i class="bi bi-box-arrow-in-down"></i> Add to Stock &rarr; Purchase Stocks
-                </button>
-            </form>
-        <?php else: ?>
-            <a href="<?= \App\Core\Controller::url('/m/purchase_stocks') ?>" class="btn btn-outline-success btn-sm fw-bold">
-                <i class="bi bi-boxes me-1"></i> View Purchase Stocks
-            </a>
-        <?php endif; ?>
-        <button class="btn btn-primary btn-sm fw-bold px-3" onclick="window.print()">
+        <button class="btn btn-primary btn-sm fw-bold px-3 py-1.5 shadow-sm" onclick="window.print()">
             <i class="bi bi-printer-fill me-1"></i> Print Labels Now
         </button>
     </div>
 </div>
 
 <div class="label-grid" id="labelGrid">
-    <?php for ($i = 0; $i < $qty; $i++): ?>
-        <div class="label-sticker">
-            <!-- Top Header: Concern Name Dynamically & Reference Badge (Image 2 Reference) -->
-            <div class="label-header-bar">
-                <div class="d-flex align-items-center">
-                    <span class="concern-check-icon"><i class="bi bi-check-lg"></i></span>
-                    <span class="concern-name-text"><?= htmlspecialchars($concernName) ?></span>
+    <?php if (!empty($multiLabels)): ?>
+        <?php foreach ($multiLabels as $lbl): 
+            $cName     = $lbl['concern_name'] ?? $concernName;
+            $rNo       = $lbl['ref_no'] ?? 'REF-001';
+            $hTitle    = $lbl['header_title'] ?? ($lbl['item_title'] ?? '');
+            $l1Name    = $lbl['label_1_name'] ?? 'Program';
+            $l1Val     = $lbl['label_1_val'] ?? '-';
+            $l2Name    = $lbl['label_2_name'] ?? 'Color';
+            $l2Val     = $lbl['label_2_val'] ?? 'STANDARD';
+            $dVal      = $lbl['design'] ?? ($lbl['label_3_val'] ?? 'STANDARD');
+            $pVal      = (float)($lbl['price'] ?? ($lbl['price_mrp'] ?? 0));
+            $tCode     = $lbl['tag_code'] ?? ($lbl['item_code'] ?? 'SKU');
+            $iQr       = $lbl['qr_payload'] ?? $tCode;
+        ?>
+            <div class="label-sticker">
+                <div class="label-header-bar">
+                    <div class="d-flex align-items-center">
+                        <span class="concern-check-icon"><i class="bi bi-check-lg"></i></span>
+                        <span class="concern-name-text"><?= htmlspecialchars($cName) ?></span>
+                    </div>
+                    <div class="d-flex align-items-center gap-1">
+                        <?php if (!empty($lbl['variant_size'])): ?>
+                            <span style="background:#fbbf24;color:#0f172a;font-weight:700;font-size:0.65rem;padding:1px 6px;border-radius:8px;font-family:monospace;-webkit-print-color-adjust:exact;print-color-adjust:exact;"><?= strtoupper(htmlspecialchars($lbl['variant_size'])) ?></span>
+                        <?php endif; ?>
+                        <span class="ref-pill-badge"><?= htmlspecialchars($rNo) ?></span>
+                    </div>
                 </div>
-                <span class="ref-pill-badge"><?= htmlspecialchars($refNo) ?></span>
+                <div class="label-divider"></div>
+                <div class="label-body-content">
+                    <div class="label-qr-wrapper">
+                        <div class="label-qr-box qr-container" data-code="<?= htmlspecialchars($iQr) ?>"></div>
+                    </div>
+                    <div class="label-details-stack">
+                        <?php if (!empty($hTitle)): ?>
+                            <div class="label-item-title"><?= htmlspecialchars($hTitle) ?></div>
+                        <?php endif; ?>
+                        <div class="label-detail-row" style="margin-bottom: 2px;">
+                            <span class="detail-label">Price:</span>
+                            <span class="detail-val fw-bold text-success" style="font-size: 0.82rem;">₹<?= number_format($pVal, 2) ?></span>
+                        </div>
+                        <div class="label-detail-row">
+                            <span class="detail-label">Code:</span>
+                            <span class="detail-val font-monospace text-primary fw-bold" style="font-size: 0.80rem;"><?= htmlspecialchars($tCode) ?></span>
+                        </div>
+                    </div>
+                </div>
             </div>
-
-            <!-- Dashed Separator Line -->
-            <div class="label-divider"></div>
-
-            <!-- Body: QR on Left, Details Stack on Right -->
-            <div class="label-body-content">
-                <div class="label-qr-wrapper">
-                    <div class="label-qr-box qr-container" data-code="<?= htmlspecialchars($qrText) ?>"></div>
+        <?php endforeach; ?>
+    <?php else: ?>
+        <?php for ($i = 0; $i < $qty; $i++): ?>
+            <div class="label-sticker">
+                <!-- Top Header: Concern Name Dynamically & Reference Badge (Image 2 Reference) -->
+                <div class="label-header-bar">
+                    <div class="d-flex align-items-center">
+                        <span class="concern-check-icon"><i class="bi bi-check-lg"></i></span>
+                        <span class="concern-name-text"><?= htmlspecialchars($concernName) ?></span>
+                    </div>
+                    <span class="ref-pill-badge"><?= htmlspecialchars($refNo) ?></span>
                 </div>
 
-                <div class="label-details-stack">
-                    <?php if (!empty($headerTitle)): ?>
-                        <div class="label-item-title"><?= htmlspecialchars($headerTitle) ?></div>
-                    <?php endif; ?>
-                    <div class="label-detail-row">
-                        <span class="detail-label"><?= htmlspecialchars($label1Name) ?>:</span>
-                        <span class="detail-val"><?= htmlspecialchars($label1Val) ?></span>
+                <!-- Dashed Separator Line -->
+                <div class="label-divider"></div>
+
+                <!-- Body: QR on Left, Details Stack on Right -->
+                <div class="label-body-content">
+                    <div class="label-qr-wrapper">
+                        <div class="label-qr-box qr-container" data-code="<?= htmlspecialchars($qrText) ?>"></div>
                     </div>
-                    <div class="label-detail-row">
-                        <span class="detail-label"><?= htmlspecialchars($label2Name) ?>:</span>
-                        <span class="detail-val text-uppercase"><?= htmlspecialchars($label2Val) ?></span>
-                    </div>
-                    <div class="label-detail-row">
-                        <span class="detail-label">Design:</span>
-                        <span class="detail-val text-uppercase"><?= htmlspecialchars($designVal) ?></span>
-                    </div>
-                    <div class="label-detail-row">
-                        <span class="detail-label">Price:</span>
-                        <span class="detail-val fw-bold text-success">₹<?= number_format($priceVal, 2) ?></span>
-                    </div>
-                    <div class="label-detail-row">
-                        <span class="detail-label">Code:</span>
-                        <span class="detail-val font-monospace text-primary fw-bold"><?= htmlspecialchars($tagCode) ?></span>
+
+                    <div class="label-details-stack">
+                        <?php if (!empty($headerTitle)): ?>
+                            <div class="label-item-title"><?= htmlspecialchars($headerTitle) ?></div>
+                        <?php endif; ?>
+                        <div class="label-detail-row" style="margin-bottom: 2px;">
+                            <span class="detail-label">Price:</span>
+                            <span class="detail-val fw-bold text-success" style="font-size: 0.82rem;">₹<?= number_format($priceVal, 2) ?></span>
+                        </div>
+                        <div class="label-detail-row">
+                            <span class="detail-label">Code:</span>
+                            <span class="detail-val font-monospace text-primary fw-bold" style="font-size: 0.80rem;"><?= htmlspecialchars($tagCode) ?></span>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
-    <?php endfor; ?>
+        <?php endfor; ?>
+    <?php endif; ?>
 </div>
 
 <script src="<?= \App\Core\Controller::url('/assets/js/qrcode.min.js') ?>"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const containers = document.querySelectorAll('.qr-container');
-    const code = "<?= htmlspecialchars($qrText) ?>";
     containers.forEach(el => {
-        new QRCode(el, {
-            text: code,
-            width: 80,
-            height: 80,
-            colorDark : "#000000",
-            colorLight : "#ffffff",
-            correctLevel : QRCode.CorrectLevel.M
-        });
+        const code = el.getAttribute('data-code') || "<?= htmlspecialchars($qrText ?? '') ?>";
+        if (code) {
+            new QRCode(el, {
+                text: code,
+                width: 80,
+                height: 80,
+                colorDark : "#000000",
+                colorLight : "#ffffff",
+                correctLevel : QRCode.CorrectLevel.M
+            });
+        }
     });
 });
 

@@ -300,6 +300,42 @@ class LabelController extends Controller {
         }
         unset($pItem);
 
+        // Group production items by stitching batch for multi-variant and batch printing
+        $productionBatches = [];
+        foreach ($productionItems as $pItem) {
+            $bId = (int)($pItem['stitching_id'] ?: ($pItem['stitching_log_id'] ?: $pItem['id']));
+            if (!isset($productionBatches[$bId])) {
+                $productionBatches[$bId] = [
+                    'id'               => $bId,
+                    'stitching_id'     => $bId,
+                    'batch_no'         => $pItem['batch_no'] ?? ($pItem['log_no'] ?? ('STCH-' . $bId)),
+                    'log_no'           => $pItem['log_no'] ?? ($pItem['batch_no'] ?? ('STCH-' . $bId)),
+                    'stitching_name'   => $pItem['stitching_name'] ?? '',
+                    'program_no'       => $pItem['program_no'] ?: 'Standard Program',
+                    'program_name'     => $pItem['program_name'] ?? '',
+                    'catalog_id'       => $pItem['catalog_id'] ?? null,
+                    'catalog_name'     => $pItem['catalog_name'] ?? ($pItem['variant_name'] ?? 'In-House Garment'),
+                    'catalog_code'     => $pItem['catalog_code'] ?? '',
+                    'category_name'    => $pItem['category_name'] ?? 'Apparel',
+                    'subcategory_name' => $pItem['subcategory_name'] ?? '',
+                    'brand_name'       => $pItem['brand_name'] ?? '',
+                    'created_at'       => $pItem['created_at'] ?? date('Y-m-d H:i:s'),
+                    'total_pieces'     => 0,
+                    'is_all_in_stock'  => true,
+                    'has_in_stock'     => false,
+                    'items'            => []
+                ];
+            }
+            $pcs = (int)($pItem['stitched_pieces'] ?? ($pItem['stitching_qty'] ?? 1));
+            $productionBatches[$bId]['total_pieces'] += $pcs;
+            if (empty($pItem['is_in_stock'])) {
+                $productionBatches[$bId]['is_all_in_stock'] = false;
+            } else {
+                $productionBatches[$bId]['has_in_stock'] = true;
+            }
+            $productionBatches[$bId]['items'][] = $pItem;
+        }
+
         // 4. Return Labels (Customer Returns & Exchanges)
         $retSql = "SELECT re.*, 
                           cust.name AS customer_name, cust.phone AS customer_phone,
@@ -350,6 +386,7 @@ class LabelController extends Controller {
             'purchaseRawItems'   => $purchaseRawItems,
             'purchaseFgItems'    => $purchaseFgItems,
             'productionItems'    => $productionItems,
+            'productionBatches'  => array_values($productionBatches),
             'returnItems'        => $returnItems,
             'allVariants'        => $allVariants,
             'recentJobs'         => $recentJobs,
@@ -656,6 +693,228 @@ class LabelController extends Controller {
         // 3. PRODUCTION LABELS (After Stitching Products)
         // ----------------------------------------------------
         elseif ($labelType === 'production') {
+            $prodPrintMode = trim($_POST['prod_print_mode'] ?? 'variant');
+            $batchId = (int)($_POST['batch_id'] ?? 0);
+            if (!$batchId && is_string($rawItemId) && strpos($rawItemId, 'batch_') === 0) {
+                $batchId = (int)str_replace('batch_', '', $rawItemId);
+                $prodPrintMode = 'batch';
+            }
+
+            // WAY 1: ENTIRE BATCH MULTI-VARIANT LABEL GENERATION (e.g. 70 Labels across 7 Variants)
+            if ($prodPrintMode === 'batch' && $batchId > 0) {
+                $batchItems = DB::fetchAll(
+                    "SELECT si.*, 
+                            si.id AS stitching_item_id,
+                            si.size AS variant_size,
+                            si.color AS variant_color,
+                            si.base_price AS variant_mrp,
+                            si.discount_price AS variant_price,
+                            si.stitching_qty AS stitched_pieces,
+                            sl.batch_no AS log_no,
+                            sl.batch_no,
+                            sl.stitching_name,
+                            sl.concern_id,
+                            pp.program_no,
+                            pp.program_name,
+                            COALESCE(cat.id, pp.catalog_id) AS catalog_id,
+                            cat.name AS catalog_name,
+                            cat.style_code AS catalog_code,
+                            c.name AS category_name,
+                            sc.name AS subcategory_name,
+                            b.name AS brand_name,
+                            v.sku_code AS v_sku,
+                            v.name AS v_name,
+                            v.mrp AS v_mrp,
+                            v.price AS v_price
+                     FROM stitching_items si
+                     JOIN stitching_logs sl ON si.stitching_id = sl.id
+                     LEFT JOIN production_programs pp ON sl.program_id = pp.id
+                     LEFT JOIN cutting_items ci ON si.cutting_item_id = ci.id
+                     LEFT JOIN program_rolls pr ON ci.program_roll_id = pr.id
+                     LEFT JOIN catalogs cat ON (si.catalog_id = cat.id OR pp.catalog_id = cat.id OR pr.catalog_id = cat.id)
+                     LEFT JOIN categories c ON cat.category_id = c.id
+                     LEFT JOIN subcategories sc ON cat.subcategory_id = sc.id
+                     LEFT JOIN variants v ON si.variant_id = v.id
+                     LEFT JOIN brands b ON v.brand_id = b.id
+                     WHERE si.stitching_id = ?" . ($cid ? " AND (sl.concern_id = ? OR sl.concern_id = 1 OR sl.concern_id IS NULL)" : "") . "
+                     ORDER BY si.id ASC",
+                    $cid ? [$batchId, $cid] : [$batchId]
+                );
+
+                if (empty($batchItems)) {
+                    $sl = DB::fetch(
+                        "SELECT sl.*, sl.batch_no AS log_no, v.sku_code, v.name AS variant_name, v.size AS variant_size,
+                                v.price AS variant_price, v.mrp AS variant_mrp, c.name AS category_name, sc.name AS subcategory_name,
+                                b.name AS brand_name, pp.program_no
+                         FROM stitching_logs sl
+                         LEFT JOIN variants v ON sl.produced_variant_id = v.id
+                         LEFT JOIN production_programs pp ON sl.program_id = pp.id
+                         LEFT JOIN categories c ON v.category_id = c.id
+                         LEFT JOIN subcategories sc ON v.subcategory_id = sc.id
+                         LEFT JOIN brands b ON v.brand_id = b.id
+                         WHERE sl.id = ?" . ($cid ? " AND (sl.concern_id = ? OR sl.concern_id = 1 OR sl.concern_id IS NULL)" : ""),
+                        $cid ? [$batchId, $cid] : [$batchId]
+                    );
+                    if ($sl) {
+                        $batchItems = [[
+                            'stitching_item_id' => 0,
+                            'stitching_id'      => $sl['id'],
+                            'variant_id'        => $sl['produced_variant_id'],
+                            'variant_name'      => $sl['variant_name'] ?: 'In-House Garment',
+                            'variant_size'      => $sl['variant_size'] ?: 'Standard',
+                            'variant_color'     => $sl['color'] ?? 'STANDARD',
+                            'variant_mrp'       => $sl['variant_mrp'] ?? 0,
+                            'variant_price'     => $sl['variant_price'] ?? 0,
+                            'stitched_pieces'   => $sl['pieces_produced'] ?? 1,
+                            'log_no'            => $sl['log_no'],
+                            'batch_no'          => $sl['log_no'],
+                            'program_no'        => $sl['program_no'] ?? 'Standard Program',
+                            'brand_name'        => $sl['brand_name'] ?? $concernName,
+                            'category_name'     => $sl['category_name'] ?? 'Apparel',
+                            'sku_code'          => $sl['sku_code'] ?? 'SKU',
+                            'concern_id'        => $sl['concern_id'] ?? 1
+                        ]];
+                    }
+                }
+
+                if (empty($batchItems)) {
+                    $this->flash('error', 'No stitched items found for batch #' . $batchId);
+                    $this->redirect('/m/label_generation?tab=production');
+                    return;
+                }
+
+                $multiLabels = [];
+                $batchNo = $batchItems[0]['log_no'] ?? ('STCH-' . $batchId);
+                $batchConcernId = $cid ?: (int)($batchItems[0]['concern_id'] ?? 1);
+
+                foreach ($batchItems as $bItem) {
+                    $itemVariantId = !empty($bItem['variant_id']) ? (int)$bItem['variant_id'] : 0;
+                    $itemSku = $bItem['sku_code'] ?? ($bItem['v_sku'] ?? '');
+                    $itemSize = $bItem['variant_size'] ?: ($bItem['size'] ?: 'Standard');
+                    $itemColor = $bItem['variant_color'] ?? ($bItem['color'] ?? 'STANDARD');
+                    $itemProg = $bItem['program_no'] ?: 'Standard Program';
+                    $itemMrp = (float)($bItem['variant_mrp'] ?: ($bItem['v_mrp'] ?? 0));
+                    $itemPrice = (float)($bItem['variant_price'] ?: ($bItem['v_price'] ?? $itemMrp));
+                    $itemPieces = max(1, (int)($bItem['stitched_pieces'] ?: 1));
+
+                    if (!$itemVariantId && !empty($itemSku)) {
+                        $existingVar = DB::fetch("SELECT id FROM variants WHERE concern_id = ? AND sku_code = ?", [$batchConcernId, $itemSku]);
+                        if ($existingVar) {
+                            $itemVariantId = (int)$existingVar['id'];
+                        } else {
+                            $catId = (int)($bItem['category_id'] ?: 1);
+                            $validCat = DB::fetchValue("SELECT id FROM categories WHERE id = ?", [$catId]);
+                            if (!$validCat) {
+                                $catId = (int)DB::fetchValue("SELECT id FROM categories ORDER BY id ASC LIMIT 1") ?: 1;
+                            }
+                            $subcatId = !empty($bItem['subcategory_id']) ? (int)$bItem['subcategory_id'] : null;
+                            if ($subcatId && !DB::fetchValue("SELECT id FROM subcategories WHERE id = ?", [$subcatId])) {
+                                $subcatId = null;
+                            }
+                            $catalogId = !empty($bItem['catalog_id']) ? (int)$bItem['catalog_id'] : null;
+                            DB::query(
+                                "INSERT INTO variants (concern_id, catalog_id, sku_code, name, category_id, subcategory_id, size, weight, weight_unit, price, mrp, creation_date, status)
+                                 VALUES (?, ?, ?, ?, ?, ?, ?, 0.4, 'pcs', ?, ?, CURDATE(), 'active')",
+                                [$batchConcernId, $catalogId, $itemSku, $bItem['variant_name'], $catId, $subcatId, $itemSize, $itemPrice, $itemMrp]
+                            );
+                            $itemVariantId = (int)DB::lastInsertId();
+                            if (!empty($bItem['stitching_item_id'])) {
+                                DB::query("UPDATE stitching_items SET variant_id = ? WHERE id = ?", [$itemVariantId, $bItem['stitching_item_id']]);
+                            }
+                        }
+                    }
+
+                    $prodName = $bItem['variant_name'] ?: ($bItem['catalog_name'] ?: 'In-House Garment');
+                    // Use SKU as tag code when available (unique per variant); fall back to generated code
+                    if (!empty($itemSku)) {
+                        $tagCode = strtoupper($itemSku);
+                    } else {
+                        $tagCode = QrService::generateTagCode(
+                            $prodName,
+                            $itemColor,
+                            $itemSize,
+                            (string)$itemVariantId
+                        );
+                    }
+                    $designVal = 'SIZE: ' . strtoupper($itemSize);
+
+                    $vLabelData = [
+                        'concern_name'   => $concernName,
+                        'ref_no'         => $itemProg ?: ('STITCH-' . $batchNo),
+                        'header_title'   => $prodName,
+                        'label_1_name'   => 'Program',
+                        'label_1_val'    => $itemProg,
+                        'label_2_name'   => 'Color',
+                        'label_2_val'    => strtoupper($itemColor),
+                        'label_3_name'   => 'Design',
+                        'label_3_val'    => $designVal,
+                        'design'         => $designVal,
+                        'label_4_name'   => 'Price',
+                        'label_4_val'    => '₹' . number_format($itemPrice, 2),
+                        'price'          => $itemPrice,
+                        'price_mrp'      => $itemMrp,
+                        'tag_code'       => $tagCode,
+                        'qr_payload'     => $tagCode,
+                        'section_title'  => 'PRODUCTION FINISHED GARMENT',
+                        'section_badge'  => 'IN-HOUSE STITCHED',
+                        'item_title'     => $prodName,
+                        'item_code'      => $tagCode,
+                        'item_id'        => (int)($bItem['stitching_item_id'] ?: 0),
+                        'variant_size'   => $itemSize,
+                        'sku_code'       => $itemSku ?: $tagCode,
+                        'stock_tab'      => 'production',
+                        'brand_name'     => $bItem['brand_name'] ?: $concernName,
+                        'category_name'  => $bItem['category_name'] ?: 'Apparel',
+                        'cost_or_ref'    => 'Batch #' . $batchNo,
+                    ];
+
+                    for ($c = 0; $c < $itemPieces; $c++) {
+                        $multiLabels[] = $vLabelData;
+                    }
+                }
+
+                $totalCopies = count($multiLabels);
+
+                DB::query(
+                    "INSERT INTO label_jobs (concern_id, label_type, ref_id, variant_id, item_title, item_code, qr_payload, qty, printed_by, created_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())",
+                    [
+                        $batchConcernId,
+                        'production',
+                        $batchId,
+                        null,
+                        "Batch #{$batchNo} (" . count($batchItems) . " Variants)",
+                        $batchNo,
+                        "BATCH-{$batchNo}",
+                        $totalCopies,
+                        Auth::id()
+                    ]
+                );
+                $jobId = (int)DB::lastInsertId();
+
+                AuditLog::log('GENERATE_LABELS', 'label_jobs', $jobId, null, [
+                    'label_type'    => 'production_batch',
+                    'batch_no'      => $batchNo,
+                    'variant_count' => count($batchItems),
+                    'total_copies'  => $totalCopies
+                ]);
+
+                $this->render('concern/label_print_sheet', [
+                    'pageTitle'    => "Print Labels - Batch #{$batchNo} ({$totalCopies} Copies across " . count($batchItems) . " Variants)",
+                    'noLayout'     => true,
+                    'labelData'    => $multiLabels[0],
+                    'multiLabels'  => $multiLabels,
+                    'qty'          => $totalCopies,
+                    'jobId'        => $jobId,
+                    'labelType'    => 'production',
+                    'batchNo'      => $batchNo,
+                    'batchId'      => $batchId,
+                    'variantCount' => count($batchItems),
+                ]);
+                return;
+            }
+
+            // WAY 2: VARIANT-WISE / SINGLE ITEM GENERATION
             $item = DB::fetch(
                 "SELECT si.*, 
                         si.id AS stitching_item_id,
@@ -1270,10 +1529,14 @@ class LabelController extends Controller {
         $billId = (int)($_POST['bill_id'] ?? ($_GET['bill_id'] ?? 0));
         $rawItemId = $_POST['item_id'] ?? ($_GET['item_id'] ?? 0);
         $preferredTab = trim($_POST['tab'] ?? ($_GET['tab'] ?? ''));
-        $stitchingId = (int)($_POST['stitching_id'] ?? ($_GET['stitching_id'] ?? 0));
+        $stitchingId = (int)($_POST['stitching_id'] ?? ($_POST['batch_id'] ?? ($_GET['stitching_id'] ?? ($_GET['batch_id'] ?? 0))));
 
         if (is_string($rawItemId) && strpos($rawItemId, 'prod_') === 0) {
             $itemId = (int)str_replace('prod_', '', $rawItemId);
+            $preferredTab = 'production';
+        } elseif (is_string($rawItemId) && strpos($rawItemId, 'batch_') === 0) {
+            $stitchingId = (int)str_replace('batch_', '', $rawItemId);
+            $itemId = 0;
             $preferredTab = 'production';
         } else {
             $itemId = (int)$rawItemId;
@@ -1285,8 +1548,8 @@ class LabelController extends Controller {
             return;
         }
 
-        // Auto-detect if itemId belongs to stitching_items
-        if ($itemId > 0 && empty($billId)) {
+        // Auto-detect if itemId belongs to stitching_items (only if not explicitly a purchase tab)
+        if ($itemId > 0 && empty($billId) && ($preferredTab === 'production' || empty($preferredTab))) {
             $this->ensureStitchingInwardSchema();
             $isStitching = DB::fetch("SELECT id FROM stitching_items WHERE id = ?", [$itemId]);
             if ($isStitching) {
@@ -1321,6 +1584,11 @@ class LabelController extends Controller {
                 $item = DB::fetch($itemSql, $itemParams);
                 if (!$item) {
                     throw new Exception("Purchase item #{$itemId} not found or access denied.");
+                }
+
+                if (($item['inward_status'] ?? '') === 'completed') {
+                    $itemLabel = ($item['section_type'] === 'rolls') ? 'Fabric roll' : 'Purchase item';
+                    throw new Exception("{$itemLabel} '{$item['item_name']}' has already been added to stock.");
                 }
 
                 $concernId = (int)$item['concern_id'];
@@ -1518,6 +1786,9 @@ class LabelController extends Controller {
                 $si = DB::fetch($sql, $params);
                 if (!$si) {
                     throw new Exception("Stitched item #{$itemId} not found or access denied.");
+                }
+                if (($si['inward_status'] ?? '') === 'completed') {
+                    throw new Exception("Stitched item #{$itemId} has already been added to stock.");
                 }
                 $itemsToInward[] = $si;
             } elseif ($stitchingId > 0) {
