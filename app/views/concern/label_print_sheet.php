@@ -48,7 +48,7 @@
             page-break-inside: avoid;
             break-inside: avoid;
             box-sizing: border-box;
-            min-height: 140px;
+            min-height: 115px;
             position: relative;
             box-shadow: 0 1px 3px rgba(0,0,0,0.05);
         }
@@ -128,14 +128,15 @@
             font-size: 0.76rem;
         }
         .label-item-title {
-            font-size: 0.86rem;
-            font-weight: 800;
-            color: #0f172a;
+            font-size: 0.70rem;
+            font-weight: 700;
+            color: #1e293b;
             text-transform: uppercase;
-            margin-bottom: 2px;
+            margin-bottom: 6px;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            letter-spacing: 0.02em;
         }
         .label-detail-row {
             color: #334155;
@@ -240,51 +241,7 @@ $badge       = $labelData['section_badge'] ?? 'STANDARD';
         </small>
     </div>
     <div class="d-flex align-items-center gap-2 flex-wrap">
-        <div class="btn-group btn-group-sm me-2" role="group">
-            <button type="button" class="btn btn-outline-secondary active" id="btnLayoutA4" onclick="setLayout('a4')">
-                <i class="bi bi-grid-3x3"></i> A4 Grid (3 Col)
-            </button>
-            <button type="button" class="btn btn-outline-secondary" id="btnLayoutThermal" onclick="setLayout('thermal')">
-                <i class="bi bi-card-text"></i> Thermal Roll (1 Col)
-            </button>
-        </div>
-        <button class="btn btn-outline-secondary btn-sm" onclick="window.close()">Close</button>
-        <?php if (!empty($multiLabels) && !empty($batchNo)): ?>
-            <!-- BATCH MODE: Add all batch items to stock -->
-            <?php $batchStitchId = $labelData['item_id'] ?? 0; ?>
-            <form action="<?= \App\Core\Controller::url('/m/label/add_to_stock') ?>" method="POST" class="d-inline" target="_self">
-                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'] ?? '') ?>">
-                <input type="hidden" name="item_id" value="batch_<?= (int)($batchId ?? $batchStitchId) ?>">
-                <input type="hidden" name="tab" value="production">
-                <button type="submit" class="btn btn-success btn-sm fw-bold px-3 shadow-sm d-flex align-items-center gap-1" title="Inward all <?= (int)($variantCount ?? count($multiLabels)) ?> variants of this batch into Live Stocks">
-                    <i class="bi bi-box-arrow-in-down"></i> Add Batch to Stock &rarr; Live Stocks
-                </button>
-            </form>
-        <?php elseif (!empty($labelData['item_id'])): ?>
-            <?php $isProdStock = ($labelData['stock_tab'] ?? '') === 'production'; ?>
-            <form action="<?= \App\Core\Controller::url('/m/label/add_to_stock') ?>" method="POST" class="d-inline" target="_self">
-                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'] ?? '') ?>">
-                <input type="hidden" name="item_id" value="<?= (int)$labelData['item_id'] ?>">
-                <input type="hidden" name="tab" value="<?= htmlspecialchars($labelData['stock_tab'] ?? 'rolls') ?>">
-                <button type="submit" class="btn btn-success btn-sm fw-bold px-3 shadow-sm d-flex align-items-center gap-1" title="Add this item to <?= $isProdStock ? 'Live Inventory Stocks' : 'Purchase Stocks' ?>">
-                    <i class="bi bi-box-arrow-in-down"></i> Add to Stock &rarr; <?= $isProdStock ? 'Live Stocks' : 'Purchase Stocks' ?>
-                </button>
-            </form>
-        <?php elseif (!empty($labelData['bill_id'])): ?>
-            <form action="<?= \App\Core\Controller::url('/m/label/add_to_stock') ?>" method="POST" class="d-inline" target="_self">
-                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'] ?? '') ?>">
-                <input type="hidden" name="bill_id" value="<?= (int)$labelData['bill_id'] ?>">
-                <input type="hidden" name="tab" value="<?= htmlspecialchars($labelData['stock_tab'] ?? 'rolls') ?>">
-                <button type="submit" class="btn btn-success btn-sm fw-bold px-3 shadow-sm d-flex align-items-center gap-1" title="Add items of this section to Purchase Stocks">
-                    <i class="bi bi-box-arrow-in-down"></i> Add to Stock &rarr; Purchase Stocks
-                </button>
-            </form>
-        <?php else: ?>
-            <a href="<?= \App\Core\Controller::url('/m/purchase_stocks') ?>" class="btn btn-outline-success btn-sm fw-bold">
-                <i class="bi bi-boxes me-1"></i> View Purchase Stocks
-            </a>
-        <?php endif; ?>
-        <button class="btn btn-primary btn-sm fw-bold px-3" onclick="window.print()">
+        <button class="btn btn-primary btn-sm fw-bold px-3 py-1.5 shadow-sm" onclick="window.print()">
             <i class="bi bi-printer-fill me-1"></i> Print Labels Now
         </button>
     </div>
@@ -327,25 +284,13 @@ $badge       = $labelData['section_badge'] ?? 'STANDARD';
                         <?php if (!empty($hTitle)): ?>
                             <div class="label-item-title"><?= htmlspecialchars($hTitle) ?></div>
                         <?php endif; ?>
-                        <div class="label-detail-row">
-                            <span class="detail-label"><?= htmlspecialchars($l1Name) ?>:</span>
-                            <span class="detail-val"><?= htmlspecialchars($l1Val) ?></span>
-                        </div>
-                        <div class="label-detail-row">
-                            <span class="detail-label"><?= htmlspecialchars($l2Name) ?>:</span>
-                            <span class="detail-val text-uppercase"><?= htmlspecialchars($l2Val) ?></span>
-                        </div>
-                        <div class="label-detail-row">
-                            <span class="detail-label">Design:</span>
-                            <span class="detail-val text-uppercase"><?= htmlspecialchars($dVal) ?></span>
-                        </div>
-                        <div class="label-detail-row">
+                        <div class="label-detail-row" style="margin-bottom: 2px;">
                             <span class="detail-label">Price:</span>
-                            <span class="detail-val fw-bold text-success">₹<?= number_format($pVal, 2) ?></span>
+                            <span class="detail-val fw-bold text-success" style="font-size: 0.82rem;">₹<?= number_format($pVal, 2) ?></span>
                         </div>
                         <div class="label-detail-row">
                             <span class="detail-label">Code:</span>
-                            <span class="detail-val font-monospace text-primary fw-bold"><?= htmlspecialchars($tCode) ?></span>
+                            <span class="detail-val font-monospace text-primary fw-bold" style="font-size: 0.80rem;"><?= htmlspecialchars($tCode) ?></span>
                         </div>
                     </div>
                 </div>
@@ -376,25 +321,13 @@ $badge       = $labelData['section_badge'] ?? 'STANDARD';
                         <?php if (!empty($headerTitle)): ?>
                             <div class="label-item-title"><?= htmlspecialchars($headerTitle) ?></div>
                         <?php endif; ?>
-                        <div class="label-detail-row">
-                            <span class="detail-label"><?= htmlspecialchars($label1Name) ?>:</span>
-                            <span class="detail-val"><?= htmlspecialchars($label1Val) ?></span>
-                        </div>
-                        <div class="label-detail-row">
-                            <span class="detail-label"><?= htmlspecialchars($label2Name) ?>:</span>
-                            <span class="detail-val text-uppercase"><?= htmlspecialchars($label2Val) ?></span>
-                        </div>
-                        <div class="label-detail-row">
-                            <span class="detail-label">Design:</span>
-                            <span class="detail-val text-uppercase"><?= htmlspecialchars($designVal) ?></span>
-                        </div>
-                        <div class="label-detail-row">
+                        <div class="label-detail-row" style="margin-bottom: 2px;">
                             <span class="detail-label">Price:</span>
-                            <span class="detail-val fw-bold text-success">₹<?= number_format($priceVal, 2) ?></span>
+                            <span class="detail-val fw-bold text-success" style="font-size: 0.82rem;">₹<?= number_format($priceVal, 2) ?></span>
                         </div>
                         <div class="label-detail-row">
                             <span class="detail-label">Code:</span>
-                            <span class="detail-val font-monospace text-primary fw-bold"><?= htmlspecialchars($tagCode) ?></span>
+                            <span class="detail-val font-monospace text-primary fw-bold" style="font-size: 0.80rem;"><?= htmlspecialchars($tagCode) ?></span>
                         </div>
                     </div>
                 </div>

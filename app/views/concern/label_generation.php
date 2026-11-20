@@ -1086,12 +1086,9 @@ $concernName = $concern['name'] ?? 'GRM Inventory';
                                             <div class="d-flex align-items-center gap-3 pt-2">
                                                 <div class="d-flex align-items-center justify-content-center bg-white flex-shrink-0" style="width:76px;height:76px;" id="prod_qr_box"></div>
                                                 <div class="flex-grow-1 overflow-hidden" style="line-height:1.35;font-size:0.76rem;">
-                                                    <div class="fw-bold text-dark text-uppercase mb-1 text-truncate" style="font-size:0.86rem;" id="prod_preview_title">Production Garment</div>
-                                                    <div class="text-truncate"><span class="text-secondary">Program:</span> <strong class="text-dark" id="prod_preview_program">In-House</strong></div>
-                                                    <div class="text-truncate"><span class="text-secondary">Color:</span> <strong class="text-dark text-uppercase" id="prod_preview_color">STANDARD</strong></div>
-                                                    <div class="text-truncate"><span class="text-secondary">Design:</span> <strong class="text-dark text-uppercase" id="prod_preview_design">STANDARD</strong></div>
-                                                    <div class="text-truncate"><span class="text-secondary">Price:</span> <strong class="text-success fw-bold" id="prod_preview_price">&#8377;0.00</strong></div>
-                                                    <div class="text-truncate"><span class="text-secondary">Code:</span> <strong class="font-monospace text-primary fw-bold" id="prod_preview_code_tag">PRO-S-01</strong></div>
+                                                    <div class="fw-bold text-dark text-uppercase mb-1 text-truncate" style="font-size:0.72rem;letter-spacing:0.02em;" id="prod_preview_title">Production Garment</div>
+                                                    <div class="text-truncate" style="margin-bottom: 2px;"><span class="text-secondary">Price:</span> <strong class="text-success fw-bold" id="prod_preview_price" style="font-size:0.82rem;">&#8377;0.00</strong></div>
+                                                    <div class="text-truncate"><span class="text-secondary">Code:</span> <strong class="font-monospace text-primary fw-bold" id="prod_preview_code_tag" style="font-size:0.80rem;">PRO-S-01</strong></div>
                                                 </div>
                                             </div>
                                         </div>
@@ -2035,13 +2032,14 @@ function updateProdPreview() {
         const design = (opt.dataset.size ? ('SIZE: ' + opt.dataset.size) : (opt.dataset.program || 'STANDARD')).toUpperCase();
         const price  = parseFloat(opt.dataset.price || opt.dataset.mrp || 0);
 
-        document.getElementById('prod_preview_ref').textContent        = ref;
-        document.getElementById('prod_preview_title').textContent      = opt.dataset.name || 'Production Garment';
-        document.getElementById('prod_preview_program').textContent    = opt.dataset.program || 'In-House';
-        document.getElementById('prod_preview_color').textContent      = color;
-        document.getElementById('prod_preview_design').textContent     = design;
-        document.getElementById('prod_preview_price').textContent      = '₹' + price.toFixed(2);
-        document.getElementById('prod_preview_code_tag').textContent   = tag;
+        const elRef = document.getElementById('prod_preview_ref');
+        const elTitle = document.getElementById('prod_preview_title');
+        const elPrice = document.getElementById('prod_preview_price');
+        const elCode = document.getElementById('prod_preview_code_tag');
+        if (elRef) elRef.textContent = ref;
+        if (elTitle) elTitle.textContent = opt.dataset.name || 'Production Garment';
+        if (elPrice) elPrice.textContent = '₹' + price.toFixed(2);
+        if (elCode) elCode.textContent = tag;
 
         const badgeEl = document.getElementById('prod_preview_badge');
         if (badgeEl) {
@@ -2054,13 +2052,14 @@ function updateProdPreview() {
     } else {
         if (addStockBtn)   addStockBtn.classList.remove('d-none');
         if (inStockBadge)  inStockBadge.classList.add('d-none');
-        document.getElementById('prod_preview_ref').textContent        = 'PP-REF';
-        document.getElementById('prod_preview_title').textContent      = 'Select Stitched Batch';
-        document.getElementById('prod_preview_program').textContent    = 'In-House';
-        document.getElementById('prod_preview_color').textContent      = 'STANDARD';
-        document.getElementById('prod_preview_design').textContent     = 'STANDARD';
-        document.getElementById('prod_preview_price').textContent      = '₹0.00';
-        document.getElementById('prod_preview_code_tag').textContent   = 'PRO-S-01';
+        const elRef = document.getElementById('prod_preview_ref');
+        const elTitle = document.getElementById('prod_preview_title');
+        const elPrice = document.getElementById('prod_preview_price');
+        const elCode = document.getElementById('prod_preview_code_tag');
+        if (elRef) elRef.textContent = 'PP-REF';
+        if (elTitle) elTitle.textContent = 'Select Stitched Batch';
+        if (elPrice) elPrice.textContent = '₹0.00';
+        if (elCode) elCode.textContent = 'PRO-S-01';
         const badgeEl = document.getElementById('prod_preview_badge');
         if (badgeEl) {
             badgeEl.textContent = 'IN-HOUSE STITCHED';
