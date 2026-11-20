@@ -291,6 +291,9 @@ $isProgramsTab = (isset($activeTab) && $activeTab === 'programs') || (isset($_GE
                                         </td>
                                         <td>
                                             <span class="badge bg-light text-dark border"><?= htmlspecialchars($p['catalog_name'] ?? 'General / Per-Roll') ?></span>
+                                            <?php if (!empty($p['roll_catalog_names']) && $p['roll_catalog_names'] !== ($p['catalog_name'] ?? '')): ?>
+                                                <div class="small text-muted mt-0.5">Roll styles: <?= htmlspecialchars($p['roll_catalog_names']) ?></div>
+                                            <?php endif; ?>
                                             <?php if (!empty($p['target_variant_name'])): ?>
                                                 <div class="small text-muted mt-0.5"><?= htmlspecialchars($p['target_variant_name']) ?></div>
                                             <?php endif; ?>

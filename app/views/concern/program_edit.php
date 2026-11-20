@@ -309,6 +309,7 @@ function createRollCardHtml(index, rollData = null) {
 
     return `
     <div class="card border rounded-3 p-3 bg-white roll-card shadow-xs mb-3" id="${cardId}" data-index="${index}">
+        <input type="hidden" name="rolls[${index}][program_roll_id]" class="input-program-roll-id" value="${rollData ? (rollData.program_roll_id || rollData.id || '') : ''}">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace px-2.5 py-1 roll-index-badge">Roll #${index + 1}</span>
             <button type="button" class="btn btn-outline-danger btn-sm py-0.5 px-2 btn-remove-roll" onclick="removeRollCard('${cardId}')" title="Remove this roll">
