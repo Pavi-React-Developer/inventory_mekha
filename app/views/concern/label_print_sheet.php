@@ -21,10 +21,8 @@
             padding: 1rem 1.5rem;
             margin-bottom: 1.5rem;
             display: flex;
-            align-items: center;
-            justify-content: space-between;
-            flex-wrap: gap;
-            gap: 1rem;
+            flex-direction: column;
+            gap: 0.75rem;
         }
         .label-grid {
             display: grid;
@@ -48,7 +46,7 @@
             page-break-inside: avoid;
             break-inside: avoid;
             box-sizing: border-box;
-            min-height: 115px;
+            min-height: 140px;
             position: relative;
             box-shadow: 0 1px 3px rgba(0,0,0,0.05);
         }
@@ -98,6 +96,18 @@
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
         }
+        .size-pill-badge {
+            background-color: #fbbf24;
+            color: #0f172a;
+            font-family: monospace;
+            font-size: 0.65rem;
+            font-weight: 700;
+            padding: 1px 6px;
+            border-radius: 8px;
+            white-space: nowrap;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
         .label-divider {
             border-top: 1px dashed #cbd5e1;
             margin: 4px 0 6px 0;
@@ -128,14 +138,15 @@
             font-size: 0.76rem;
         }
         .label-item-title {
-            font-size: 0.70rem;
+            font-size: 0.72rem;
             font-weight: 700;
-            color: #1e293b;
+            color: #0f172a;
             text-transform: uppercase;
-            margin-bottom: 6px;
+            margin-bottom: 3px;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            line-height: 1.25;
             letter-spacing: 0.02em;
         }
         .label-detail-row {
@@ -204,46 +215,103 @@ $priceVal    = (float)($labelData['price'] ?? ($labelData['price_mrp'] ?? 0));
 $tagCode     = $labelData['tag_code'] ?? ($labelData['item_code'] ?? 'SKU');
 $qrText      = $qrCodeText ?? ($labelData['qr_payload'] ?? $tagCode);
 $badge       = $labelData['section_badge'] ?? 'STANDARD';
+$isProduction = ($labelType === 'production') 
+    || (($labelData['section_title'] ?? '') === 'PRODUCTION FINISHED GARMENT')
+    || (($labelData['stock_tab'] ?? '') === 'production');
+
+// Precalculate variant summary for batch mode
+$variantSummary = [];
+if (!empty($multiLabels)) {
+    foreach ($multiLabels as $_lbl) {
+        $sz = $_lbl['variant_size'] ?? '—';
+        if (!isset($variantSummary[$sz])) {
+            $variantSummary[$sz] = ['sku' => $_lbl['sku_code'] ?? '', 'count' => 0];
+        }
+        $variantSummary[$sz]['count']++;
+    }
+}
 ?>
 
 <div class="print-toolbar">
-    <div>
-        <h5 class="mb-0 fw-bold d-flex align-items-center gap-2">
+    <!-- Top Row: Title + Action buttons in one clean, un-wrapped row -->
+    <div class="d-flex align-items-center justify-content-between w-100 flex-wrap gap-2">
+        <h5 class="mb-0 fw-bold d-flex align-items-center gap-2 text-dark">
             <i class="bi bi-printer text-primary"></i> 
             <span>Print Sheet Preview</span>
             <span class="badge bg-primary-subtle text-primary border border-primary fs-6">Job #<?= (int)($jobId ?? 1) ?></span>
         </h5>
-        <small class="text-muted">
-            <span class="badge bg-light text-dark border me-1"><?= htmlspecialchars($labelData['section_title'] ?? 'PRODUCT LABEL') ?></span>
-            <span class="badge bg-primary-subtle text-primary border me-1"><?= htmlspecialchars($badge) ?></span>
+        <div class="d-flex align-items-center gap-2 flex-wrap" style="white-space: nowrap;">
+            <div class="btn-group btn-group-sm" role="group">
+                <button type="button" class="btn btn-outline-secondary active" id="btnLayoutA4" onclick="setLayout('a4')">
+                    <i class="bi bi-grid-3x3"></i> A4 Grid (3 Col)
+                </button>
+                <button type="button" class="btn btn-outline-secondary" id="btnLayoutThermal" onclick="setLayout('thermal')">
+                    <i class="bi bi-card-text"></i> Thermal Roll (1 Col)
+                </button>
+            </div>
+            <?php if (!empty($multiLabels) && !empty($batchNo)): ?>
+                <!-- BATCH MODE: Add all batch items to stock -->
+                <?php $batchStitchId = $labelData['item_id'] ?? 0; ?>
+                <form action="<?= \App\Core\Controller::url('/m/label/add_to_stock') ?>" method="POST" class="d-inline m-0" target="_self">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'] ?? '') ?>">
+                    <input type="hidden" name="item_id" value="batch_<?= (int)($batchId ?? $batchStitchId) ?>">
+                    <input type="hidden" name="tab" value="production">
+                    <button type="submit" class="btn btn-success btn-sm fw-bold px-3 shadow-sm d-flex align-items-center gap-1" title="Inward all <?= (int)($variantCount ?? count($multiLabels)) ?> variants of this batch into Live Stocks">
+                        <i class="bi bi-box-arrow-in-down"></i> Add Batch to Stock &rarr; Live Stocks
+                    </button>
+                </form>
+            <?php elseif (!empty($labelData['item_id'])): ?>
+                <?php $isProdStock = ($labelData['stock_tab'] ?? '') === 'production'; ?>
+                <form action="<?= \App\Core\Controller::url('/m/label/add_to_stock') ?>" method="POST" class="d-inline m-0" target="_self">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'] ?? '') ?>">
+                    <input type="hidden" name="item_id" value="<?= (int)$labelData['item_id'] ?>">
+                    <input type="hidden" name="tab" value="<?= htmlspecialchars($labelData['stock_tab'] ?? 'rolls') ?>">
+                    <button type="submit" class="btn btn-success btn-sm fw-bold px-3 shadow-sm d-flex align-items-center gap-1" title="Add this item to <?= $isProdStock ? 'Live Inventory Stocks' : 'Purchase Stocks' ?>">
+                        <i class="bi bi-box-arrow-in-down"></i> Add to Stock &rarr; <?= $isProdStock ? 'Live Stocks' : 'Purchase Stocks' ?>
+                    </button>
+                </form>
+            <?php elseif (!empty($labelData['bill_id'])): ?>
+                <form action="<?= \App\Core\Controller::url('/m/label/add_to_stock') ?>" method="POST" class="d-inline m-0" target="_self">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'] ?? '') ?>">
+                    <input type="hidden" name="bill_id" value="<?= (int)$labelData['bill_id'] ?>">
+                    <input type="hidden" name="tab" value="<?= htmlspecialchars($labelData['stock_tab'] ?? 'rolls') ?>">
+                    <button type="submit" class="btn btn-success btn-sm fw-bold px-3 shadow-sm d-flex align-items-center gap-1" title="Add items of this section to Purchase Stocks">
+                        <i class="bi bi-box-arrow-in-down"></i> Add to Stock &rarr; Purchase Stocks
+                    </button>
+                </form>
+            <?php else: ?>
+                <a href="<?= \App\Core\Controller::url('/m/purchase_stocks') ?>" class="btn btn-outline-success btn-sm fw-bold">
+                    <i class="bi bi-boxes me-1"></i> View Purchase Stocks
+                </a>
+            <?php endif; ?>
+            <button class="btn btn-primary btn-sm fw-bold px-3 shadow-sm" onclick="window.print()">
+                <i class="bi bi-printer-fill me-1"></i> Print Labels Now
+            </button>
+            <button class="btn btn-outline-secondary btn-sm" onclick="window.close()">Close</button>
+        </div>
+    </div>
+
+    <!-- Bottom Row: Batch details and variant pills spanning full width -->
+    <div class="d-flex align-items-center justify-content-between w-100 flex-wrap gap-2 pt-2 border-top text-muted small">
+        <div class="d-flex align-items-center gap-1 flex-wrap">
+            <span class="badge bg-light text-dark border"><?= htmlspecialchars($labelData['section_title'] ?? 'PRODUCT LABEL') ?></span>
+            <span class="badge bg-primary-subtle text-primary border"><?= htmlspecialchars($badge) ?></span>
             <?php if (!empty($multiLabels)): ?>
-                Printing <strong><?= (int)$qty ?> labels</strong> across <strong><?= (int)($variantCount ?? count($multiLabels)) ?> variants</strong> for Batch <strong>#<?= htmlspecialchars($batchNo ?? 'BATCH') ?></strong> &bull; Concern: <strong><?= htmlspecialchars($concernName) ?></strong>
-                <?php
-                // Build per-variant summary from multiLabels
-                $variantSummary = [];
-                foreach ($multiLabels as $_lbl) {
-                    $sz = $_lbl['variant_size'] ?? '—';
-                    if (!isset($variantSummary[$sz])) {
-                        $variantSummary[$sz] = ['sku' => $_lbl['sku_code'] ?? '', 'count' => 0];
-                    }
-                    $variantSummary[$sz]['count']++;
-                }
-                ?>
-                <span class="ms-2">|</span>
+                <span>Printing <strong><?= (int)$qty ?> labels</strong> across <strong><?= (int)($variantCount ?? count($multiLabels)) ?> variants</strong> for Batch <strong>#<?= htmlspecialchars($batchNo ?? 'BATCH') ?></strong> &bull; Concern: <strong><?= htmlspecialchars($concernName) ?></strong></span>
+            <?php else: ?>
+                <span>Printing <strong><?= (int)$qty ?> copies</strong> of <strong><?= htmlspecialchars(!empty($headerTitle) ? $headerTitle : $label1Val) ?></strong> (<?= htmlspecialchars($tagCode) ?>) &bull; Concern: <strong><?= htmlspecialchars($concernName) ?></strong></span>
+            <?php endif; ?>
+        </div>
+        <?php if (!empty($multiLabels) && !empty($variantSummary)): ?>
+            <div class="d-flex align-items-center gap-1 flex-wrap">
+                <span class="text-secondary small fw-semibold me-1">Variants:</span>
                 <?php foreach ($variantSummary as $sz => $info): ?>
-                    <span style="background:#fbbf24;color:#0f172a;font-weight:700;font-size:0.65rem;padding:1px 7px;border-radius:8px;margin-left:3px;font-family:monospace;">
+                    <span class="size-pill-badge" style="font-size:0.68rem;padding:2px 7px;">
                         <?= strtoupper(htmlspecialchars($sz)) ?> &times;<?= $info['count'] ?>
                     </span>
                 <?php endforeach; ?>
-            <?php else: ?>
-                Printing <strong><?= (int)$qty ?> copies</strong> of <strong><?= htmlspecialchars(!empty($headerTitle) ? $headerTitle : $label1Val) ?></strong> (<?= htmlspecialchars($tagCode) ?>) &bull; Concern: <strong><?= htmlspecialchars($concernName) ?></strong>
-            <?php endif; ?>
-        </small>
-    </div>
-    <div class="d-flex align-items-center gap-2 flex-wrap">
-        <button class="btn btn-primary btn-sm fw-bold px-3 py-1.5 shadow-sm" onclick="window.print()">
-            <i class="bi bi-printer-fill me-1"></i> Print Labels Now
-        </button>
+            </div>
+        <?php endif; ?>
     </div>
 </div>
 
@@ -261,6 +329,10 @@ $badge       = $labelData['section_badge'] ?? 'STANDARD';
             $pVal      = (float)($lbl['price'] ?? ($lbl['price_mrp'] ?? 0));
             $tCode     = $lbl['tag_code'] ?? ($lbl['item_code'] ?? 'SKU');
             $iQr       = $lbl['qr_payload'] ?? $tCode;
+            $vSize     = !empty($lbl['variant_size']) ? $lbl['variant_size'] : preg_replace('/^SIZE:\s*/i', '', $dVal);
+            if (empty($vSize) || $vSize === 'STANDARD') {
+                $vSize = 'Free';
+            }
         ?>
             <div class="label-sticker">
                 <div class="label-header-bar">
@@ -269,9 +341,7 @@ $badge       = $labelData['section_badge'] ?? 'STANDARD';
                         <span class="concern-name-text"><?= htmlspecialchars($cName) ?></span>
                     </div>
                     <div class="d-flex align-items-center gap-1">
-                        <?php if (!empty($lbl['variant_size'])): ?>
-                            <span style="background:#fbbf24;color:#0f172a;font-weight:700;font-size:0.65rem;padding:1px 6px;border-radius:8px;font-family:monospace;-webkit-print-color-adjust:exact;print-color-adjust:exact;"><?= strtoupper(htmlspecialchars($lbl['variant_size'])) ?></span>
-                        <?php endif; ?>
+                        <span class="size-pill-badge"><?= strtoupper(htmlspecialchars($vSize)) ?></span>
                         <span class="ref-pill-badge"><?= htmlspecialchars($rNo) ?></span>
                     </div>
                 </div>
@@ -284,19 +354,53 @@ $badge       = $labelData['section_badge'] ?? 'STANDARD';
                         <?php if (!empty($hTitle)): ?>
                             <div class="label-item-title"><?= htmlspecialchars($hTitle) ?></div>
                         <?php endif; ?>
-                        <div class="label-detail-row" style="margin-bottom: 2px;">
-                            <span class="detail-label">Price:</span>
-                            <span class="detail-val fw-bold text-success" style="font-size: 0.82rem;">₹<?= number_format($pVal, 2) ?></span>
-                        </div>
-                        <div class="label-detail-row">
-                            <span class="detail-label">Code:</span>
-                            <span class="detail-val font-monospace text-primary fw-bold" style="font-size: 0.80rem;"><?= htmlspecialchars($tCode) ?></span>
-                        </div>
+                        <?php if ($isProduction): ?>
+                            <!-- PRODUCTION: Clean layout without Program or Color, Size instead of Design -->
+                            <div class="label-detail-row">
+                                <span class="detail-label">Size:</span>
+                                <span class="detail-val text-uppercase fw-bold"><?= htmlspecialchars($vSize) ?></span>
+                            </div>
+                            <div class="label-detail-row">
+                                <span class="detail-label">Price:</span>
+                                <span class="detail-val fw-bold text-success">₹<?= number_format($pVal, 2) ?></span>
+                            </div>
+                            <div class="label-detail-row">
+                                <span class="detail-label">Code:</span>
+                                <span class="detail-val font-monospace text-primary fw-bold"><?= htmlspecialchars($tCode) ?></span>
+                            </div>
+                        <?php else: ?>
+                            <div class="label-detail-row">
+                                <span class="detail-label"><?= htmlspecialchars($l1Name) ?>:</span>
+                                <span class="detail-val"><?= htmlspecialchars($l1Val) ?></span>
+                            </div>
+                            <div class="label-detail-row">
+                                <span class="detail-label"><?= htmlspecialchars($l2Name) ?>:</span>
+                                <span class="detail-val text-uppercase"><?= htmlspecialchars($l2Val) ?></span>
+                            </div>
+                            <div class="label-detail-row">
+                                <span class="detail-label">Design:</span>
+                                <span class="detail-val text-uppercase"><?= htmlspecialchars($dVal) ?></span>
+                            </div>
+                            <div class="label-detail-row">
+                                <span class="detail-label">Price:</span>
+                                <span class="detail-val fw-bold text-success">₹<?= number_format($pVal, 2) ?></span>
+                            </div>
+                            <div class="label-detail-row">
+                                <span class="detail-label">Code:</span>
+                                <span class="detail-val font-monospace text-primary fw-bold"><?= htmlspecialchars($tCode) ?></span>
+                            </div>
+                        <?php endif; ?>
                     </div>
                 </div>
             </div>
         <?php endforeach; ?>
     <?php else: ?>
+        <?php 
+        $sSize = !empty($labelData['variant_size']) ? $labelData['variant_size'] : preg_replace('/^SIZE:\s*/i', '', $designVal);
+        if (empty($sSize) || $sSize === 'STANDARD') {
+            $sSize = 'Free';
+        }
+        ?>
         <?php for ($i = 0; $i < $qty; $i++): ?>
             <div class="label-sticker">
                 <!-- Top Header: Concern Name Dynamically & Reference Badge (Image 2 Reference) -->
@@ -305,7 +409,12 @@ $badge       = $labelData['section_badge'] ?? 'STANDARD';
                         <span class="concern-check-icon"><i class="bi bi-check-lg"></i></span>
                         <span class="concern-name-text"><?= htmlspecialchars($concernName) ?></span>
                     </div>
-                    <span class="ref-pill-badge"><?= htmlspecialchars($refNo) ?></span>
+                    <div class="d-flex align-items-center gap-1">
+                        <?php if ($isProduction): ?>
+                            <span class="size-pill-badge"><?= strtoupper(htmlspecialchars($sSize)) ?></span>
+                        <?php endif; ?>
+                        <span class="ref-pill-badge"><?= htmlspecialchars($refNo) ?></span>
+                    </div>
                 </div>
 
                 <!-- Dashed Separator Line -->
@@ -321,14 +430,42 @@ $badge       = $labelData['section_badge'] ?? 'STANDARD';
                         <?php if (!empty($headerTitle)): ?>
                             <div class="label-item-title"><?= htmlspecialchars($headerTitle) ?></div>
                         <?php endif; ?>
-                        <div class="label-detail-row" style="margin-bottom: 2px;">
-                            <span class="detail-label">Price:</span>
-                            <span class="detail-val fw-bold text-success" style="font-size: 0.82rem;">₹<?= number_format($priceVal, 2) ?></span>
-                        </div>
-                        <div class="label-detail-row">
-                            <span class="detail-label">Code:</span>
-                            <span class="detail-val font-monospace text-primary fw-bold" style="font-size: 0.80rem;"><?= htmlspecialchars($tagCode) ?></span>
-                        </div>
+                        <?php if ($isProduction): ?>
+                            <!-- PRODUCTION: Clean layout without Program or Color, Size instead of Design -->
+                            <div class="label-detail-row">
+                                <span class="detail-label">Size:</span>
+                                <span class="detail-val text-uppercase fw-bold"><?= htmlspecialchars($sSize) ?></span>
+                            </div>
+                            <div class="label-detail-row">
+                                <span class="detail-label">Price:</span>
+                                <span class="detail-val fw-bold text-success">₹<?= number_format($priceVal, 2) ?></span>
+                            </div>
+                            <div class="label-detail-row">
+                                <span class="detail-label">Code:</span>
+                                <span class="detail-val font-monospace text-primary fw-bold"><?= htmlspecialchars($tagCode) ?></span>
+                            </div>
+                        <?php else: ?>
+                            <div class="label-detail-row">
+                                <span class="detail-label"><?= htmlspecialchars($label1Name) ?>:</span>
+                                <span class="detail-val"><?= htmlspecialchars($label1Val) ?></span>
+                            </div>
+                            <div class="label-detail-row">
+                                <span class="detail-label"><?= htmlspecialchars($label2Name) ?>:</span>
+                                <span class="detail-val text-uppercase"><?= htmlspecialchars($label2Val) ?></span>
+                            </div>
+                            <div class="label-detail-row">
+                                <span class="detail-label">Design:</span>
+                                <span class="detail-val text-uppercase"><?= htmlspecialchars($designVal) ?></span>
+                            </div>
+                            <div class="label-detail-row">
+                                <span class="detail-label">Price:</span>
+                                <span class="detail-val fw-bold text-success">₹<?= number_format($priceVal, 2) ?></span>
+                            </div>
+                            <div class="label-detail-row">
+                                <span class="detail-label">Code:</span>
+                                <span class="detail-val font-monospace text-primary fw-bold"><?= htmlspecialchars($tagCode) ?></span>
+                            </div>
+                        <?php endif; ?>
                     </div>
                 </div>
             </div>

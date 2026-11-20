@@ -1072,6 +1072,8 @@ class LabelController extends Controller {
                 'item_title'     => $prodName,
                 'item_code'      => $tagCode,
                 'item_id'        => $itemId,
+                'variant_size'   => $item['variant_size'] ?: ($item['size'] ?: 'Free'),
+                'sku_code'       => $item['sku_code'] ?? $tagCode,
                 'stock_tab'      => 'production',
                 'brand_name'     => $item['brand_name'] ?: $concernName,
                 'category_name'  => $item['category_name'] ?: 'Apparel',
