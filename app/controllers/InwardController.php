@@ -11,7 +11,40 @@ use App\Services\NumberSeries;
 use Exception;
 
 class InwardController extends Controller {
+    private static bool $schemaEnsured = false;
+
+    protected function ensureSchema(): void {
+        if (self::$schemaEnsured) {
+            return;
+        }
+
+        try {
+            $inCols = array_column(DB::fetchAll("DESCRIBE `inwards`"), 'Field');
+            if (!in_array('outward_id', $inCols)) {
+                DB::query("ALTER TABLE `inwards` ADD COLUMN `outward_id` INT NULL AFTER `purchase_bill_id`");
+            }
+            if (!in_array('from_concern_id', $inCols)) {
+                DB::query("ALTER TABLE `inwards` ADD COLUMN `from_concern_id` INT NULL AFTER `outward_id`");
+            }
+            if (!in_array('inward_type', $inCols)) {
+                DB::query("ALTER TABLE `inwards` ADD COLUMN `inward_type` ENUM('purchase', 'transfer') NOT NULL DEFAULT 'purchase' AFTER `from_concern_id`");
+            }
+
+            $outCols = array_column(DB::fetchAll("DESCRIBE `outwards`"), 'Field');
+            if (!in_array('transfer_type', $outCols)) {
+                DB::query("ALTER TABLE `outwards` ADD COLUMN `transfer_type` ENUM('customer', 'concern') NOT NULL DEFAULT 'customer' AFTER `customer_id`");
+            }
+            if (!in_array('destination_concern_id', $outCols)) {
+                DB::query("ALTER TABLE `outwards` ADD COLUMN `destination_concern_id` INT NULL AFTER `transfer_type`");
+            }
+            self::$schemaEnsured = true;
+        } catch (\Throwable $e) {
+            // Ignore if columns exist
+        }
+    }
+
     public function index(): void {
+        $this->ensureSchema();
         $cid = Auth::concernId();
 
         $sql = "SELECT i.*, s.name AS supplier_name, pb.bill_no, u.name AS user_name,

@@ -82,11 +82,6 @@
                                         <button type="button" class="btn btn-sm btn-outline-info" onclick='openViewOutwardModal(<?= json_encode($o, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>)' title="View Consignment Details">
                                             <i class="bi bi-eye"></i>
                                         </button>
-                                        <?php if ($o['status'] === 'prepared'): ?>
-                                            <a href="<?= \App\Core\Controller::url('/m/dispatch') ?>" class="btn btn-sm btn-outline-secondary" title="Dispatch shipment">
-                                                <i class="bi bi-send"></i>
-                                            </a>
-                                        <?php endif; ?>
                                         <button type="button" class="btn btn-sm btn-outline-primary" onclick='openEditOutwardModal(<?= json_encode($o, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>)' title="Edit Outward">
                                             <i class="bi bi-pencil"></i>
                                         </button>

@@ -107,6 +107,27 @@ class AdminController extends Controller {
                 DB::query('ALTER TABLE `staff` ADD COLUMN `password_hash` VARCHAR(255) NULL AFTER `email`');
             }
 
+            // Remove dispatch module if present in DB
+            $dispatchMod = DB::fetch("SELECT id FROM modules WHERE code = 'dispatch'");
+            if ($dispatchMod) {
+                $did = (int)$dispatchMod['id'];
+                DB::query("DELETE FROM user_permissions WHERE module_id = ?", [$did]);
+                DB::query("DELETE FROM role_permissions WHERE module_id = ?", [$did]);
+                DB::query("DELETE FROM concern_modules WHERE module_id = ?", [$did]);
+                DB::query("DELETE FROM modules WHERE id = ?", [$did]);
+            }
+
+            // Ensure concern_dashboard is always enabled for all concerns and roles
+            $dashMod = DB::fetch("SELECT id FROM modules WHERE code = 'concern_dashboard'");
+            if ($dashMod) {
+                $dashModId = (int)$dashMod['id'];
+                DB::query("INSERT INTO concern_modules (concern_id, module_id, enabled)
+                           SELECT id, ?, 1 FROM concerns
+                           ON DUPLICATE KEY UPDATE enabled = 1", [$dashModId]);
+                DB::query("INSERT IGNORE INTO role_permissions (role_id, module_id, can_view, can_add, can_edit, can_delete)
+                           SELECT id, ?, 1, 1, 1, 1 FROM roles", [$dashModId]);
+            }
+
             self::$schemaEnsured = true;
         } catch (\Throwable $e) {
             error_log('AdminController ensureSchema error: ' . $e->getMessage());
@@ -209,7 +230,7 @@ class AdminController extends Controller {
         if ($textLength($name) < 2 || $textLength($name) > 150 || preg_match('/\p{L}/u', $name) !== 1) {
             $errors[] = 'Concern name must be 2 to 150 characters and contain a letter.';
         }
-        if ($gstin !== '' && !preg_match('/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][A-Z0-9]Z[A-Z0-9]$/D', $gstin)) {
+        if ($gstin !== '' && !preg_match('/^[0-9A-Z]{15}$/D', $gstin)) {
             $errors[] = 'Enter a valid 15-character GSTIN or leave the field blank.';
         }
         if ($phone !== '' && !preg_match('/^\+?[0-9]{10,15}$/D', $phone)) {
@@ -218,17 +239,22 @@ class AdminController extends Controller {
         if ($textLength($address) > 1000) {
             $errors[] = 'Registered address cannot exceed 1000 characters.';
         }
-        if ($textLength($adminName) < 2 || $textLength($adminName) > 100 || preg_match('/\p{L}/u', $adminName) !== 1) {
-            $errors[] = 'Admin name must be 2 to 100 characters and contain a letter.';
-        }
-        if ($adminEmail === '' || strlen($adminEmail) > 120 || filter_var($adminEmail, FILTER_VALIDATE_EMAIL) === false) {
-            $errors[] = 'Enter a valid admin login email address.';
-        }
-        if (strlen($adminPass) < 8 || strlen($adminPass) > 72 || !preg_match('/[A-Za-z]/', $adminPass) || !preg_match('/[0-9]/', $adminPass)) {
-            $errors[] = 'Admin password must be 8 to 72 characters and include at least one letter and one number.';
+        if ($adminEmail !== '') {
+            if ($textLength($adminName) < 2 || $textLength($adminName) > 100 || preg_match('/\p{L}/u', $adminName) !== 1) {
+                $errors[] = 'Admin name must be 2 to 100 characters and contain a letter.';
+            }
+            if (strlen($adminEmail) > 120 || filter_var($adminEmail, FILTER_VALIDATE_EMAIL) === false) {
+                $errors[] = 'Enter a valid admin login email address.';
+            }
+            if (strlen($adminPass) < 8 || strlen($adminPass) > 72 || !preg_match('/[A-Za-z]/', $adminPass) || !preg_match('/[0-9]/', $adminPass)) {
+                $errors[] = 'Admin password must be 8 to 72 characters and include at least one letter and one number.';
+            }
+            if (DB::fetch("SELECT id FROM users WHERE email = ? LIMIT 1", [$adminEmail])) {
+                $errors[] = 'That admin login email is already in use.';
+            }
         }
 
-        $allConcernModules = DB::fetchAll("SELECT id FROM modules WHERE is_super_admin_only = 0");
+        $allConcernModules = DB::fetchAll("SELECT id FROM modules WHERE is_super_admin_only = 0 AND code != 'dispatch'");
         $allowedModuleIds = array_fill_keys(array_map('strval', array_column($allConcernModules, 'id')), true);
         $rawModuleIds = $_POST['modules'] ?? [];
         $pickedModuleIds = [];
@@ -244,14 +270,14 @@ class AdminController extends Controller {
                 }
                 $pickedModuleIds[] = (int)$moduleId;
             }
+            $dashMod = DB::fetch("SELECT id FROM modules WHERE code = 'concern_dashboard'");
+            if ($dashMod) {
+                $pickedModuleIds[] = (int)$dashMod['id'];
+            }
             $pickedModuleIds = array_values(array_unique($pickedModuleIds));
         }
         if (!$pickedModuleIds) {
             $errors[] = 'Select at least one module for the concern.';
-        }
-
-        if ($adminEmail !== '' && DB::fetch("SELECT id FROM users WHERE email = ? LIMIT 1", [$adminEmail])) {
-            $errors[] = 'That admin login email is already in use.';
         }
 
         if ($errors) {
@@ -298,32 +324,34 @@ class AdminController extends Controller {
                 $insertRp->execute([$roleId, (int)$modId]);
             }
 
-            // 5. Create Admin User
-            $passwordHash = password_hash($adminPass, PASSWORD_BCRYPT);
-            DB::query(
-                "INSERT INTO users (concern_id, role_id, name, email, password_hash, phone, status) VALUES (?, ?, ?, ?, ?, ?, 'active')",
-                [$concernId, $roleId, $adminName, $adminEmail, $passwordHash, $phone !== '' ? $phone : null]
-            );
-            $adminUserId = (int)DB::lastInsertId();
+            // 5. Create Admin User (if provided)
+            if ($adminEmail !== '' && $adminName !== '' && $adminPass !== '') {
+                $passwordHash = password_hash($adminPass, PASSWORD_BCRYPT);
+                DB::query(
+                    "INSERT INTO users (concern_id, role_id, name, email, password_hash, phone, status) VALUES (?, ?, ?, ?, ?, ?, 'active')",
+                    [$concernId, $roleId, $adminName, $adminEmail, $passwordHash, $phone !== '' ? $phone : null]
+                );
+                $adminUserId = (int)DB::lastInsertId();
 
-            DB::query("INSERT IGNORE INTO user_concerns (user_id, concern_id) VALUES (?, ?)", [$adminUserId, $concernId]);
+                DB::query("INSERT IGNORE INTO user_concerns (user_id, concern_id) VALUES (?, ?)", [$adminUserId, $concernId]);
 
-            // 5b. Create Initial Staff Profile for Concern Admin
-            $staffCode = 'STF-' . str_pad((string)$concernId, 3, '0', STR_PAD_LEFT) . '-001';
-            DB::query(
-                "INSERT INTO staff (concern_id, user_id, staff_code, name, email, password_hash, phone, designation, department, salary_type, base_salary, address, status, joining_date, created_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, 'Concern Administrator', 'Management', 'monthly', 0.00, ?, 'active', CURDATE(), NOW())",
-                [$concernId, $adminUserId, $staffCode, $adminName, $adminEmail, $passwordHash, $phone !== '' ? $phone : null, $address !== '' ? $address : null]
-            );
+                // 5b. Create Initial Staff Profile for Concern Admin
+                $staffCode = 'STF-' . str_pad((string)$concernId, 3, '0', STR_PAD_LEFT) . '-001';
+                DB::query(
+                    "INSERT INTO staff (concern_id, user_id, staff_code, name, email, password_hash, phone, designation, department, salary_type, base_salary, address, status, joining_date, created_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, 'Concern Administrator', 'Management', 'monthly', 0.00, ?, 'active', CURDATE(), NOW())",
+                    [$concernId, $adminUserId, $staffCode, $adminName, $adminEmail, $passwordHash, $phone !== '' ? $phone : null, $address !== '' ? $address : null]
+                );
 
-            // 5c. Assign user_permissions for enabled modules
-            $insertUp = DB::pdo()->prepare(
-                "INSERT INTO user_permissions (user_id, module_id, can_view, can_add, can_edit, can_delete)
-                 VALUES (?, ?, 1, 1, 1, 1)
-                 ON DUPLICATE KEY UPDATE can_view = 1, can_add = 1, can_edit = 1, can_delete = 1"
-            );
-            foreach ($pickedModuleIds as $modId) {
-                $insertUp->execute([$adminUserId, (int)$modId]);
+                // 5c. Assign user_permissions for enabled modules
+                $insertUp = DB::pdo()->prepare(
+                    "INSERT INTO user_permissions (user_id, module_id, can_view, can_add, can_edit, can_delete)
+                     VALUES (?, ?, 1, 1, 1, 1)
+                     ON DUPLICATE KEY UPDATE can_view = 1, can_add = 1, can_edit = 1, can_delete = 1"
+                );
+                foreach ($pickedModuleIds as $modId) {
+                    $insertUp->execute([$adminUserId, (int)$modId]);
+                }
             }
 
             // 6. Seed Default Document Series
@@ -404,29 +432,110 @@ class AdminController extends Controller {
     }
 
     public function updateConcern(): void {
+        $this->ensureSchema();
         $this->validateCsrf();
         $id = (int)($_POST['id'] ?? 0);
         $concern = DB::fetch("SELECT * FROM concerns WHERE id = ?", [$id]);
         if (!$concern) {
             $this->flash('error', 'Concern not found.');
             $this->redirect('/admin/concerns');
+            return;
         }
 
         $name    = trim($_POST['name'] ?? $concern['name']);
         $code    = strtoupper(trim($_POST['code'] ?? $concern['code']));
-        $gstin   = trim($_POST['gstin'] ?? $concern['gstin']);
+        $gstin   = strtoupper(trim($_POST['gstin'] ?? $concern['gstin']));
         $phone   = trim($_POST['phone'] ?? $concern['phone']);
         $email   = trim($_POST['email'] ?? $concern['email']);
         $address = trim($_POST['address'] ?? $concern['address']);
         $status  = trim($_POST['status'] ?? $concern['status']);
 
+        if ($name === '') {
+            $this->flash('error', 'Concern name is required.');
+            $this->redirect('/admin/concerns');
+            return;
+        }
+        if ($gstin !== '' && !preg_match('/^[0-9A-Z]{15}$/D', $gstin)) {
+            $this->flash('error', 'Enter a valid 15-character GSTIN or leave the field blank.');
+            $this->redirect('/admin/concerns');
+            return;
+        }
+        if ($phone !== '' && !preg_match('/^\+?[0-9]{10,15}$/D', $phone)) {
+            $this->flash('error', 'Phone must contain 10 to 15 digits, with an optional leading +.');
+            $this->redirect('/admin/concerns');
+            return;
+        }
+
+        $rawModuleIds = $_POST['modules'] ?? [];
+        $hasModulePicker = isset($_POST['modules_present']);
+        $allConcernModules = DB::fetchAll("SELECT id FROM modules WHERE is_super_admin_only = 0 AND code != 'dispatch'");
+        $allowedModuleIds = [];
+        foreach ($allConcernModules as $m) {
+            $allowedModuleIds[(int)$m['id']] = true;
+        }
+
+        $pickedModuleIds = [];
+        if (is_array($rawModuleIds)) {
+            foreach ($rawModuleIds as $modId) {
+                $mid = (int)$modId;
+                if (isset($allowedModuleIds[$mid])) {
+                    $pickedModuleIds[] = $mid;
+                }
+            }
+        }
+
+        $dashMod = DB::fetch("SELECT id FROM modules WHERE code = 'concern_dashboard'");
+        if ($dashMod) {
+            $pickedModuleIds[] = (int)$dashMod['id'];
+        }
+        $pickedModuleIds = array_values(array_unique($pickedModuleIds));
+
+        if ($hasModulePicker && empty($pickedModuleIds)) {
+            $this->flash('error', 'Select at least one module for the concern.');
+            $this->redirect('/admin/concerns');
+            return;
+        }
+
+        DB::beginTransaction();
         try {
             DB::query(
                 "UPDATE concerns SET name = ?, code = ?, gstin = ?, phone = ?, email = ?, address = ?, status = ? WHERE id = ?",
-                [$name, $code, $gstin, $phone, $email, $address, $status, $id]
+                [
+                    $name,
+                    $code,
+                    $gstin !== '' ? $gstin : null,
+                    $phone !== '' ? $phone : null,
+                    $email !== '' ? $email : null,
+                    $address !== '' ? $address : null,
+                    $status,
+                    $id
+                ]
             );
+
+            if ($hasModulePicker) {
+                $upsertCm = DB::pdo()->prepare(
+                    "INSERT INTO concern_modules (concern_id, module_id, enabled) VALUES (?, ?, ?)
+                     ON DUPLICATE KEY UPDATE enabled = VALUES(enabled)"
+                );
+                foreach ($allConcernModules as $m) {
+                    $enabled = in_array((int)$m['id'], $pickedModuleIds, true) ? 1 : 0;
+                    $upsertCm->execute([$id, $m['id'], $enabled]);
+                }
+
+                $role = DB::fetch("SELECT id FROM roles WHERE concern_id = ? ORDER BY id ASC LIMIT 1", [$id]);
+                if ($role) {
+                    $roleId = (int)$role['id'];
+                    $insertRp = DB::pdo()->prepare("INSERT IGNORE INTO role_permissions (role_id, module_id, can_view, can_add, can_edit, can_delete) VALUES (?, ?, 1, 1, 1, 1)");
+                    foreach ($pickedModuleIds as $modId) {
+                        $insertRp->execute([$roleId, $modId]);
+                    }
+                }
+            }
+
+            DB::commit();
             $this->flash('success', "Concern '{$name}' updated successfully.");
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
+            DB::rollBack();
             $this->flash('error', 'Failed to update concern: ' . $e->getMessage());
         }
 

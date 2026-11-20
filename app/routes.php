@@ -70,10 +70,10 @@ $router->get('/admin/reports/export', [AdminController::class, 'exportReports'],
 // ==========================================
 
 // Dashboard
-$router->get('/dashboard', [ConcernDashboardController::class, 'index'], 'concern_dashboard', 'view');
-$router->get('/dashboard/export', [ConcernDashboardController::class, 'exportDashboard'], 'concern_dashboard', 'view');
-$router->get('/m/concern_dashboard', [ConcernDashboardController::class, 'index'], 'concern_dashboard', 'view');
-$router->get('/m/concern_dashboard/export', [ConcernDashboardController::class, 'exportDashboard'], 'concern_dashboard', 'view');
+$router->get('/dashboard', [ConcernDashboardController::class, 'index']);
+$router->get('/dashboard/export', [ConcernDashboardController::class, 'exportDashboard']);
+$router->get('/m/concern_dashboard', [ConcernDashboardController::class, 'index']);
+$router->get('/m/concern_dashboard/export', [ConcernDashboardController::class, 'exportDashboard']);
 
 // Variants Catalog
 $router->get('/m/variants', [VariantController::class, 'index'], 'stocks', 'view');
@@ -249,6 +249,7 @@ $router->post('/api/categories/quick-add', [ProductionController::class, 'quickA
 $router->post('/api/subcategories/quick-add', [ProductionController::class, 'quickAddSubcategoryAjax'], 'catalog_program', 'add');
 $router->post('/api/subsubcategories/quick-add', [ProductionController::class, 'quickAddSubSubcategoryAjax'], 'catalog_program', 'add');
 $router->post('/api/attributes/quick-add', [ProductionController::class, 'quickAddAttributeAjax'], 'catalog_program', 'add');
+$router->post('/api/attributes/delete', [ProductionController::class, 'deleteAttributeAjax'], 'catalog_program', 'delete');
 $router->get('/api/hsn/search', [ProductionController::class, 'searchHsnAjax'], 'catalog_program', 'view');
 $router->post('/api/hsn/quick-add', [ProductionController::class, 'quickAddHsnAjax'], 'catalog_program', 'add');
 $router->get('/api/catalog/style-details', [ProductionController::class, 'styleDetailsAjax'], 'catalog_program', 'view');

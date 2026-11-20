@@ -228,7 +228,7 @@
             $activeRoute = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
             $grouped = [];
             foreach ($sidebarModules as $m) {
-                if ($m['code'] === 'variants' || $m['group_name'] === 'Masters') continue;
+                if ($m['code'] === 'variants' || $m['code'] === 'concern_dashboard' || $m['code'] === 'admin_concerns' || $m['code'] === 'dispatch' || $m['group_name'] === 'Masters') continue;
                 $groupName = $m['code'] === 'catalog_mapping' ? 'Purchase' : $m['group_name'];
                 $grouped[$groupName][] = $m;
             }
@@ -308,6 +308,12 @@
                 <i class="bi bi-person-badge-fill"></i>
                 <span>Role Assign</span>
             </a>
+            <?php if ($isSuperAdmin): ?>
+            <a href="<?= \App\Core\Controller::url('/admin/concerns') ?>" class="nav-link <?= (str_contains($activeRoute, 'admin/concerns') || (isset($currentModule) && $currentModule === 'admin_concerns')) ? 'active' : '' ?>">
+                <i class="bi bi-buildings"></i>
+                <span>Concern Management</span>
+            </a>
+            <?php endif; ?>
         </div>
     </nav>
 
@@ -395,10 +401,6 @@
             </div>
 
             <div class="navbar-right">
-                <a href="<?= \App\Core\Controller::url('/m/label_generation') ?>" class="btn btn-sm btn-outline-primary d-flex align-items-center gap-1 shadow-sm px-2.5" style="height: 32px; font-size: 0.82rem; border-radius: 8px;">
-                    <i class="bi bi-qr-code-scan"></i> <span class="d-none d-sm-inline">Scan / Labels</span>
-                </a>
-
                 <div class="dropdown">
                     <button class="btn btn-sm btn-light border dropdown-toggle d-flex align-items-center gap-1.5 shadow-sm px-2.5" type="button" data-bs-toggle="dropdown" style="height: 32px; font-size: 0.82rem; border-radius: 8px;">
                         <i class="bi bi-person-circle fs-6 text-secondary"></i>

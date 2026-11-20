@@ -73,60 +73,30 @@
                     <input type="date" id="expense_to_date" class="form-control form-control-sm" value="<?= date('Y-m-d') ?>" style="width: 125px; border-radius: 8px; font-size: 0.82rem;">
                 </div>
 
-                <!-- Export Excel Button -->
-                <button type="button" class="btn btn-success btn-sm px-3 fw-bold d-flex align-items-center gap-2 shadow-sm" onclick="runExpenseToolbarExport('excel')" style="border-radius: 8px; height: 35px; background: #16a34a; border: none;">
-                    <i class="bi bi-file-earmark-excel"></i> Export Excel
-                </button>
-
-                <!-- Export PDF Button -->
-                <button type="button" class="btn btn-danger btn-sm px-3 fw-bold d-flex align-items-center gap-2 shadow-sm" onclick="runExpenseToolbarExport('pdf')" style="border-radius: 8px; height: 35px; background: #dc2626; border: none;">
-                    <i class="bi bi-file-earmark-pdf"></i> Export PDF
-                </button>
-
-                <!-- CSV Button -->
-                <button type="button" class="btn btn-outline-secondary btn-sm px-3 fw-bold d-flex align-items-center gap-1 shadow-sm" onclick="runExpenseToolbarExport('csv')" style="border-radius: 8px; height: 35px;">
-                    <i class="bi bi-download"></i> CSV
-                </button>
+                <!-- Export Dropdown Button -->
+                <div class="dropdown">
+                    <button type="button" class="btn btn-success btn-sm px-3 fw-bold d-flex align-items-center gap-2 shadow-sm dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" style="border-radius: 8px; height: 35px; background: #16a34a; border: none;">
+                        <i class="bi bi-download"></i> Export
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end shadow-sm py-1" style="border-radius: 10px; border: 1px solid #e2e8f0; font-size: 0.88rem; min-width: 170px;">
+                        <li>
+                            <a class="dropdown-item py-2 d-flex align-items-center gap-2 fw-semibold text-success" href="javascript:void(0)" onclick="runExpenseToolbarExport('excel')">
+                                <i class="bi bi-file-earmark-excel fs-6"></i> Export Excel
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item py-2 d-flex align-items-center gap-2 fw-semibold text-danger" href="javascript:void(0)" onclick="runExpenseToolbarExport('pdf')">
+                                <i class="bi bi-file-earmark-pdf fs-6"></i> Export PDF
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item py-2 d-flex align-items-center gap-2 fw-semibold text-secondary" href="javascript:void(0)" onclick="runExpenseToolbarExport('csv')">
+                                <i class="bi bi-file-earmark-arrow-down fs-6"></i> CSV
+                            </a>
+                        </li>
+                    </ul>
+                </div>
             </div>
-        </div>
-
-        <!-- 1-Click Fast Track Date Shortcuts -->
-        <div class="d-flex flex-wrap align-items-center gap-2 pt-3 mt-3 border-top" style="font-size: 0.82rem;">
-            <span class="text-secondary fw-semibold"><i class="bi bi-lightning-charge text-warning"></i> 1-Click Fast Export:</span>
-            
-            <a href="javascript:void(0)" onclick="quickExpenseExport('excel', 'single_day')" class="badge text-decoration-none px-2 py-1 fw-semibold d-flex align-items-center gap-1" style="background: #ecfdf5; color: #15803d; border: 1px solid #bbf7d0;">
-                <i class="bi bi-file-earmark-excel"></i> Single Day Excel
-            </a>
-            <a href="javascript:void(0)" onclick="quickExpenseExport('pdf', 'single_day')" class="badge text-decoration-none px-2 py-1 fw-semibold d-flex align-items-center gap-1" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca;">
-                <i class="bi bi-file-earmark-pdf"></i> Single Day PDF
-            </a>
-
-            <span class="text-muted">|</span>
-
-            <a href="javascript:void(0)" onclick="quickExpenseExport('excel', 'this_month')" class="badge text-decoration-none px-2 py-1 fw-semibold d-flex align-items-center gap-1" style="background: #ecfdf5; color: #15803d; border: 1px solid #bbf7d0;">
-                <i class="bi bi-file-earmark-excel"></i> Monthly Excel
-            </a>
-            <a href="javascript:void(0)" onclick="quickExpenseExport('pdf', 'this_month')" class="badge text-decoration-none px-2 py-1 fw-semibold d-flex align-items-center gap-1" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca;">
-                <i class="bi bi-file-earmark-pdf"></i> Monthly PDF
-            </a>
-
-            <span class="text-muted">|</span>
-
-            <a href="javascript:void(0)" onclick="quickExpenseExport('excel', '3_months')" class="badge text-decoration-none px-2 py-1 fw-semibold d-flex align-items-center gap-1" style="background: #ecfdf5; color: #15803d; border: 1px solid #bbf7d0;">
-                <i class="bi bi-file-earmark-excel"></i> 3 Months Excel
-            </a>
-            <a href="javascript:void(0)" onclick="quickExpenseExport('pdf', '3_months')" class="badge text-decoration-none px-2 py-1 fw-semibold d-flex align-items-center gap-1" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca;">
-                <i class="bi bi-file-earmark-pdf"></i> 3 Months PDF
-            </a>
-
-            <span class="text-muted">|</span>
-
-            <a href="javascript:void(0)" onclick="quickExpenseExport('excel', '6_months')" class="badge text-decoration-none px-2 py-1 fw-semibold d-flex align-items-center gap-1" style="background: #ecfdf5; color: #15803d; border: 1px solid #bbf7d0;">
-                <i class="bi bi-file-earmark-excel"></i> 6 Months Excel
-            </a>
-            <a href="javascript:void(0)" onclick="quickExpenseExport('pdf', '6_months')" class="badge text-decoration-none px-2 py-1 fw-semibold d-flex align-items-center gap-1" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca;">
-                <i class="bi bi-file-earmark-pdf"></i> 6 Months PDF
-            </a>
         </div>
     </div>
     </div>

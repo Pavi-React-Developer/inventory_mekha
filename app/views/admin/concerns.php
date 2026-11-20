@@ -194,14 +194,14 @@
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label small fw-semibold">GSTIN</label>
-                                <input type="text" name="gstin" class="form-control text-uppercase" maxlength="15" pattern="[0-9]{2}[A-Za-z]{5}[0-9]{4}[A-Za-z][A-Za-z0-9]Z[A-Za-z0-9]" autocomplete="off">
+                                <input type="text" name="gstin" class="form-control text-uppercase font-monospace" maxlength="15" pattern="[0-9A-Za-z]{15}" placeholder="15-character GSTIN" oninput="this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 15);" autocomplete="off" title="15-character alphanumeric GSTIN (e.g. 29AAAAA0000A1Z5)">
                             </div>
                         </div>
 
                         <div class="row g-2 mb-3">
                             <div class="col-12">
                                 <label class="form-label small fw-semibold">Phone</label>
-                                <input type="tel" name="phone" class="form-control" maxlength="16" pattern="\+?[0-9]{10,15}" autocomplete="off">
+                                <input type="tel" name="phone" class="form-control" maxlength="15" pattern="\+?[0-9]{10,15}" placeholder="10-15 digits (e.g. 9876543210)" oninput="this.value = this.value.replace(/[^0-9+]/g, '').slice(0, 15);" autocomplete="off" title="Enter 10 to 15 digit phone number">
                             </div>
                         </div>
 
@@ -209,29 +209,12 @@
                             <label class="form-label small fw-semibold">Registered Address</label>
                             <textarea name="address" class="form-control" rows="2" maxlength="1000" autocomplete="off"></textarea>
                         </div>
-
-                        <hr class="my-4">
-
-                        <h6 class="fw-bold text-primary mb-3"><i class="bi bi-person-badge me-1"></i> Step 2: Tenant Admin Account</h6>
-                        <div class="mb-3">
-                            <label class="form-label small fw-semibold">Admin Name *</label>
-                            <input type="text" name="admin_name" class="form-control" minlength="2" maxlength="100" autocomplete="off" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label small fw-semibold">Admin Login Email *</label>
-                            <input type="email" name="admin_email" class="form-control" maxlength="120" autocomplete="off" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label small fw-semibold">Admin Password *</label>
-                            <input type="password" name="admin_password" class="form-control" minlength="8" maxlength="72" pattern="(?=.*[A-Za-z])(?=.*[0-9]).{8,72}" autocomplete="new-password" required>
-                            <div class="form-text">Use 8 to 72 characters, including at least one letter and one number.</div>
-                        </div>
                     </div>
 
                     <!-- Column 2: Module Picker -->
                     <div class="col-lg-7">
                         <div class="d-flex justify-content-between align-items-center mb-3">
-                            <h6 class="fw-bold text-primary mb-0"><i class="bi bi-grid-3x3-gap me-1"></i> Step 3: Module Picker Checklist</h6>
+                            <h6 class="fw-bold text-primary mb-0"><i class="bi bi-grid-3x3-gap me-1"></i> Step 2: Module Picker Checklist</h6>
                             <div>
                                 <button type="button" class="btn btn-sm btn-outline-primary" onclick="selectAllModules(true)">Select All</button>
                                 <button type="button" class="btn btn-sm btn-outline-secondary" onclick="selectAllModules(false)">Deselect All</button>
@@ -251,16 +234,24 @@
                         ?>
 
                         <div class="row g-3" style="max-height: 520px; overflow-y: auto;">
-                            <?php foreach ($groupedAll as $grp => $mods): ?>
+                            <?php foreach ($groupedAll as $grp => $mods): 
+                                $slug = strtolower(preg_replace('/[^a-zA-Z0-9]+/', '_', $grp));
+                            ?>
                                 <div class="col-md-6">
-                                    <div class="card border h-100">
-                                        <div class="card-header bg-light py-2">
-                                            <span class="fw-bold small text-dark"><?= htmlspecialchars($grp) ?></span>
+                                    <div class="card border h-100 shadow-sm">
+                                        <div class="card-header bg-light py-2 px-3 d-flex align-items-center justify-content-between">
+                                            <div class="form-check mb-0 d-flex align-items-center">
+                                                <input class="form-check-input group-master-check me-2" type="checkbox" id="grp_chk_<?= $slug ?>" <?= $slug === 'dashboard' ? 'checked' : '' ?> onchange="toggleGroupCheck('<?= $slug ?>', this.checked)">
+                                                <label class="form-check-label fw-bold small text-dark user-select-none" for="grp_chk_<?= $slug ?>" style="cursor: pointer;">
+                                                    <?= htmlspecialchars($grp) ?>
+                                                </label>
+                                            </div>
+                                            <span class="badge bg-white text-secondary border small fw-normal px-2"><?= count($mods) ?></span>
                                         </div>
-                                        <div class="card-body p-2">
+                                        <div class="card-body p-2 ps-3">
                                             <?php foreach ($mods as $m): ?>
                                                 <div class="form-check mb-1">
-                                                    <input class="form-check-input module-check" type="checkbox" name="modules[]" value="<?= $m['id'] ?>" id="new_mod_<?= $m['id'] ?>">
+                                                    <input class="form-check-input module-check group-mod-<?= $slug ?>" type="checkbox" name="modules[]" value="<?= $m['id'] ?>" id="new_mod_<?= $m['id'] ?>" data-group="<?= $slug ?>" <?= $m['code'] === 'concern_dashboard' ? 'checked' : '' ?> onchange="syncGroupMasterCheck('<?= $slug ?>')">
                                                     <label class="form-check-label small" for="new_mod_<?= $m['id'] ?>">
                                                         <i class="bi <?= htmlspecialchars($m['icon']) ?> text-muted me-1"></i>
                                                         <?= htmlspecialchars($m['name']) ?>
@@ -288,57 +279,117 @@
 
 <!-- EDIT CONCERN MODAL -->
 <div class="modal fade" id="modalEditConcern" tabindex="-1">
-    <div class="modal-dialog">
-        <form action="<?= \App\Core\Controller::url('/admin/concerns/update') ?>" method="POST" class="modal-content">
+    <div class="modal-dialog modal-xl">
+        <form action="<?= \App\Core\Controller::url('/admin/concerns/update') ?>" method="POST" class="modal-content" id="editConcernForm" autocomplete="off">
             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
             <input type="hidden" name="id" id="edit_concern_id" value="">
+            <input type="hidden" name="modules_present" value="1">
 
-            <div class="modal-header">
-                <h5 class="modal-title fw-bold"><i class="bi bi-pencil-square me-1 text-primary"></i> Edit Business Concern</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title fw-bold"><i class="bi bi-pencil-square me-2 text-warning"></i> Edit Business Concern</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body">
-                <div class="row g-2 mb-3">
-                    <div class="col-md-8">
-                        <label class="form-label small fw-semibold">Concern Name *</label>
-                        <input type="text" name="name" id="edit_concern_name" class="form-control" required>
+
+            <div class="modal-body p-4">
+                <div class="row g-4">
+                    <!-- Column 1: Concern Profile -->
+                    <div class="col-lg-5 border-end pe-lg-4">
+                        <h6 class="fw-bold text-primary mb-3"><i class="bi bi-info-circle me-1"></i> Step 1: Concern Profile</h6>
+                        
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold">Concern Name *</label>
+                            <input type="text" name="name" id="edit_concern_name" class="form-control" required maxlength="150" autocomplete="off">
+                        </div>
+
+                        <div class="row g-2 mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label small fw-semibold">Concern Code *</label>
+                                <input type="text" name="code" id="edit_concern_code" class="form-control text-uppercase font-monospace" required maxlength="20" autocomplete="off">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-semibold">GSTIN</label>
+                                <input type="text" name="gstin" id="edit_concern_gstin" class="form-control text-uppercase font-monospace" maxlength="15" pattern="[0-9A-Za-z]{15}" placeholder="15-character GSTIN" oninput="this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 15);" autocomplete="off" title="15-character alphanumeric GSTIN">
+                            </div>
+                        </div>
+
+                        <div class="row g-2 mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label small fw-semibold">Phone</label>
+                                <input type="tel" name="phone" id="edit_concern_phone" class="form-control" maxlength="15" pattern="\+?[0-9]{10,15}" placeholder="10-15 digits" oninput="this.value = this.value.replace(/[^0-9+]/g, '').slice(0, 15);" autocomplete="off" title="Enter 10 to 15 digit phone number">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-semibold">Email</label>
+                                <input type="email" name="email" id="edit_concern_email" class="form-control" maxlength="120" placeholder="e.g. contact@concern.com" autocomplete="off">
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold">Operating Status *</label>
+                            <select name="status" id="edit_concern_status" class="form-select" required>
+                                <option value="active">Active</option>
+                                <option value="inactive">Inactive</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold">Registered Physical Address</label>
+                            <textarea name="address" id="edit_concern_address" class="form-control" rows="3" maxlength="1000" autocomplete="off" placeholder="Complete registered address"></textarea>
+                        </div>
                     </div>
-                    <div class="col-md-4">
-                        <label class="form-label small fw-semibold">Code *</label>
-                        <input type="text" name="code" id="edit_concern_code" class="form-control text-uppercase" required>
+
+                    <!-- Column 2: Module Picker Checklist -->
+                    <div class="col-lg-7">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6 class="fw-bold text-primary mb-0"><i class="bi bi-grid-3x3-gap me-1"></i> Step 2: Module Picker Checklist</h6>
+                            <div>
+                                <button type="button" class="btn btn-sm btn-outline-primary" onclick="selectAllEditModules(true)">Select All</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="selectAllEditModules(false)">Deselect All</button>
+                            </div>
+                        </div>
+                        <p class="text-muted small">
+                            Select the modules this concern gets. Unchecked modules will not appear in their sidebar and will return 403 on direct URL access.
+                        </p>
+                        <div class="alert alert-danger py-2 d-none" id="editConcernModuleError" role="alert">Select at least one module.</div>
+
+                        <div class="row g-3" style="max-height: 520px; overflow-y: auto;">
+                            <?php foreach ($groupedAll as $grp => $mods): 
+                                $slug = strtolower(preg_replace('/[^a-zA-Z0-9]+/', '_', $grp));
+                            ?>
+                                <div class="col-md-6">
+                                    <div class="card border h-100 shadow-sm">
+                                        <div class="card-header bg-light py-2 px-3 d-flex align-items-center justify-content-between">
+                                            <div class="form-check mb-0 d-flex align-items-center">
+                                                <input class="form-check-input edit-group-master-check me-2" type="checkbox" id="edit_grp_chk_<?= $slug ?>" data-group="<?= $slug ?>" onchange="toggleEditGroupCheck('<?= $slug ?>', this.checked)">
+                                                <label class="form-check-label fw-bold small text-dark user-select-none" for="edit_grp_chk_<?= $slug ?>" style="cursor: pointer;">
+                                                    <?= htmlspecialchars($grp) ?>
+                                                </label>
+                                            </div>
+                                            <span class="badge bg-white text-secondary border small fw-normal px-2"><?= count($mods) ?></span>
+                                        </div>
+                                        <div class="card-body p-2 ps-3">
+                                            <?php foreach ($mods as $m): ?>
+                                                <div class="form-check mb-1">
+                                                    <input class="form-check-input edit-module-check edit-group-mod-<?= $slug ?>" type="checkbox" name="modules[]" value="<?= $m['id'] ?>" id="edit_mod_<?= $m['id'] ?>" data-group="<?= $slug ?>" onchange="syncEditGroupMasterCheck('<?= $slug ?>')">
+                                                    <label class="form-check-label small" for="edit_mod_<?= $m['id'] ?>">
+                                                        <i class="bi <?= htmlspecialchars($m['icon']) ?> text-muted me-1"></i>
+                                                        <?= htmlspecialchars($m['name']) ?>
+                                                    </label>
+                                                </div>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
                     </div>
-                </div>
-                <div class="row g-2 mb-3">
-                    <div class="col-md-6">
-                        <label class="form-label small fw-semibold">Phone</label>
-                        <input type="text" name="phone" id="edit_concern_phone" class="form-control">
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label small fw-semibold">Email</label>
-                        <input type="email" name="email" id="edit_concern_email" class="form-control">
-                    </div>
-                </div>
-                <div class="row g-2 mb-3">
-                    <div class="col-md-6">
-                        <label class="form-label small fw-semibold">GSTIN</label>
-                        <input type="text" name="gstin" id="edit_concern_gstin" class="form-control text-uppercase">
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label small fw-semibold">Status *</label>
-                        <select name="status" id="edit_concern_status" class="form-select" required>
-                            <option value="active">Active</option>
-                            <option value="inactive">Inactive</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label small fw-semibold">Physical Address</label>
-                    <textarea name="address" id="edit_concern_address" class="form-control" rows="2"></textarea>
                 </div>
             </div>
+
             <div class="modal-footer bg-light">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="submit" class="btn btn-primary px-4 fw-semibold">Update Concern</button>
+                <button type="submit" class="btn btn-primary px-4 fw-semibold">
+                    <i class="bi bi-check-lg me-1"></i> Update Concern & Modules
+                </button>
             </div>
         </form>
     </div>
@@ -346,55 +397,103 @@
 
 <!-- VIEW CONCERN PROFILE MODAL -->
 <div class="modal fade" id="modalViewConcern" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
         <div class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
-            <div class="modal-header border-bottom px-4 py-3 bg-light">
+            <div class="modal-header border-bottom px-4 py-3 bg-light d-flex align-items-center justify-content-between">
                 <div class="d-flex align-items-center gap-2">
-                    <span style="width: 36px; height: 36px; background: #e0f2fe; color: #0284c7; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1.15rem;">
+                    <span style="width: 40px; height: 40px; background: #e0f2fe; color: #0284c7; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.3rem;">
                         <i class="bi bi-building"></i>
                     </span>
                     <div>
-                        <h6 class="modal-title fw-bold text-dark mb-0" id="view_concern_name">Concern Details</h6>
-                        <small class="badge bg-dark font-monospace" id="view_concern_code"></small>
+                        <h5 class="modal-title fw-bold text-dark mb-0" id="view_concern_name">Concern Details</h5>
+                        <div class="d-flex align-items-center gap-2 mt-1">
+                            <span class="badge bg-dark font-monospace" id="view_concern_code"></span>
+                            <span class="badge" id="view_concern_status_badge">Active</span>
+                        </div>
                     </div>
                 </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
+
             <div class="modal-body p-4">
-                <div class="d-flex justify-content-between align-items-center p-3 rounded-3 mb-3" style="background: #f8fafc; border: 1px solid #e2e8f0;">
-                    <div>
-                        <span class="text-secondary small d-block">Operating Status</span>
-                        <span class="badge" id="view_concern_status_badge">Active</span>
+                <div class="row g-4">
+                    <!-- Left: Profile & Statistics -->
+                    <div class="col-lg-5 border-end pe-lg-4">
+                        <h6 class="fw-bold text-primary mb-3"><i class="bi bi-info-circle me-1"></i> Concern Business Profile</h6>
+                        
+                        <div class="row g-2 mb-3">
+                            <div class="col-6">
+                                <div class="p-3 rounded-3 bg-light border text-center">
+                                    <span class="text-secondary small d-block">Catalog SKUs</span>
+                                    <span class="fw-bold fs-5 text-dark font-monospace" id="view_concern_variants">0</span>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="p-3 rounded-3 bg-light border text-center">
+                                    <span class="text-secondary small d-block">Assigned Users</span>
+                                    <span class="fw-bold fs-5 text-dark font-monospace" id="view_concern_users">0</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <ul class="list-group list-group-flush small mb-3">
+                            <li class="list-group-item px-0 d-flex justify-content-between align-items-center">
+                                <span class="text-muted"><i class="bi bi-receipt text-primary me-2"></i>GSTIN / Tax ID:</span>
+                                <span class="badge bg-light text-dark border font-monospace fs-7" id="view_concern_gstin">Unregistered</span>
+                            </li>
+                            <li class="list-group-item px-0 d-flex justify-content-between align-items-center">
+                                <span class="text-muted"><i class="bi bi-telephone text-primary me-2"></i>Primary Phone:</span>
+                                <strong class="text-dark font-monospace" id="view_concern_phone">-</strong>
+                            </li>
+                            <li class="list-group-item px-0 d-flex justify-content-between align-items-center">
+                                <span class="text-muted"><i class="bi bi-envelope text-primary me-2"></i>Corporate Email:</span>
+                                <strong class="text-dark" id="view_concern_email">-</strong>
+                            </li>
+                            <li class="list-group-item px-0 d-flex justify-content-between align-items-center">
+                                <span class="text-muted"><i class="bi bi-check2-circle text-primary me-2"></i>Active Modules:</span>
+                                <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25" id="view_concern_modules">0 Modules</span>
+                            </li>
+                            <li class="list-group-item px-0 pt-2">
+                                <span class="text-muted d-block mb-1"><i class="bi bi-geo-alt text-primary me-2"></i>Registered Physical Address:</span>
+                                <div class="text-dark p-2 bg-light rounded border small" id="view_concern_address">-</div>
+                            </li>
+                        </ul>
                     </div>
-                    <div class="text-end">
-                        <span class="text-secondary small d-block">Catalog Items</span>
-                        <span class="fw-bold text-dark font-monospace" id="view_concern_variants">0 Variants</span>
+
+                    <!-- Right: Provisioned Modules -->
+                    <div class="col-lg-7">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6 class="fw-bold text-primary mb-0"><i class="bi bi-grid-3x3-gap me-1"></i> Provisioned Modules</h6>
+                            <span class="text-muted small">Status for each module</span>
+                        </div>
+
+                        <div class="row g-3" style="max-height: 480px; overflow-y: auto;">
+                            <?php foreach ($groupedAll as $grp => $mods): ?>
+                                <div class="col-md-6">
+                                    <div class="card border h-100 shadow-sm">
+                                        <div class="card-header bg-light py-2 px-3 fw-bold small text-dark d-flex justify-content-between align-items-center">
+                                            <span><?= htmlspecialchars($grp) ?></span>
+                                            <span class="badge bg-white text-secondary border small fw-normal"><?= count($mods) ?></span>
+                                        </div>
+                                        <div class="card-body p-2">
+                                            <?php foreach ($mods as $m): ?>
+                                                <div class="d-flex align-items-center justify-content-between p-1 px-2 rounded mb-1 view-module-item" data-module-id="<?= $m['id'] ?>">
+                                                    <span class="small">
+                                                        <i class="bi <?= htmlspecialchars($m['icon']) ?> me-1"></i>
+                                                        <?= htmlspecialchars($m['name']) ?>
+                                                    </span>
+                                                    <span class="view-mod-badge badge bg-light text-muted border">Off</span>
+                                                </div>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
                     </div>
                 </div>
-
-                <ul class="list-group list-group-flush small">
-                    <li class="list-group-item px-0 d-flex justify-content-between">
-                        <span class="text-muted"><i class="bi bi-telephone text-primary me-2"></i>Phone:</span>
-                        <strong class="text-dark" id="view_concern_phone">-</strong>
-                    </li>
-                    <li class="list-group-item px-0 d-flex justify-content-between">
-                        <span class="text-muted"><i class="bi bi-envelope text-primary me-2"></i>Email:</span>
-                        <strong class="text-dark" id="view_concern_email">-</strong>
-                    </li>
-                    <li class="list-group-item px-0 d-flex justify-content-between">
-                        <span class="text-muted"><i class="bi bi-receipt text-primary me-2"></i>GSTIN:</span>
-                        <span class="badge bg-light text-dark border font-monospace" id="view_concern_gstin">Unregistered</span>
-                    </li>
-                    <li class="list-group-item px-0 d-flex justify-content-between">
-                        <span class="text-muted"><i class="bi bi-check2-circle text-primary me-2"></i>Active Modules:</span>
-                        <span class="badge bg-primary bg-opacity-10 text-primary border" id="view_concern_modules">0 Modules</span>
-                    </li>
-                    <li class="list-group-item px-0">
-                        <span class="text-muted d-block mb-1"><i class="bi bi-geo-alt text-primary me-2"></i>Address:</span>
-                        <div class="text-dark p-2 bg-light rounded" id="view_concern_address">-</div>
-                    </li>
-                </ul>
             </div>
+
             <div class="modal-footer border-top px-4 py-2 bg-light d-flex justify-content-between align-items-center">
                 <div class="btn-group">
                     <a href="#" id="view_concern_pdf_btn" class="btn btn-sm btn-outline-danger" target="_blank" title="Download / Print PDF Dossier">
@@ -407,7 +506,7 @@
                         <i class="bi bi-file-earmark-text me-1"></i> CSV
                     </a>
                 </div>
-                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-sm btn-secondary px-3" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
     </div>
@@ -442,6 +541,14 @@ if (createConcernModal && createConcernForm) {
             field.setCustomValidity('');
         });
         createConcernForm.querySelectorAll('textarea').forEach(field => field.value = '');
+        document.querySelectorAll('.group-master-check').forEach(cb => {
+            cb.checked = false;
+            cb.indeterminate = false;
+        });
+        const dashCb = document.querySelector('input.module-check[data-group="dashboard"]');
+        if (dashCb) dashCb.checked = true;
+        const dashGrpMaster = document.getElementById('grp_chk_dashboard');
+        if (dashGrpMaster) dashGrpMaster.checked = true;
         if (moduleSelectionError) moduleSelectionError.classList.add('d-none');
     });
 
@@ -458,8 +565,55 @@ if (createConcernModal && createConcernForm) {
             if (createConcernForm.querySelector('.module-check:checked')) {
                 if (moduleSelectionError) moduleSelectionError.classList.add('d-none');
             }
+            if (checkbox.dataset.group) {
+                syncGroupMasterCheck(checkbox.dataset.group);
+            }
         });
     });
+}
+
+function toggleGroupCheck(groupSlug, isChecked) {
+    const checkboxes = document.querySelectorAll('.group-mod-' + groupSlug);
+    checkboxes.forEach(cb => {
+        cb.checked = isChecked;
+    });
+    if (moduleSelectionError && isChecked) {
+        moduleSelectionError.classList.add('d-none');
+    }
+}
+
+function syncGroupMasterCheck(groupSlug) {
+    const groupMaster = document.getElementById('grp_chk_' + groupSlug);
+    if (!groupMaster) return;
+    const checkboxes = document.querySelectorAll('.group-mod-' + groupSlug);
+    if (!checkboxes.length) return;
+    
+    let checkedCount = 0;
+    checkboxes.forEach(cb => {
+        if (cb.checked) checkedCount++;
+    });
+    
+    if (checkedCount === 0) {
+        groupMaster.checked = false;
+        groupMaster.indeterminate = false;
+    } else if (checkedCount === checkboxes.length) {
+        groupMaster.checked = true;
+        groupMaster.indeterminate = false;
+    } else {
+        groupMaster.checked = false;
+        groupMaster.indeterminate = true;
+    }
+}
+
+function selectAllModules(check) {
+    document.querySelectorAll('.module-check').forEach(cb => cb.checked = check);
+    document.querySelectorAll('.group-master-check').forEach(cb => {
+        cb.checked = check;
+        cb.indeterminate = false;
+    });
+    if (moduleSelectionError) {
+        moduleSelectionError.classList.toggle('d-none', check);
+    }
 }
 
 function openViewConcernModal(con) {
@@ -470,8 +624,10 @@ function openViewConcernModal(con) {
     document.getElementById('view_concern_email').innerText = con.email || '-';
     document.getElementById('view_concern_gstin').innerText = con.gstin || 'Unregistered';
     document.getElementById('view_concern_address').innerText = con.address || 'No address specified';
-    document.getElementById('view_concern_variants').innerText = (con.variants_count || 0) + ' Variants';
+    document.getElementById('view_concern_variants').innerText = (con.variants_count || 0) + ' SKUs';
     document.getElementById('view_concern_modules').innerText = (con.active_modules_count || 0) + ' Active Modules';
+    const usersEl = document.getElementById('view_concern_users');
+    if (usersEl) usersEl.innerText = (con.users_count || 0);
 
     const statusBadge = document.getElementById('view_concern_status_badge');
     if (con.status === 'active') {
@@ -481,6 +637,29 @@ function openViewConcernModal(con) {
         statusBadge.className = 'badge bg-secondary';
         statusBadge.innerText = 'Inactive';
     }
+
+    // Provisioned modules checklist in View Modal
+    const enabledIds = Array.isArray(con.enabled_module_ids) ? con.enabled_module_ids.map(Number) : [];
+    document.querySelectorAll('.view-module-item').forEach(item => {
+        const mid = Number(item.dataset.moduleId);
+        const isEnabled = enabledIds.includes(mid);
+        const iconBadge = item.querySelector('.view-mod-badge');
+        if (isEnabled) {
+            item.classList.remove('opacity-50', 'text-muted');
+            item.classList.add('text-dark', 'fw-semibold', 'bg-light');
+            if (iconBadge) {
+                iconBadge.className = 'view-mod-badge badge bg-success-subtle text-success border border-success-subtle';
+                iconBadge.innerHTML = '<i class="bi bi-check-lg"></i> Enabled';
+            }
+        } else {
+            item.classList.add('opacity-50', 'text-muted');
+            item.classList.remove('text-dark', 'fw-semibold', 'bg-light');
+            if (iconBadge) {
+                iconBadge.className = 'view-mod-badge badge bg-light text-muted border';
+                iconBadge.innerHTML = '<i class="bi bi-x"></i> Off';
+            }
+        }
+    });
 
     const downloadBaseUrl = '<?= \App\Core\Controller::url('/admin/concerns/download') ?>';
     const pdfBtn = document.getElementById('view_concern_pdf_btn');
@@ -505,12 +684,92 @@ function openEditConcernModal(con) {
     document.getElementById('edit_concern_address').value = con.address || '';
     document.getElementById('edit_concern_status').value = con.status || 'active';
 
+    const editModErr = document.getElementById('editConcernModuleError');
+    if (editModErr) editModErr.classList.add('d-none');
+
+    // Populate and check modules
+    const enabledIds = Array.isArray(con.enabled_module_ids) ? con.enabled_module_ids.map(Number) : [];
+    document.querySelectorAll('.edit-module-check').forEach(cb => {
+        cb.checked = enabledIds.includes(Number(cb.value));
+    });
+
+    // Synchronize all edit group master checkboxes
+    document.querySelectorAll('.edit-group-master-check').forEach(master => {
+        const slug = master.dataset.group;
+        if (slug) syncEditGroupMasterCheck(slug);
+    });
+
     const modal = new bootstrap.Modal(document.getElementById('modalEditConcern'));
     modal.show();
 }
-function selectAllModules(check) {
-    document.querySelectorAll('.module-check').forEach(cb => cb.checked = check);
-    moduleSelectionError.classList.toggle('d-none', check);
+
+function toggleEditGroupCheck(groupSlug, isChecked) {
+    const checkboxes = document.querySelectorAll('.edit-group-mod-' + groupSlug);
+    checkboxes.forEach(cb => {
+        cb.checked = isChecked;
+    });
+    const editModErr = document.getElementById('editConcernModuleError');
+    if (editModErr && isChecked) {
+        editModErr.classList.add('d-none');
+    }
+}
+
+function syncEditGroupMasterCheck(groupSlug) {
+    const groupMaster = document.getElementById('edit_grp_chk_' + groupSlug);
+    if (!groupMaster) return;
+    const checkboxes = document.querySelectorAll('.edit-group-mod-' + groupSlug);
+    if (!checkboxes.length) return;
+    
+    let checkedCount = 0;
+    checkboxes.forEach(cb => {
+        if (cb.checked) checkedCount++;
+    });
+    
+    if (checkedCount === 0) {
+        groupMaster.checked = false;
+        groupMaster.indeterminate = false;
+    } else if (checkedCount === checkboxes.length) {
+        groupMaster.checked = true;
+        groupMaster.indeterminate = false;
+    } else {
+        groupMaster.checked = false;
+        groupMaster.indeterminate = true;
+    }
+}
+
+function selectAllEditModules(check) {
+    document.querySelectorAll('.edit-module-check').forEach(cb => cb.checked = check);
+    document.querySelectorAll('.edit-group-master-check').forEach(cb => {
+        cb.checked = check;
+        cb.indeterminate = false;
+    });
+    const editModErr = document.getElementById('editConcernModuleError');
+    if (editModErr) {
+        editModErr.classList.toggle('d-none', check);
+    }
+}
+
+const editConcernForm = document.getElementById('editConcernForm');
+const editConcernModuleError = document.getElementById('editConcernModuleError');
+if (editConcernForm) {
+    editConcernForm.addEventListener('submit', event => {
+        const hasSelectedModule = editConcernForm.querySelector('.edit-module-check:checked');
+        if (!hasSelectedModule) {
+            event.preventDefault();
+            if (editConcernModuleError) editConcernModuleError.classList.remove('d-none');
+        }
+    });
+
+    editConcernForm.querySelectorAll('.edit-module-check').forEach(checkbox => {
+        checkbox.addEventListener('change', () => {
+            if (editConcernForm.querySelector('.edit-module-check:checked')) {
+                if (editConcernModuleError) editConcernModuleError.classList.add('d-none');
+            }
+            if (checkbox.dataset.group) {
+                syncEditGroupMasterCheck(checkbox.dataset.group);
+            }
+        });
+    });
 }
 
 // Live module toggle handler
