@@ -199,9 +199,14 @@
                         </div>
 
                         <div class="row g-2 mb-3">
-                            <div class="col-12">
+                            <div class="col-md-6">
                                 <label class="form-label small fw-semibold">Phone</label>
-                                <input type="tel" name="phone" class="form-control" maxlength="15" pattern="\+?[0-9]{10,15}" placeholder="10-15 digits (e.g. 9876543210)" oninput="this.value = this.value.replace(/[^0-9+]/g, '').slice(0, 15);" autocomplete="off" title="Enter 10 to 15 digit phone number">
+                                <input type="tel" name="phone" id="newConcernPhone" class="form-control" maxlength="13" pattern="^(\+?91)?[6-9][0-9]{9}$|^[6-9][0-9]{11}$" placeholder="10 or 12 digits (e.g. 9876543210)" oninput="this.value = this.value.replace(/[^0-9+]/g, '').slice(0, 13);" autocomplete="off" title="Phone number must be 10 or 12 digits and start with 6, 7, 8, or 9 (or +91)">
+                                <div class="invalid-feedback" id="newConcernPhoneFeedback">Phone must be 10 or 12 digits and start with 6, 7, 8, or 9.</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-semibold">Email</label>
+                                <input type="email" name="email" id="newConcernEmail" class="form-control" maxlength="120" placeholder="e.g. contact@concern.com" autocomplete="off">
                             </div>
                         </div>
 
@@ -315,7 +320,8 @@
                         <div class="row g-2 mb-3">
                             <div class="col-md-6">
                                 <label class="form-label small fw-semibold">Phone</label>
-                                <input type="tel" name="phone" id="edit_concern_phone" class="form-control" maxlength="15" pattern="\+?[0-9]{10,15}" placeholder="10-15 digits" oninput="this.value = this.value.replace(/[^0-9+]/g, '').slice(0, 15);" autocomplete="off" title="Enter 10 to 15 digit phone number">
+                                <input type="tel" name="phone" id="edit_concern_phone" class="form-control" maxlength="13" pattern="^(\+?91)?[6-9][0-9]{9}$|^[6-9][0-9]{11}$" placeholder="10 or 12 digits (e.g. 9876543210)" oninput="this.value = this.value.replace(/[^0-9+]/g, '').slice(0, 13);" autocomplete="off" title="Phone number must be 10 or 12 digits and start with 6, 7, 8, or 9 (or +91)">
+                                <div class="invalid-feedback" id="editConcernPhoneFeedback">Phone must be 10 or 12 digits and start with 6, 7, 8, or 9.</div>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label small fw-semibold">Email</label>
@@ -533,13 +539,65 @@ if (newConcernName && newConcernCode) {
     });
 }
 
+function validateConcernPhone(inputEl, feedbackEl, isFinalCheck = false) {
+    if (!inputEl) return true;
+    const val = inputEl.value.trim();
+    if (!val) {
+        inputEl.classList.remove('is-invalid');
+        inputEl.setCustomValidity('');
+        if (feedbackEl) feedbackEl.textContent = '';
+        return true;
+    }
+
+    const clean = val.replace(/^\+/, '');
+    let mobileDigits = clean;
+    if (clean.length > 2 && clean.startsWith('91')) {
+        mobileDigits = clean.substring(2);
+    }
+    const firstDigit = mobileDigits.charAt(0);
+
+    // Rule 1: Must start with 6, 7, 8, or 9. If starts with 1, 2, 3, 4, 5 etc., throw error.
+    if (firstDigit && !['6', '7', '8', '9'].includes(firstDigit)) {
+        const errorMsg = 'Phone number must start with 6, 7, 8, or 9. Numbers starting with ' + firstDigit + ' are not allowed.';
+        inputEl.classList.add('is-invalid');
+        inputEl.setCustomValidity(errorMsg);
+        if (feedbackEl) feedbackEl.textContent = errorMsg;
+        return false;
+    }
+
+    // Rule 2: Must be exactly 10 or 12 digits
+    if (isFinalCheck || clean.length >= 10) {
+        if (clean.length !== 10 && clean.length !== 12) {
+            const errorMsg = 'Phone number must be exactly 10 or 12 digits (currently ' + clean.length + ' digits).';
+            inputEl.classList.add('is-invalid');
+            inputEl.setCustomValidity(errorMsg);
+            if (feedbackEl) feedbackEl.textContent = errorMsg;
+            return false;
+        }
+    }
+
+    inputEl.classList.remove('is-invalid');
+    inputEl.setCustomValidity('');
+    if (feedbackEl) feedbackEl.textContent = '';
+    return true;
+}
+
+const newConcernPhone = document.getElementById('newConcernPhone');
+const newConcernPhoneFb = document.getElementById('newConcernPhoneFeedback');
+if (newConcernPhone) {
+    newConcernPhone.addEventListener('input', () => validateConcernPhone(newConcernPhone, newConcernPhoneFb, false));
+    newConcernPhone.addEventListener('blur', () => validateConcernPhone(newConcernPhone, newConcernPhoneFb, true));
+}
+
 if (createConcernModal && createConcernForm) {
     createConcernModal.addEventListener('show.bs.modal', () => {
         createConcernForm.reset();
         createConcernForm.querySelectorAll('input:not([type="hidden"]):not([type="checkbox"])').forEach(field => {
             field.value = '';
+            field.classList.remove('is-invalid');
             field.setCustomValidity('');
         });
+        if (newConcernPhoneFb) newConcernPhoneFb.textContent = '';
         createConcernForm.querySelectorAll('textarea').forEach(field => field.value = '');
         document.querySelectorAll('.group-master-check').forEach(cb => {
             cb.checked = false;
@@ -553,6 +611,12 @@ if (createConcernModal && createConcernForm) {
     });
 
     createConcernForm.addEventListener('submit', event => {
+        if (!validateConcernPhone(newConcernPhone, newConcernPhoneFb, true)) {
+            event.preventDefault();
+            newConcernPhone.focus();
+            return;
+        }
+
         const hasSelectedModule = createConcernForm.querySelector('.module-check:checked');
         if (!hasSelectedModule) {
             event.preventDefault();
@@ -684,6 +748,14 @@ function openEditConcernModal(con) {
     document.getElementById('edit_concern_address').value = con.address || '';
     document.getElementById('edit_concern_status').value = con.status || 'active';
 
+    const editPhoneEl = document.getElementById('edit_concern_phone');
+    const editPhoneFb = document.getElementById('editConcernPhoneFeedback');
+    if (editPhoneEl) {
+        editPhoneEl.classList.remove('is-invalid');
+        editPhoneEl.setCustomValidity('');
+    }
+    if (editPhoneFb) editPhoneFb.textContent = '';
+
     const editModErr = document.getElementById('editConcernModuleError');
     if (editModErr) editModErr.classList.add('d-none');
 
@@ -751,8 +823,22 @@ function selectAllEditModules(check) {
 
 const editConcernForm = document.getElementById('editConcernForm');
 const editConcernModuleError = document.getElementById('editConcernModuleError');
+const editConcernPhone = document.getElementById('edit_concern_phone');
+const editConcernPhoneFb = document.getElementById('editConcernPhoneFeedback');
+
+if (editConcernPhone) {
+    editConcernPhone.addEventListener('input', () => validateConcernPhone(editConcernPhone, editConcernPhoneFb, false));
+    editConcernPhone.addEventListener('blur', () => validateConcernPhone(editConcernPhone, editConcernPhoneFb, true));
+}
+
 if (editConcernForm) {
     editConcernForm.addEventListener('submit', event => {
+        if (!validateConcernPhone(editConcernPhone, editConcernPhoneFb, true)) {
+            event.preventDefault();
+            editConcernPhone.focus();
+            return;
+        }
+
         const hasSelectedModule = editConcernForm.querySelector('.edit-module-check:checked');
         if (!hasSelectedModule) {
             event.preventDefault();

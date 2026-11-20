@@ -218,6 +218,7 @@ class AdminController extends Controller {
         $name = $readField('name');
         $gstin = strtoupper($readField('gstin'));
         $phone = $readField('phone');
+        $email = strtolower($readField('email'));
         $address = $readField('address');
         $adminName = $readField('admin_name');
         $adminEmail = strtolower($readField('admin_email'));
@@ -233,8 +234,31 @@ class AdminController extends Controller {
         if ($gstin !== '' && !preg_match('/^[0-9A-Z]{15}$/D', $gstin)) {
             $errors[] = 'Enter a valid 15-character GSTIN or leave the field blank.';
         }
-        if ($phone !== '' && !preg_match('/^\+?[0-9]{10,15}$/D', $phone)) {
-            $errors[] = 'Phone must contain 10 to 15 digits, with an optional leading +.';
+        if ($email !== '' && (strlen($email) > 120 || filter_var($email, FILTER_VALIDATE_EMAIL) === false)) {
+            $errors[] = 'Enter a valid corporate email address or leave the field blank.';
+        }
+        if ($phone !== '') {
+            $cleanDigits = ltrim($phone, '+');
+            if (!ctype_digit($cleanDigits)) {
+                $errors[] = 'Phone number can only contain digits with an optional leading +.';
+            } else {
+                $len = strlen($cleanDigits);
+                if ($len !== 10 && $len !== 12) {
+                    $errors[] = 'Phone number must be exactly 10 or 12 digits (entered ' . $len . ' digits).';
+                } else {
+                    $firstDigit = $cleanDigits[0];
+                    if ($len === 12 && substr($cleanDigits, 0, 2) === '91') {
+                        $mobileFirstDigit = $cleanDigits[2] ?? '';
+                        if (!in_array($mobileFirstDigit, ['6', '7', '8', '9'], true)) {
+                            $errors[] = 'Phone number must start with 6, 7, 8, or 9. Numbers starting with ' . $mobileFirstDigit . ' are not allowed.';
+                        }
+                    } else {
+                        if (!in_array($firstDigit, ['6', '7', '8', '9'], true)) {
+                            $errors[] = 'Phone number must start with 6, 7, 8, or 9. Numbers starting with ' . $firstDigit . ' are not allowed.';
+                        }
+                    }
+                }
+            }
         }
         if ($textLength($address) > 1000) {
             $errors[] = 'Registered address cannot exceed 1000 characters.';
@@ -299,7 +323,7 @@ class AdminController extends Controller {
                     $address !== '' ? $address : null,
                     $gstin !== '' ? $gstin : null,
                     $phone !== '' ? $phone : null,
-                    null,
+                    $email !== '' ? $email : null,
                 ]
             );
             $concernId = (int)DB::lastInsertId();
@@ -460,10 +484,39 @@ class AdminController extends Controller {
             $this->redirect('/admin/concerns');
             return;
         }
-        if ($phone !== '' && !preg_match('/^\+?[0-9]{10,15}$/D', $phone)) {
-            $this->flash('error', 'Phone must contain 10 to 15 digits, with an optional leading +.');
+        if ($email !== '' && (strlen($email) > 120 || filter_var($email, FILTER_VALIDATE_EMAIL) === false)) {
+            $this->flash('error', 'Enter a valid corporate email address or leave the field blank.');
             $this->redirect('/admin/concerns');
             return;
+        }
+        if ($phone !== '') {
+            $cleanDigits = ltrim($phone, '+');
+            if (!ctype_digit($cleanDigits)) {
+                $this->flash('error', 'Phone number can only contain digits with an optional leading +.');
+                $this->redirect('/admin/concerns');
+                return;
+            }
+            $len = strlen($cleanDigits);
+            if ($len !== 10 && $len !== 12) {
+                $this->flash('error', 'Phone number must be exactly 10 or 12 digits (entered ' . $len . ' digits).');
+                $this->redirect('/admin/concerns');
+                return;
+            }
+            $firstDigit = $cleanDigits[0];
+            if ($len === 12 && substr($cleanDigits, 0, 2) === '91') {
+                $mobileFirstDigit = $cleanDigits[2] ?? '';
+                if (!in_array($mobileFirstDigit, ['6', '7', '8', '9'], true)) {
+                    $this->flash('error', 'Phone number must start with 6, 7, 8, or 9. Numbers starting with ' . $mobileFirstDigit . ' are not allowed.');
+                    $this->redirect('/admin/concerns');
+                    return;
+                }
+            } else {
+                if (!in_array($firstDigit, ['6', '7', '8', '9'], true)) {
+                    $this->flash('error', 'Phone number must start with 6, 7, 8, or 9. Numbers starting with ' . $firstDigit . ' are not allowed.');
+                    $this->redirect('/admin/concerns');
+                    return;
+                }
+            }
         }
 
         $rawModuleIds = $_POST['modules'] ?? [];
