@@ -895,12 +895,14 @@ $concernName = $concern['name'] ?? 'GRM Inventory';
             </div>
         </div>
 
+
         <!-- ======================================================== -->
         <!-- TAB 3: PRODUCTION LABEL (After Stitching Products)       -->
         <!-- ======================================================== -->
         <div class="tab-pane fade <?= ($curTab === 'production') ? 'show active' : '' ?>" id="tab-production" role="tabpanel">
             <div class="row g-4">
-                <!-- Generator Config Card -->
+
+                <!-- ===== LEFT: Configuration Card ===== -->
                 <div class="col-lg-5">
                     <div class="card border-0 shadow-sm rounded-3 h-100">
                         <div class="card-header bg-white py-3 border-bottom d-flex align-items-center justify-content-between">
@@ -910,108 +912,210 @@ $concernName = $concern['name'] ?? 'GRM Inventory';
                             </h6>
                             <span class="badge bg-warning-subtle text-warning border border-warning">After Stitching</span>
                         </div>
-                        <form action="<?= \App\Core\Controller::url('/m/label_generation/generate') ?>" method="POST" target="_blank" class="card-body p-4 d-flex flex-column">
-                            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
-                            <input type="hidden" name="label_type" value="production">
+                        <div class="card-body p-3 d-flex flex-column">
 
+                            <!-- MODE TOGGLE BUTTONS -->
                             <div class="mb-3">
-                                <label class="form-label small fw-semibold">Select Stitched Production Batch <span class="text-danger">*</span></label>
-                                <select name="item_id" id="prod_item_select" class="form-select" required onchange="updateProdPreview()">
-                                    <option value="">-- Choose Stitched Production Batch --</option>
-                                    <?php foreach ($productionItems as $prod): 
-                                        $tagCode = QrService::generateTagCode(
-                                            $prod['variant_name'],
-                                            $prod['variant_color'] ?? ($prod['color'] ?? ''),
-                                            $prod['program_no'] ?? '',
-                                            (string)($prod['produced_variant_id'] ?: $prod['variant_id'] ?: $prod['id'])
-                                        );
-                                    ?>
-                                        <option value="<?= $prod['id'] ?>"
-                                                data-name="<?= htmlspecialchars($prod['variant_name']) ?>"
-                                                data-sku="<?= htmlspecialchars($prod['sku_code']) ?>"
-                                                data-tag="<?= htmlspecialchars($tagCode) ?>"
-                                                data-mrp="<?= htmlspecialchars($prod['variant_mrp']) ?>"
-                                                data-price="<?= htmlspecialchars($prod['variant_price'] ?? $prod['variant_mrp']) ?>"
-                                                data-size="<?= htmlspecialchars($prod['variant_size'] ?: 'Standard') ?>"
-                                                data-color="<?= htmlspecialchars($prod['variant_color'] ?? ($prod['color'] ?? 'Standard')) ?>"
-                                                data-cat="<?= htmlspecialchars($prod['category_name'] ?: 'Apparel') ?>"
-                                                data-brand="<?= htmlspecialchars($prod['brand_name'] ?: 'GRM Production') ?>"
-                                                data-log="<?= htmlspecialchars($prod['log_no']) ?>"
-                                                data-pcs="<?= htmlspecialchars($prod['stitched_pieces']) ?>"
-                                                data-program="<?= htmlspecialchars($prod['program_no'] ?: 'Standard Program') ?>"
-                                                data-in-stock="<?= !empty($prod['is_in_stock']) ? '1' : '0' ?>"
-                                                data-qr="<?= htmlspecialchars($tagCode) ?>">
-                                            Batch #<?= htmlspecialchars($prod['log_no']) ?> &bull; <?= htmlspecialchars($prod['variant_name']) ?> [<?= htmlspecialchars($prod['variant_size'] ?: 'Standard') ?>] (<?= htmlspecialchars($prod['sku_code']) ?>) &bull; <?= (int)$prod['stitched_pieces'] ?> pcs stitched <?= !empty($prod['is_in_stock']) ? '✓ In Stock' : '' ?>
+                                <div class="d-flex gap-2">
+                                    <button type="button" id="prod_mode_batch_btn" onclick="switchProdMode('batch')"
+                                        class="btn btn-warning text-dark fw-semibold flex-fill py-2">
+                                        <i class="bi bi-collection-fill me-1"></i> Way 1: Full Batch
+                                    </button>
+                                    <button type="button" id="prod_mode_variant_btn" onclick="switchProdMode('variant')"
+                                        class="btn btn-outline-secondary fw-semibold flex-fill py-2">
+                                        <i class="bi bi-tag me-1"></i> Way 2: Single Variant
+                                    </button>
+                                </div>
+                                <small class="text-muted d-block mt-1">
+                                    <i class="bi bi-info-circle me-1"></i>
+                                    <span id="prod_mode_hint_text">Generate all variants of a batch at once (e.g. 70 labels across 7 sizes)</span>
+                                </small>
+                            </div>
+
+                            <!-- ===== WAY 1: BATCH MODE UI ===== -->
+                            <div id="prod_batch_ui" class="d-flex flex-column flex-grow-1">
+
+                                <div class="mb-3">
+                                    <label class="form-label small fw-semibold">Select Stitched Production Batch <span class="text-danger">*</span></label>
+                                    <select id="prod_batch_select" class="form-select" onchange="onBatchSelect()">
+                                        <option value="">-- Choose Stitched Production Batch --</option>
+                                        <?php foreach ($productionBatches as $batch):
+                                            $batchItemsJson = htmlspecialchars(json_encode(array_values($batch['items'])));
+                                            $bPendingCount = count(array_filter($batch['items'], function($it){ return empty($it['is_in_stock']); }));
+                                        ?>
+                                        <option value="<?= (int)$batch['stitching_id'] ?>"
+                                                data-batch-no="<?= htmlspecialchars($batch['batch_no']) ?>"
+                                                data-log-no="<?= htmlspecialchars($batch['log_no']) ?>"
+                                                data-program="<?= htmlspecialchars($batch['program_no']) ?>"
+                                                data-catalog="<?= htmlspecialchars($batch['catalog_name']) ?>"
+                                                data-total-pcs="<?= (int)$batch['total_pieces'] ?>"
+                                                data-variant-count="<?= count($batch['items']) ?>"
+                                                data-pending-count="<?= (int)$bPendingCount ?>"
+                                                data-is-all-in-stock="<?= $batch['is_all_in_stock'] ? '1' : '0' ?>"
+                                                data-items="<?= $batchItemsJson ?>">
+                                            Batch #<?= htmlspecialchars($batch['batch_no']) ?>
+                                            &bull; <?= htmlspecialchars($batch['program_no']) ?>
+                                            &bull; <?= count($batch['items']) ?> Variants
+                                            &bull; <?= (int)$batch['total_pieces'] ?> Total Pcs
+                                            <?= $batch['is_all_in_stock'] ? ' ✓ All In Stock' : '' ?>
                                         </option>
-                                    <?php endforeach; ?>
-                                </select>
-                                <small class="text-muted">Populated automatically from production assembly logs after stitching.</small>
-                            </div>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
 
-                            <div class="mb-3">
-                                <div class="d-flex justify-content-between align-items-center mb-1">
-                                    <label class="form-label small fw-semibold mb-0">Number of Label Copies (N Prints) <span class="text-danger">*</span></label>
-                                    <div class="btn-group btn-group-sm" role="group">
-                                        <button type="button" class="btn btn-outline-warning py-0 px-2" onclick="matchProdQty()">Match Stitched Pcs</button>
+                                <!-- Summary Banner -->
+                                <div id="prod_batch_summary" class="alert alert-warning py-2 px-3 mb-3 d-none small">
+                                    <i class="bi bi-layers-fill me-1"></i>
+                                    <span id="prod_batch_summary_text">Select a batch to see summary</span>
+                                </div>
+
+                                <!-- Variant Preview Table -->
+                                <div id="prod_batch_table_wrap" class="d-none mb-3">
+                                    <div class="table-responsive rounded-3 border" style="max-height:220px;overflow-y:auto;">
+                                        <table class="table table-sm align-middle mb-0" id="prod_batch_variant_table">
+                                            <thead class="table-warning text-dark small sticky-top">
+                                                <tr>
+                                                    <th>#</th>
+                                                    <th>Size</th>
+                                                    <th>Color</th>
+                                                    <th>SKU</th>
+                                                    <th class="text-center">Pcs</th>
+                                                    <th class="text-center">Status</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="prod_batch_variant_tbody"></tbody>
+                                        </table>
                                     </div>
                                 </div>
-                                <div class="input-group">
-                                    <button type="button" class="btn btn-outline-secondary" onclick="adjustCopies('prod_qty', -1)" aria-label="Decrease label quantity"><i class="bi bi-dash-lg"></i></button>
-                                    <input type="number" name="qty" id="prod_qty" class="form-control text-center" min="1" max="500" value="24" required>
-                                    <button type="button" class="btn btn-outline-secondary" onclick="adjustCopies('prod_qty', 1)" aria-label="Increase label quantity"><i class="bi bi-plus-lg"></i></button>
-                                    <span class="input-group-text bg-light">Stickers</span>
-                                </div>
-                            </div>
 
-                            <!-- Live Sticker Preview (Image 2 Reference Layout) -->
-                            <div class="p-3 border rounded-3 bg-light mb-4">
-                                <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <span class="fw-bold text-dark small"><i class="bi bi-eye text-warning me-1"></i> Production Tag Preview</span>
-                                    <span class="badge bg-warning-subtle text-warning border border-warning font-monospace" id="prod_preview_badge">IN-HOUSE STITCHED</span>
+                                <!-- Batch Action Buttons -->
+                                <div class="d-flex gap-2 mt-auto">
+                                    <form action="<?= \App\Core\Controller::url('/m/label_generation/generate') ?>" method="POST" target="_blank" class="flex-fill" id="prod_batch_print_form">
+                                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
+                                        <input type="hidden" name="label_type" value="production">
+                                        <input type="hidden" name="prod_print_mode" value="batch">
+                                        <input type="hidden" name="batch_id" id="hidden_batch_id" value="">
+                                        <button type="submit" class="btn btn-warning text-dark w-100 py-2 fw-semibold shadow-sm"
+                                                id="prod_batch_print_btn" disabled onclick="return validateBatchSelect()">
+                                            <i class="bi bi-printer-fill me-1"></i> Generate All Labels
+                                        </button>
+                                    </form>
+                                    <form action="<?= \App\Core\Controller::url('/m/label/add_to_stock') ?>" method="POST" id="prod_batch_stock_form">
+                                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
+                                        <input type="hidden" name="item_id" id="hidden_batch_stock_id" value="">
+                                        <input type="hidden" name="tab" value="production">
+                                        <button type="submit" class="btn btn-success py-2 px-3 fw-semibold shadow-sm text-nowrap"
+                                                id="prod_batch_stock_btn" disabled onclick="return validateBatchStockSelect()">
+                                            <i class="bi bi-box-arrow-in-down me-1"></i> Add Batch to Stock
+                                        </button>
+                                    </form>
                                 </div>
-                                <div class="border rounded-3 p-3 bg-white shadow-sm" style="border: 1.5px solid #0f172a !important;">
-                                    <!-- Top Header: Concern Name Dynamically & Reference Badge -->
-                                    <div class="d-flex align-items-center justify-content-between pb-2 border-bottom border-secondary-subtle" style="border-style: dashed !important;">
-                                        <div class="d-flex align-items-center">
-                                            <span style="background-color: #0d6efd; color: #ffffff; width: 17px; height: 17px; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; margin-right: 6px;">
-                                                <i class="bi bi-check-lg"></i>
-                                            </span>
-                                            <span class="fw-bold text-dark text-uppercase small" style="letter-spacing: 0.04em;" id="prod_preview_concern"><?= htmlspecialchars($concernName) ?></span>
+                                <small class="text-muted mt-2 d-block" id="prod_batch_stock_note"></small>
+
+                            </div><!-- /prod_batch_ui -->
+
+                            <!-- ===== WAY 2: SINGLE VARIANT UI ===== -->
+                            <div id="prod_variant_ui" class="d-none d-flex flex-column flex-grow-1">
+                                <form action="<?= \App\Core\Controller::url('/m/label_generation/generate') ?>" method="POST" target="_blank" class="d-flex flex-column flex-grow-1" id="prod_variant_form">
+                                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
+                                    <input type="hidden" name="label_type" value="production">
+
+                                    <div class="mb-3">
+                                        <label class="form-label small fw-semibold">Select Stitched Variant <span class="text-danger">*</span></label>
+                                        <select name="item_id" id="prod_item_select" class="form-select" required onchange="updateProdPreview()">
+                                            <option value="">-- Choose Stitched Production Batch --</option>
+                                            <?php foreach ($productionItems as $prod):
+                                                $tagCode = QrService::generateTagCode(
+                                                    $prod['variant_name'],
+                                                    $prod['variant_color'] ?? ($prod['color'] ?? ''),
+                                                    $prod['program_no'] ?? '',
+                                                    (string)($prod['produced_variant_id'] ?: $prod['variant_id'] ?: $prod['id'])
+                                                );
+                                            ?>
+                                                <option value="<?= $prod['id'] ?>"
+                                                        data-name="<?= htmlspecialchars($prod['variant_name']) ?>"
+                                                        data-sku="<?= htmlspecialchars($prod['sku_code']) ?>"
+                                                        data-tag="<?= htmlspecialchars($tagCode) ?>"
+                                                        data-mrp="<?= htmlspecialchars($prod['variant_mrp']) ?>"
+                                                        data-price="<?= htmlspecialchars($prod['variant_price'] ?? $prod['variant_mrp']) ?>"
+                                                        data-size="<?= htmlspecialchars($prod['variant_size'] ?: 'Standard') ?>"
+                                                        data-color="<?= htmlspecialchars($prod['variant_color'] ?? ($prod['color'] ?? 'Standard')) ?>"
+                                                        data-cat="<?= htmlspecialchars($prod['category_name'] ?: 'Apparel') ?>"
+                                                        data-brand="<?= htmlspecialchars($prod['brand_name'] ?: 'GRM Production') ?>"
+                                                        data-log="<?= htmlspecialchars($prod['log_no']) ?>"
+                                                        data-pcs="<?= htmlspecialchars($prod['stitched_pieces']) ?>"
+                                                        data-program="<?= htmlspecialchars($prod['program_no'] ?: 'Standard Program') ?>"
+                                                        data-in-stock="<?= !empty($prod['is_in_stock']) ? '1' : '0' ?>"
+                                                        data-qr="<?= htmlspecialchars($tagCode) ?>">
+                                                    Batch #<?= htmlspecialchars($prod['log_no']) ?> &bull; <?= htmlspecialchars($prod['variant_name']) ?> [<?= htmlspecialchars($prod['variant_size'] ?: 'Standard') ?>] (<?= htmlspecialchars($prod['sku_code']) ?>) &bull; <?= (int)$prod['stitched_pieces'] ?> pcs <?= !empty($prod['is_in_stock']) ? '&#10003; In Stock' : '' ?>
+                                                </option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                        <small class="text-muted">From stitching assembly logs.</small>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <div class="d-flex justify-content-between align-items-center mb-1">
+                                            <label class="form-label small fw-semibold mb-0">Label Copies (N Prints) <span class="text-danger">*</span></label>
+                                            <button type="button" class="btn btn-outline-warning btn-sm py-0 px-2" onclick="matchProdQty()">Match Stitched Pcs</button>
                                         </div>
-                                        <span class="badge font-monospace px-2 py-1" style="background-color: #e0f2fe; color: #0284c7; border: 1px solid #bae6fd; font-size: 0.70rem;" id="prod_preview_ref">PP-REF</span>
-                                    </div>
-
-                                    <!-- Body: Left QR, Right Details Stack -->
-                                    <div class="d-flex align-items-center gap-3 pt-2">
-                                        <div class="d-flex align-items-center justify-content-center bg-white flex-shrink-0" style="width: 76px; height: 76px;" id="prod_qr_box"></div>
-                                        <div class="flex-grow-1 overflow-hidden" style="line-height: 1.35; font-size: 0.76rem;">
-                                            <div class="fw-bold text-dark text-uppercase mb-1 text-truncate" style="font-size: 0.86rem;" id="prod_preview_title">Production Garment</div>
-                                            <div class="text-truncate"><span class="text-secondary">Program:</span> <strong class="text-dark" id="prod_preview_program">In-House</strong></div>
-                                            <div class="text-truncate"><span class="text-secondary">Color:</span> <strong class="text-dark text-uppercase" id="prod_preview_color">STANDARD</strong></div>
-                                            <div class="text-truncate"><span class="text-secondary">Design:</span> <strong class="text-dark text-uppercase" id="prod_preview_design">STANDARD</strong></div>
-                                            <div class="text-truncate"><span class="text-secondary">Price:</span> <strong class="text-success fw-bold" id="prod_preview_price">₹0.00</strong></div>
-                                            <div class="text-truncate"><span class="text-secondary">Code:</span> <strong class="font-monospace text-primary fw-bold" id="prod_preview_code_tag">PRO-S-01</strong></div>
+                                        <div class="input-group">
+                                            <button type="button" class="btn btn-outline-secondary" onclick="adjustCopies('prod_qty', -1)" aria-label="Decrease"><i class="bi bi-dash-lg"></i></button>
+                                            <input type="number" name="qty" id="prod_qty" class="form-control text-center" min="1" max="500" value="24" required>
+                                            <button type="button" class="btn btn-outline-secondary" onclick="adjustCopies('prod_qty', 1)" aria-label="Increase"><i class="bi bi-plus-lg"></i></button>
+                                            <span class="input-group-text bg-light">Stickers</span>
                                         </div>
                                     </div>
-                                </div>
-                            </div>
 
-                            <div class="d-flex gap-2 mt-auto align-items-center">
-                                <button type="submit" class="btn btn-warning text-dark flex-grow-1 py-2 fw-semibold shadow-sm">
-                                    <i class="bi bi-printer-fill me-1"></i> Generate Printable Sheet (N Labels)
-                                </button>
-                                <button type="button" class="btn btn-success py-2 px-3 fw-semibold shadow-sm text-nowrap" id="prod_add_stock_btn" onclick="submitProdToStock()" title="Inward selected stitched item into Live Stock">
-                                    <i class="bi bi-box-arrow-in-down me-1"></i> Add to Stock
-                                </button>
-                                <a href="<?= \App\Core\Controller::url('/m/stocks?tab=live_stock') ?>" class="btn btn-outline-success py-2 fw-semibold shadow-sm px-3 d-none text-nowrap" id="prod_in_stock_badge" title="Already in Stock - View in Live Stock">
-                                    <i class="bi bi-check-circle-fill text-success me-1"></i> In Stock
-                                </a>
-                            </div>
-                        </form>
+                                    <!-- Live Sticker Preview -->
+                                    <div class="p-3 border rounded-3 bg-light mb-3">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <span class="fw-bold text-dark small"><i class="bi bi-eye text-warning me-1"></i> Production Tag Preview</span>
+                                            <span class="badge bg-warning-subtle text-warning border border-warning font-monospace" id="prod_preview_badge">IN-HOUSE STITCHED</span>
+                                        </div>
+                                        <div class="border rounded-3 p-3 bg-white shadow-sm" style="border: 1.5px solid #0f172a !important;">
+                                            <div class="d-flex align-items-center justify-content-between pb-2 border-bottom border-secondary-subtle" style="border-style: dashed !important;">
+                                                <div class="d-flex align-items-center">
+                                                    <span style="background-color:#0d6efd;color:#fff;width:17px;height:17px;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;margin-right:6px;">
+                                                        <i class="bi bi-check-lg"></i>
+                                                    </span>
+                                                    <span class="fw-bold text-dark text-uppercase small" style="letter-spacing:0.04em;" id="prod_preview_concern"><?= htmlspecialchars($concernName) ?></span>
+                                                </div>
+                                                <span class="badge font-monospace px-2 py-1" style="background-color:#e0f2fe;color:#0284c7;border:1px solid #bae6fd;font-size:0.70rem;" id="prod_preview_ref">PP-REF</span>
+                                            </div>
+                                            <div class="d-flex align-items-center gap-3 pt-2">
+                                                <div class="d-flex align-items-center justify-content-center bg-white flex-shrink-0" style="width:76px;height:76px;" id="prod_qr_box"></div>
+                                                <div class="flex-grow-1 overflow-hidden" style="line-height:1.35;font-size:0.76rem;">
+                                                    <div class="fw-bold text-dark text-uppercase mb-1 text-truncate" style="font-size:0.86rem;" id="prod_preview_title">Production Garment</div>
+                                                    <div class="text-truncate"><span class="text-secondary">Program:</span> <strong class="text-dark" id="prod_preview_program">In-House</strong></div>
+                                                    <div class="text-truncate"><span class="text-secondary">Color:</span> <strong class="text-dark text-uppercase" id="prod_preview_color">STANDARD</strong></div>
+                                                    <div class="text-truncate"><span class="text-secondary">Design:</span> <strong class="text-dark text-uppercase" id="prod_preview_design">STANDARD</strong></div>
+                                                    <div class="text-truncate"><span class="text-secondary">Price:</span> <strong class="text-success fw-bold" id="prod_preview_price">&#8377;0.00</strong></div>
+                                                    <div class="text-truncate"><span class="text-secondary">Code:</span> <strong class="font-monospace text-primary fw-bold" id="prod_preview_code_tag">PRO-S-01</strong></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="d-flex gap-2 mt-auto align-items-center">
+                                        <button type="submit" class="btn btn-warning text-dark flex-grow-1 py-2 fw-semibold shadow-sm">
+                                            <i class="bi bi-printer-fill me-1"></i> Generate Printable Sheet (N Labels)
+                                        </button>
+                                        <button type="button" class="btn btn-success py-2 px-3 fw-semibold shadow-sm text-nowrap" id="prod_add_stock_btn" onclick="submitProdToStock()">
+                                            <i class="bi bi-box-arrow-in-down me-1"></i> Add to Stock
+                                        </button>
+                                        <a href="<?= \App\Core\Controller::url('/m/stocks?tab=live_stock') ?>" class="btn btn-outline-success py-2 fw-semibold shadow-sm px-3 d-none text-nowrap" id="prod_in_stock_badge">
+                                            <i class="bi bi-check-circle-fill text-success me-1"></i> In Stock
+                                        </a>
+                                    </div>
+                                </form>
+                            </div><!-- /prod_variant_ui -->
+
+                        </div><!-- /card-body -->
                     </div>
                 </div>
 
-                <!-- Production Stitched Items Directory Table -->
+                <!-- ===== RIGHT: Batch Directory Table ===== -->
                 <div class="col-lg-7">
                     <div class="card border-0 shadow-sm rounded-3 h-100">
                         <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -1019,82 +1123,175 @@ $concernName = $concern['name'] ?? 'GRM Inventory';
                                 <i class="bi bi-list-check text-warning"></i>
                                 <span>Recent Stitching Production Batches</span>
                             </h6>
-                            <input type="text" id="search_prod_table" class="form-control form-control-sm" style="width: 220px;" placeholder="Search stitched batch...">
+                            <input type="text" id="search_prod_table" class="form-control form-control-sm" style="width:220px;" placeholder="Search batch, program...">
                         </div>
                         <div class="table-responsive">
+                            <?php if (empty($productionBatches)): ?>
+                                <div class="text-center py-5 text-muted">
+                                    <i class="bi bi-box-seam fs-2 d-block mb-2 opacity-50"></i>
+                                    No stitched production batches found.
+                                </div>
+                            <?php else: ?>
                             <table class="table table-hover align-middle mb-0 table-custom" id="tableProdItems">
                                 <thead class="table-light text-muted small">
                                     <tr>
-                                        <th>#</th>
-                                        <th>Log & Program</th>
-                                        <th>Assembled Garment</th>
-                                        <th>Stitched Pcs</th>
-                                        <th>Stock Status</th>
-                                        <th class="text-end pe-3">Action</th>
+                                        <th style="width:30px">#</th>
+                                        <th>Batch &amp; Program</th>
+                                        <th>Catalog / Style</th>
+                                        <th class="text-center">Total Pcs</th>
+                                        <th class="text-center">Variants</th>
+                                        <th class="text-center">Status</th>
+                                        <th class="text-end pe-3">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <?php if (empty($productionItems)): ?>
-                                        <tr><td colspan="6" class="text-center py-4 text-muted">No stitched production batches found. Complete a stitching log in Production Line.</td></tr>
-                                    <?php else: ?>
-                                        <?php $idx = 1; foreach ($productionItems as $p): ?>
-                                            <tr class="prod-row" data-search="<?= strtolower(htmlspecialchars($p['log_no'] . ' ' . $p['variant_name'] . ' ' . $p['sku_code'])) ?>">
-                                                <td class="text-muted small"><?= $idx++ ?></td>
-                                                <td>
-                                                    <span class="badge bg-dark font-monospace"><?= htmlspecialchars($p['log_no']) ?></span>
-                                                    <div class="small text-muted mt-1"><?= htmlspecialchars($p['program_no'] ?: 'Standard Program') ?></div>
-                                                </td>
-                                                <td>
-                                                    <div class="fw-bold text-dark"><?= htmlspecialchars($p['variant_name']) ?></div>
-                                                    <div class="small text-muted d-flex align-items-center gap-1 mt-1">
-                                                        <span class="badge bg-light text-dark border font-monospace"><?= htmlspecialchars($p['sku_code']) ?></span>
-                                                        <span class="badge bg-secondary" style="font-size: 0.7rem;"><?= htmlspecialchars($p['variant_size'] ?: 'Free') ?></span>
-                                                    </div>
-                                                </td>
-                                                <td>
-                                                    <span class="badge bg-success font-monospace fs-6"><?= (int)$p['stitched_pieces'] ?> pcs</span>
-                                                    <small class="d-block text-muted"><?= date('d M Y', strtotime($p['created_at'])) ?></small>
-                                                </td>
-                                                <td>
-                                                    <?php if (!empty($p['is_in_stock'])): ?>
-                                                        <span class="badge bg-success-subtle text-success border border-success px-2 py-1">
-                                                            <i class="bi bi-check-circle-fill me-1"></i> In Stock
-                                                        </span>
-                                                    <?php else: ?>
-                                                        <span class="badge bg-warning-subtle text-warning border border-warning px-2 py-1">
-                                                            <i class="bi bi-clock-history me-1"></i> Pending Inward
-                                                        </span>
-                                                    <?php endif; ?>
-                                                </td>
-                                                <td class="text-end pe-3">
-                                                    <div class="d-inline-flex gap-1 align-items-center">
-                                                        <button type="button" class="btn btn-sm btn-outline-warning text-dark py-1 px-2 fw-semibold" onclick="selectProdItem(<?= (int)$p['id'] ?>)" title="Configure & Print Labels">
-                                                            <i class="bi bi-printer me-1"></i> Print
+                                <?php $bIdx = 1; foreach ($productionBatches as $batch):
+                                    $bAllStock    = $batch['is_all_in_stock'];
+                                    $bPending     = array_filter($batch['items'], function($it){ return empty($it['is_in_stock']); });
+                                    $batchRowId   = 'brows_' . (int)$batch['stitching_id'];
+                                ?>
+                                    <!-- BATCH HEADER ROW -->
+                                    <tr class="prod-row table-warning fw-semibold"
+                                        style="cursor:pointer"
+                                        data-search="<?= strtolower(htmlspecialchars($batch['batch_no'] . ' ' . $batch['program_no'] . ' ' . $batch['catalog_name'])) ?>"
+                                        onclick="toggleBatchRows('<?= $batchRowId ?>')">
+                                        <td class="text-muted small"><?= $bIdx++ ?></td>
+                                        <td>
+                                            <span class="badge bg-dark font-monospace"><?= htmlspecialchars($batch['batch_no']) ?></span>
+                                            <div class="small text-dark mt-1 fw-semibold"><?= htmlspecialchars($batch['program_no']) ?></div>
+                                        </td>
+                                        <td>
+                                            <div class="fw-bold text-dark text-truncate" style="max-width:150px"><?= htmlspecialchars($batch['catalog_name']) ?></div>
+                                            <div class="small text-muted"><?= htmlspecialchars($batch['category_name']) ?></div>
+                                        </td>
+                                        <td class="text-center">
+                                            <span class="badge bg-primary font-monospace fs-6"><?= (int)$batch['total_pieces'] ?> pcs</span>
+                                        </td>
+                                        <td class="text-center">
+                                            <span class="badge bg-secondary"><?= count($batch['items']) ?> var</span>
+                                        </td>
+                                        <td class="text-center">
+                                            <?php if ($bAllStock): ?>
+                                                <span class="badge bg-success-subtle text-success border border-success px-2 py-1 small">
+                                                    <i class="bi bi-check-circle-fill me-1"></i>All In Stock
+                                                </span>
+                                            <?php elseif ($batch['has_in_stock']): ?>
+                                                <span class="badge bg-info-subtle text-info border border-info px-2 py-1 small">
+                                                    <i class="bi bi-dash-circle me-1"></i>Partial
+                                                </span>
+                                            <?php else: ?>
+                                                <span class="badge bg-warning-subtle text-warning border border-warning px-2 py-1 small">
+                                                    <i class="bi bi-clock-history me-1"></i>Pending
+                                                </span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td class="text-end pe-3">
+                                            <div class="d-inline-flex gap-1 align-items-center">
+                                                <form action="<?= \App\Core\Controller::url('/m/label_generation/generate') ?>" method="POST" target="_blank" class="d-inline" onsubmit="event.stopPropagation()">
+                                                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
+                                                    <input type="hidden" name="label_type" value="production">
+                                                    <input type="hidden" name="prod_print_mode" value="batch">
+                                                    <input type="hidden" name="batch_id" value="<?= (int)$batch['stitching_id'] ?>">
+                                                    <button type="submit" class="btn btn-sm btn-warning text-dark py-1 px-2 fw-semibold" title="Print all <?= (int)$batch['total_pieces'] ?> labels" onclick="event.stopPropagation()">
+                                                        <i class="bi bi-printer-fill me-1"></i>Print All
+                                                    </button>
+                                                </form>
+                                                <?php if (!$bAllStock): ?>
+                                                <form action="<?= \App\Core\Controller::url('/m/label/add_to_stock') ?>" method="POST" class="d-inline" onsubmit="event.stopPropagation()">
+                                                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
+                                                    <input type="hidden" name="item_id" value="batch_<?= (int)$batch['stitching_id'] ?>">
+                                                    <input type="hidden" name="tab" value="production">
+                                                    <button type="submit" class="btn btn-sm btn-success py-1 px-2 fw-semibold" title="Inward all pending variants into stock" onclick="event.stopPropagation()">
+                                                        <i class="bi bi-box-arrow-in-down me-1"></i>Add All
+                                                    </button>
+                                                </form>
+                                                <?php else: ?>
+                                                <a href="<?= \App\Core\Controller::url('/m/stocks') ?>" class="btn btn-sm btn-outline-success py-1 px-2 fw-semibold" onclick="event.stopPropagation()">
+                                                    <i class="bi bi-eye me-1"></i>View Stock
+                                                </a>
+                                                <?php endif; ?>
+                                                <button type="button" class="btn btn-sm btn-outline-secondary py-1 px-2"
+                                                        onclick="event.stopPropagation(); toggleBatchRows('<?= $batchRowId ?>')"
+                                                        title="Expand / Collapse variants">
+                                                    <i class="bi bi-chevron-down" id="icon_<?= $batchRowId ?>"></i>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+
+                                    <!-- VARIANT DETAIL ROWS (collapsed by default) -->
+                                    <?php $vIdx = 1; foreach ($batch['items'] as $bItem):
+                                        $bTagCode = QrService::generateTagCode(
+                                            $bItem['variant_name'],
+                                            $bItem['variant_color'] ?? ($bItem['color'] ?? ''),
+                                            $bItem['program_no'] ?? '',
+                                            (string)($bItem['produced_variant_id'] ?: $bItem['variant_id'] ?: $bItem['id'])
+                                        );
+                                        $bInStock = !empty($bItem['is_in_stock']);
+                                    ?>
+                                    <tr class="variant-detail-row <?= $batchRowId ?> d-none" style="background:#fefefe; border-left:3px solid #ffc107;">
+                                        <td class="text-muted small ps-4"><?= $vIdx++ ?></td>
+                                        <td colspan="2">
+                                            <div class="d-flex align-items-center gap-2">
+                                                <span class="badge bg-secondary"><?= htmlspecialchars($bItem['variant_size'] ?: 'Free') ?></span>
+                                                <span class="text-dark small fw-semibold"><?= htmlspecialchars($bItem['variant_name']) ?></span>
+                                            </div>
+                                            <div class="small text-muted mt-1">
+                                                <span class="badge bg-light text-dark border font-monospace"><?= htmlspecialchars($bItem['sku_code']) ?></span>
+                                                <span class="ms-1">Color: <?= htmlspecialchars($bItem['variant_color'] ?? ($bItem['color'] ?? '—')) ?></span>
+                                            </div>
+                                        </td>
+                                        <td class="text-center">
+                                            <span class="badge bg-success font-monospace"><?= (int)($bItem['stitched_pieces'] ?? $bItem['stitching_qty'] ?? 0) ?> pcs</span>
+                                        </td>
+                                        <td class="text-center">
+                                            <span class="font-monospace small text-muted" style="font-size:0.65rem;"><?= htmlspecialchars($bTagCode) ?></span>
+                                        </td>
+                                        <td class="text-center">
+                                            <?php if ($bInStock): ?>
+                                                <span class="badge bg-success-subtle text-success border border-success" style="font-size:0.68rem;">
+                                                    <i class="bi bi-check-circle-fill"></i> In Stock
+                                                </span>
+                                            <?php else: ?>
+                                                <span class="badge bg-warning-subtle text-warning border border-warning" style="font-size:0.68rem;">
+                                                    <i class="bi bi-clock-history"></i> Pending
+                                                </span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td class="text-end pe-3">
+                                            <div class="d-inline-flex gap-1">
+                                                <button type="button" class="btn btn-sm btn-outline-warning text-dark py-1 px-2 fw-semibold"
+                                                        onclick="selectProdItemAndSwitchMode(<?= (int)$bItem['id'] ?>)"
+                                                        title="Print labels for this variant (Way 2)">
+                                                    <i class="bi bi-printer me-1"></i>Print
+                                                </button>
+                                                <?php if ($bInStock): ?>
+                                                    <a href="<?= \App\Core\Controller::url('/m/stocks') ?>" class="btn btn-sm btn-outline-success py-1 px-2 fw-semibold">
+                                                        <i class="bi bi-eye"></i>
+                                                    </a>
+                                                <?php else: ?>
+                                                    <form action="<?= \App\Core\Controller::url('/m/label/add_to_stock') ?>" method="POST" class="d-inline">
+                                                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
+                                                        <input type="hidden" name="item_id" value="<?= (int)$bItem['id'] ?>">
+                                                        <input type="hidden" name="tab" value="production">
+                                                        <button type="submit" class="btn btn-sm btn-success py-1 px-2 fw-semibold">
+                                                            <i class="bi bi-box-arrow-in-down"></i>
                                                         </button>
-                                                        <?php if (!empty($p['is_in_stock'])): ?>
-                                                            <a href="<?= \App\Core\Controller::url('/m/stocks') ?>" class="btn btn-sm btn-outline-success py-1 px-2 fw-semibold" title="View in Live Stocks">
-                                                                <i class="bi bi-eye"></i> Stock
-                                                            </a>
-                                                        <?php else: ?>
-                                                            <form action="<?= \App\Core\Controller::url('/m/label/add_to_stock') ?>" method="POST" class="d-inline">
-                                                                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
-                                                                <input type="hidden" name="item_id" value="<?= (int)$p['id'] ?>">
-                                                                <input type="hidden" name="tab" value="production">
-                                                                <button type="submit" class="btn btn-sm btn-success py-1 px-2 fw-semibold" title="Inward directly into Live Inventory Stocks">
-                                                                    <i class="bi bi-box-arrow-in-down me-1"></i> Add to Stock
-                                                                </button>
-                                                            </form>
-                                                        <?php endif; ?>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        <?php endforeach; ?>
-                                    <?php endif; ?>
+                                                    </form>
+                                                <?php endif; ?>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    <?php endforeach; ?>
+
+                                <?php endforeach; ?>
                                 </tbody>
                             </table>
+                            <?php endif; ?>
                         </div>
                     </div>
                 </div>
+
             </div>
         </div>
 
@@ -1814,7 +2011,8 @@ function doMapVariant() {
     });
 }
 
-// Tab 3: Production Preview Handler
+
+// Tab 3: Production Preview Handler - Way 2 (single variant)
 function updateProdPreview() {
     const sel = document.getElementById('prod_item_select');
     if (!sel) return;
@@ -1825,62 +2023,206 @@ function updateProdPreview() {
     if (opt && opt.value) {
         const isInStock = (opt.dataset && (opt.dataset.inStock === '1' || opt.dataset.inward === 'completed'));
         if (addStockBtn) {
-            if (isInStock) {
-                addStockBtn.classList.add('d-none');
-            } else {
-                addStockBtn.classList.remove('d-none');
-            }
+            isInStock ? addStockBtn.classList.add('d-none') : addStockBtn.classList.remove('d-none');
         }
         if (inStockBadge) {
-            if (isInStock) {
-                inStockBadge.classList.remove('d-none');
-            } else {
-                inStockBadge.classList.add('d-none');
-            }
+            isInStock ? inStockBadge.classList.remove('d-none') : inStockBadge.classList.add('d-none');
         }
 
-        const tag = opt.dataset.tag || makeTagCode(opt.dataset.name, opt.dataset.color, opt.dataset.program, opt.value);
-        const ref = opt.dataset.program || opt.dataset.log || 'PP-REF';
-        const color = (opt.dataset.color || 'STANDARD').toUpperCase();
+        const tag    = opt.dataset.tag || makeTagCode(opt.dataset.name, opt.dataset.color, opt.dataset.program, opt.value);
+        const ref    = opt.dataset.program || opt.dataset.log || 'PP-REF';
+        const color  = (opt.dataset.color || 'STANDARD').toUpperCase();
         const design = (opt.dataset.size ? ('SIZE: ' + opt.dataset.size) : (opt.dataset.program || 'STANDARD')).toUpperCase();
-        const price = parseFloat(opt.dataset.price || opt.dataset.mrp || 0);
+        const price  = parseFloat(opt.dataset.price || opt.dataset.mrp || 0);
 
-        document.getElementById('prod_preview_ref').textContent = ref;
-        document.getElementById('prod_preview_title').textContent = opt.dataset.name || 'Production Garment';
-        document.getElementById('prod_preview_program').textContent = opt.dataset.program || 'In-House';
-        document.getElementById('prod_preview_color').textContent = color;
-        document.getElementById('prod_preview_design').textContent = design;
-        document.getElementById('prod_preview_price').textContent = '₹' + price.toFixed(2);
-        document.getElementById('prod_preview_code_tag').textContent = tag;
+        document.getElementById('prod_preview_ref').textContent        = ref;
+        document.getElementById('prod_preview_title').textContent      = opt.dataset.name || 'Production Garment';
+        document.getElementById('prod_preview_program').textContent    = opt.dataset.program || 'In-House';
+        document.getElementById('prod_preview_color').textContent      = color;
+        document.getElementById('prod_preview_design').textContent     = design;
+        document.getElementById('prod_preview_price').textContent      = '₹' + price.toFixed(2);
+        document.getElementById('prod_preview_code_tag').textContent   = tag;
 
         const badgeEl = document.getElementById('prod_preview_badge');
         if (badgeEl) {
             badgeEl.textContent = isInStock ? 'IN STOCK' : 'IN-HOUSE STITCHED';
-            badgeEl.className = isInStock ? 'badge bg-success-subtle text-success border border-success font-monospace' : 'badge bg-warning-subtle text-warning border border-warning font-monospace';
+            badgeEl.className   = isInStock
+                ? 'badge bg-success-subtle text-success border border-success font-monospace'
+                : 'badge bg-warning-subtle text-warning border border-warning font-monospace';
         }
-
         renderQr('prod_qr_box', tag);
     } else {
-        if (addStockBtn) addStockBtn.classList.remove('d-none');
-        if (inStockBadge) inStockBadge.classList.add('d-none');
-
-        document.getElementById('prod_preview_ref').textContent = 'PP-REF';
-        document.getElementById('prod_preview_title').textContent = 'Select Stitched Batch';
-        document.getElementById('prod_preview_program').textContent = 'In-House';
-        document.getElementById('prod_preview_color').textContent = 'STANDARD';
-        document.getElementById('prod_preview_design').textContent = 'STANDARD';
-        document.getElementById('prod_preview_price').textContent = '₹0.00';
-        document.getElementById('prod_preview_code_tag').textContent = 'PRO-S-01';
+        if (addStockBtn)   addStockBtn.classList.remove('d-none');
+        if (inStockBadge)  inStockBadge.classList.add('d-none');
+        document.getElementById('prod_preview_ref').textContent        = 'PP-REF';
+        document.getElementById('prod_preview_title').textContent      = 'Select Stitched Batch';
+        document.getElementById('prod_preview_program').textContent    = 'In-House';
+        document.getElementById('prod_preview_color').textContent      = 'STANDARD';
+        document.getElementById('prod_preview_design').textContent     = 'STANDARD';
+        document.getElementById('prod_preview_price').textContent      = '₹0.00';
+        document.getElementById('prod_preview_code_tag').textContent   = 'PRO-S-01';
         const badgeEl = document.getElementById('prod_preview_badge');
         if (badgeEl) {
             badgeEl.textContent = 'IN-HOUSE STITCHED';
-            badgeEl.className = 'badge bg-warning-subtle text-warning border border-warning font-monospace';
+            badgeEl.className   = 'badge bg-warning-subtle text-warning border border-warning font-monospace';
         }
         renderQr('prod_qr_box', 'PRO-S-01');
     }
 }
 
+// Switch between Way 1 (batch) and Way 2 (variant)
+function switchProdMode(mode) {
+    const batchUi    = document.getElementById('prod_batch_ui');
+    const variantUi  = document.getElementById('prod_variant_ui');
+    const batchBtn   = document.getElementById('prod_mode_batch_btn');
+    const variantBtn = document.getElementById('prod_mode_variant_btn');
+    const hintText   = document.getElementById('prod_mode_hint_text');
+
+    if (mode === 'batch') {
+        batchUi.classList.remove('d-none');
+        variantUi.classList.add('d-none');
+        batchBtn.classList.replace('btn-outline-secondary', 'btn-warning');
+        batchBtn.classList.add('text-dark');
+        variantBtn.classList.replace('btn-warning', 'btn-outline-secondary');
+        variantBtn.classList.remove('text-dark');
+        if (hintText) hintText.textContent = 'Generate all variants of a batch at once (e.g. 70 labels across 7 sizes)';
+    } else {
+        variantUi.classList.remove('d-none');
+        batchUi.classList.add('d-none');
+        variantBtn.classList.replace('btn-outline-secondary', 'btn-warning');
+        variantBtn.classList.add('text-dark');
+        batchBtn.classList.replace('btn-warning', 'btn-outline-secondary');
+        batchBtn.classList.remove('text-dark');
+        if (hintText) hintText.textContent = 'Generate N labels for one specific size/color variant';
+        updateProdPreview();
+    }
+}
+
+// Called when user selects a batch in Way 1 dropdown
+function onBatchSelect() {
+    const sel = document.getElementById('prod_batch_select');
+    if (!sel) return;
+    const opt = sel.options[sel.selectedIndex];
+
+    const printBtn    = document.getElementById('prod_batch_print_btn');
+    const stockBtn    = document.getElementById('prod_batch_stock_btn');
+    const hiddenBatch = document.getElementById('hidden_batch_id');
+    const hiddenStock = document.getElementById('hidden_batch_stock_id');
+    const summary     = document.getElementById('prod_batch_summary');
+    const summaryText = document.getElementById('prod_batch_summary_text');
+    const tableWrap   = document.getElementById('prod_batch_table_wrap');
+    const tbody       = document.getElementById('prod_batch_variant_tbody');
+    const noteEl      = document.getElementById('prod_batch_stock_note');
+
+    if (!opt || !opt.value) {
+        if (printBtn)  printBtn.disabled = true;
+        if (stockBtn)  stockBtn.disabled = true;
+        if (summary)   summary.classList.add('d-none');
+        if (tableWrap) tableWrap.classList.add('d-none');
+        return;
+    }
+
+    const batchId       = opt.value;
+    const totalPcs      = opt.dataset.totalPcs || 0;
+    const variantCount  = opt.dataset.variantCount || 0;
+    const pendingCount  = parseInt(opt.dataset.pendingCount || 0, 10);
+    const isAllInStock  = opt.dataset.isAllInStock === '1';
+    const batchNo       = opt.dataset.batchNo || opt.dataset.logNo || batchId;
+    const program       = opt.dataset.program || '';
+    const catalog       = opt.dataset.catalog || '';
+
+    // Update hidden inputs
+    if (hiddenBatch) hiddenBatch.value = batchId;
+    if (hiddenStock) hiddenStock.value = 'batch_' + batchId;
+
+    // Enable print always; stock only if pending items
+    if (printBtn) printBtn.disabled = false;
+    if (stockBtn) {
+        stockBtn.disabled = isAllInStock;
+        stockBtn.title    = isAllInStock ? 'All variants already in stock' : 'Inward ' + pendingCount + ' pending variants into stock';
+    }
+    if (noteEl) {
+        noteEl.textContent = isAllInStock
+            ? '✓ All variants of this batch are already in stock.'
+            : pendingCount + ' variant(s) pending inward out of ' + variantCount + ' total.';
+    }
+
+    // Summary banner
+    if (summary && summaryText) {
+        summaryText.textContent =
+            'Batch #' + batchNo + ' • ' + program +
+            ' • Will generate ' + totalPcs + ' labels across ' + variantCount + ' variants' +
+            (catalog ? ' (' + catalog + ')' : '');
+        summary.classList.remove('d-none');
+    }
+
+    // Build variant preview table
+    if (tableWrap && tbody) {
+        tableWrap.classList.remove('d-none');
+        tbody.innerHTML = '';
+        let items = [];
+        try { items = JSON.parse(opt.dataset.items || '[]'); } catch(e) {}
+        items.forEach(function(item, idx) {
+            const inStock = item.is_in_stock == 1 || item.is_in_stock === true;
+            const size    = item.variant_size || item.size || 'Free';
+            const color   = item.variant_color || item.color || '—';
+            const sku     = item.sku_code || '—';
+            const pcs     = item.stitched_pieces || item.stitching_qty || 0;
+            const statusHtml = inStock
+                ? '<span class="badge bg-success-subtle text-success border border-success" style="font-size:0.68rem;"><i class="bi bi-check-circle-fill"></i> In Stock</span>'
+                : '<span class="badge bg-warning-subtle text-warning border border-warning" style="font-size:0.68rem;"><i class="bi bi-clock-history"></i> Pending</span>';
+            const tr = document.createElement('tr');
+            tr.innerHTML =
+                '<td class="text-muted small">' + (idx+1) + '</td>' +
+                '<td><span class="badge bg-secondary">' + size + '</span></td>' +
+                '<td class="small">' + color + '</td>' +
+                '<td class="small font-monospace">' + sku + '</td>' +
+                '<td class="text-center"><span class="badge bg-success font-monospace">' + pcs + ' pcs</span></td>' +
+                '<td class="text-center">' + statusHtml + '</td>';
+            tbody.appendChild(tr);
+        });
+    }
+}
+
+// Way 1 form validation
+function validateBatchSelect() {
+    const sel = document.getElementById('prod_batch_select');
+    if (!sel || !sel.value) {
+        alert('Please choose a stitched production batch first.');
+        return false;
+    }
+    return true;
+}
+
+// Way 1 stock form validation
+function validateBatchStockSelect() {
+    const sel = document.getElementById('prod_batch_select');
+    if (!sel || !sel.value) {
+        alert('Please choose a stitched production batch first.');
+        return false;
+    }
+    const opt = sel.options[sel.selectedIndex];
+    if (opt && opt.dataset.isAllInStock === '1') {
+        alert('All variants of this batch are already in stock.');
+        return false;
+    }
+    return true;
+}
+
+// Way 2: select a specific item and switch to variant mode
+function selectProdItemAndSwitchMode(id) {
+    switchProdMode('variant');
+    const sel = document.getElementById('prod_item_select');
+    if (!sel) return;
+    sel.value = id;
+    updateProdPreview();
+    matchProdQty();
+    sel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+// Way 2: existing helpers
 function selectProdItem(id) {
+    switchProdMode('variant');
     const sel = document.getElementById('prod_item_select');
     if (!sel) return;
     sel.value = id;
@@ -1895,7 +2237,8 @@ function matchProdQty() {
     const opt = sel.options[sel.selectedIndex];
     if (opt && opt.value) {
         const pcs = parseInt(opt.dataset.pcs || 24, 10);
-        document.getElementById('prod_qty').value = pcs > 0 ? pcs : 24;
+        const qtyEl = document.getElementById('prod_qty');
+        if (qtyEl) qtyEl.value = pcs > 0 ? pcs : 24;
     }
 }
 
@@ -1910,20 +2253,36 @@ function submitProdToStock() {
         alert('This stitched production item has already been added to stock.');
         return;
     }
-    const val = select.value;
-    const isProd = val.startsWith('prod_');
+    const val     = select.value;
+    const isProd  = val.startsWith('prod_');
     const cleanId = isProd ? val.replace('prod_', '') : val;
     const form = document.createElement('form');
     form.method = 'POST';
     form.action = '<?= \App\Core\Controller::url('/m/label/add_to_stock') ?>';
-    form.innerHTML = `
-        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
-        <input type="hidden" name="item_id" value="${cleanId}">
-        <input type="hidden" name="tab" value="production">
-    `;
+    form.innerHTML =
+        '<input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">' +
+        '<input type="hidden" name="item_id" value="' + cleanId + '">' +
+        '<input type="hidden" name="tab" value="production">';
     document.body.appendChild(form);
     form.submit();
 }
+
+// Toggle expand/collapse of variant detail rows in the right table
+function toggleBatchRows(rowClass) {
+    const rows = document.querySelectorAll('.' + rowClass);
+    const icon = document.getElementById('icon_' + rowClass);
+    let isHidden = false;
+    rows.forEach(function(r) {
+        if (r.classList.contains('d-none')) isHidden = true;
+    });
+    rows.forEach(function(r) {
+        isHidden ? r.classList.remove('d-none') : r.classList.add('d-none');
+    });
+    if (icon) {
+        icon.className = isHidden ? 'bi bi-chevron-up' : 'bi bi-chevron-down';
+    }
+}
+
 
 // Tab 4: Return Preview Handler
 function updateRetPreview() {
