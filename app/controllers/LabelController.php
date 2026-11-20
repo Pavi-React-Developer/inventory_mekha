@@ -825,12 +825,17 @@ class LabelController extends Controller {
                     }
 
                     $prodName = $bItem['variant_name'] ?: ($bItem['catalog_name'] ?: 'In-House Garment');
-                    $tagCode = QrService::generateTagCode(
-                        $prodName,
-                        $itemColor,
-                        $itemSize,
-                        (string)$itemVariantId
-                    );
+                    // Use SKU as tag code when available (unique per variant); fall back to generated code
+                    if (!empty($itemSku)) {
+                        $tagCode = strtoupper($itemSku);
+                    } else {
+                        $tagCode = QrService::generateTagCode(
+                            $prodName,
+                            $itemColor,
+                            $itemSize,
+                            (string)$itemVariantId
+                        );
+                    }
                     $designVal = 'SIZE: ' . strtoupper($itemSize);
 
                     $vLabelData = [
@@ -903,6 +908,7 @@ class LabelController extends Controller {
                     'jobId'        => $jobId,
                     'labelType'    => 'production',
                     'batchNo'      => $batchNo,
+                    'batchId'      => $batchId,
                     'variantCount' => count($batchItems),
                 ]);
                 return;

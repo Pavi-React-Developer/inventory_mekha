@@ -216,7 +216,24 @@ $badge       = $labelData['section_badge'] ?? 'STANDARD';
             <span class="badge bg-light text-dark border me-1"><?= htmlspecialchars($labelData['section_title'] ?? 'PRODUCT LABEL') ?></span>
             <span class="badge bg-primary-subtle text-primary border me-1"><?= htmlspecialchars($badge) ?></span>
             <?php if (!empty($multiLabels)): ?>
-                Printing <strong><?= (int)$qty ?> copies</strong> across <strong><?= (int)($variantCount ?? count($multiLabels)) ?> variants</strong> for Batch <strong>#<?= htmlspecialchars($batchNo ?? 'BATCH') ?></strong> &bull; Concern: <strong><?= htmlspecialchars($concernName) ?></strong>
+                Printing <strong><?= (int)$qty ?> labels</strong> across <strong><?= (int)($variantCount ?? count($multiLabels)) ?> variants</strong> for Batch <strong>#<?= htmlspecialchars($batchNo ?? 'BATCH') ?></strong> &bull; Concern: <strong><?= htmlspecialchars($concernName) ?></strong>
+                <?php
+                // Build per-variant summary from multiLabels
+                $variantSummary = [];
+                foreach ($multiLabels as $_lbl) {
+                    $sz = $_lbl['variant_size'] ?? '—';
+                    if (!isset($variantSummary[$sz])) {
+                        $variantSummary[$sz] = ['sku' => $_lbl['sku_code'] ?? '', 'count' => 0];
+                    }
+                    $variantSummary[$sz]['count']++;
+                }
+                ?>
+                <span class="ms-2">|</span>
+                <?php foreach ($variantSummary as $sz => $info): ?>
+                    <span style="background:#fbbf24;color:#0f172a;font-weight:700;font-size:0.65rem;padding:1px 7px;border-radius:8px;margin-left:3px;font-family:monospace;">
+                        <?= strtoupper(htmlspecialchars($sz)) ?> &times;<?= $info['count'] ?>
+                    </span>
+                <?php endforeach; ?>
             <?php else: ?>
                 Printing <strong><?= (int)$qty ?> copies</strong> of <strong><?= htmlspecialchars(!empty($headerTitle) ? $headerTitle : $label1Val) ?></strong> (<?= htmlspecialchars($tagCode) ?>) &bull; Concern: <strong><?= htmlspecialchars($concernName) ?></strong>
             <?php endif; ?>
@@ -232,13 +249,24 @@ $badge       = $labelData['section_badge'] ?? 'STANDARD';
             </button>
         </div>
         <button class="btn btn-outline-secondary btn-sm" onclick="window.close()">Close</button>
-        <?php if (!empty($labelData['item_id'])): ?>
+        <?php if (!empty($multiLabels) && !empty($batchNo)): ?>
+            <!-- BATCH MODE: Add all batch items to stock -->
+            <?php $batchStitchId = $labelData['item_id'] ?? 0; ?>
+            <form action="<?= \App\Core\Controller::url('/m/label/add_to_stock') ?>" method="POST" class="d-inline" target="_self">
+                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'] ?? '') ?>">
+                <input type="hidden" name="item_id" value="batch_<?= (int)($batchId ?? $batchStitchId) ?>">
+                <input type="hidden" name="tab" value="production">
+                <button type="submit" class="btn btn-success btn-sm fw-bold px-3 shadow-sm d-flex align-items-center gap-1" title="Inward all <?= (int)($variantCount ?? count($multiLabels)) ?> variants of this batch into Live Stocks">
+                    <i class="bi bi-box-arrow-in-down"></i> Add Batch to Stock &rarr; Live Stocks
+                </button>
+            </form>
+        <?php elseif (!empty($labelData['item_id'])): ?>
             <?php $isProdStock = ($labelData['stock_tab'] ?? '') === 'production'; ?>
             <form action="<?= \App\Core\Controller::url('/m/label/add_to_stock') ?>" method="POST" class="d-inline" target="_self">
                 <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'] ?? '') ?>">
                 <input type="hidden" name="item_id" value="<?= (int)$labelData['item_id'] ?>">
                 <input type="hidden" name="tab" value="<?= htmlspecialchars($labelData['stock_tab'] ?? 'rolls') ?>">
-                <button type="submit" class="btn btn-success btn-sm fw-bold px-3 shadow-sm d-flex align-items-center gap-1.5" title="Add this item to <?= $isProdStock ? 'Live Inventory Stocks' : 'Purchase Stocks' ?>">
+                <button type="submit" class="btn btn-success btn-sm fw-bold px-3 shadow-sm d-flex align-items-center gap-1" title="Add this item to <?= $isProdStock ? 'Live Inventory Stocks' : 'Purchase Stocks' ?>">
                     <i class="bi bi-box-arrow-in-down"></i> Add to Stock &rarr; <?= $isProdStock ? 'Live Stocks' : 'Purchase Stocks' ?>
                 </button>
             </form>
@@ -247,7 +275,7 @@ $badge       = $labelData['section_badge'] ?? 'STANDARD';
                 <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'] ?? '') ?>">
                 <input type="hidden" name="bill_id" value="<?= (int)$labelData['bill_id'] ?>">
                 <input type="hidden" name="tab" value="<?= htmlspecialchars($labelData['stock_tab'] ?? 'rolls') ?>">
-                <button type="submit" class="btn btn-success btn-sm fw-bold px-3 shadow-sm d-flex align-items-center gap-1.5" title="Add items of this section to Purchase Stocks">
+                <button type="submit" class="btn btn-success btn-sm fw-bold px-3 shadow-sm d-flex align-items-center gap-1" title="Add items of this section to Purchase Stocks">
                     <i class="bi bi-box-arrow-in-down"></i> Add to Stock &rarr; Purchase Stocks
                 </button>
             </form>
@@ -283,7 +311,12 @@ $badge       = $labelData['section_badge'] ?? 'STANDARD';
                         <span class="concern-check-icon"><i class="bi bi-check-lg"></i></span>
                         <span class="concern-name-text"><?= htmlspecialchars($cName) ?></span>
                     </div>
-                    <span class="ref-pill-badge"><?= htmlspecialchars($rNo) ?></span>
+                    <div class="d-flex align-items-center gap-1">
+                        <?php if (!empty($lbl['variant_size'])): ?>
+                            <span style="background:#fbbf24;color:#0f172a;font-weight:700;font-size:0.65rem;padding:1px 6px;border-radius:8px;font-family:monospace;-webkit-print-color-adjust:exact;print-color-adjust:exact;"><?= strtoupper(htmlspecialchars($lbl['variant_size'])) ?></span>
+                        <?php endif; ?>
+                        <span class="ref-pill-badge"><?= htmlspecialchars($rNo) ?></span>
+                    </div>
                 </div>
                 <div class="label-divider"></div>
                 <div class="label-body-content">
